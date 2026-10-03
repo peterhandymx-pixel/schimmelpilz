@@ -1,0 +1,29 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Runtime/client data
+data/
+uploads/
+exports/
+backups/
+models/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
+
+# Development output
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+dist/
+build/
+.DS_Store
+Thumbs.db
