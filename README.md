@@ -49,7 +49,17 @@ Set OLLAMA_NO_CLOUD=1, select a local model, and do not publish Ollama's port. Q
 
 ## Deployment handoff
 
-The implementation should include a Dockerfile, compose.yaml, Caddyfile, .env.example, version-locked dependencies, a database migration command, first-admin setup, a health endpoint, backup/restore scripts and deployment instructions.
+The repository now includes the first Dockerfile, `compose.yaml`, `Caddyfile`, `.env.example`, version-locked API dependencies and a health endpoint. Authentication, migrations, first-admin setup and backup/restore automation remain before public launch.
+
+For a local production-shaped run:
+
+```bash
+cp .env.example .env
+# Set DOMAIN to the hostname that points to this server.
+docker compose up -d --build
+```
+
+The public web service is exposed through Caddy. The API and SQLite data remain on the internal network and persistent `app_data` volume.
 
 The owner supplies the server, domain, DNS and secret values. Target workflow once those deployment files exist:
 

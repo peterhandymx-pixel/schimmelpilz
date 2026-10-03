@@ -1,0 +1,39 @@
+services:
+  landing:
+    build:
+      context: .
+      dockerfile: landing/Dockerfile
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - app_data:/data
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - landing
+      - api
+
+volumes:
+  app_data:
+  caddy_data:
+  caddy_config:
