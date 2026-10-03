@@ -2,7 +2,7 @@
 
 Implementation plan for an English/German legal assistant on one self-managed server.
 
-Status: planning repository. No application or deployment is implemented yet.
+Status: working prototype. The bilingual landing page and the first single-server API are implemented; authentication, production document processing and legal review workflows still belong to the next milestones.
 
 ## One-server architecture
 
@@ -81,5 +81,12 @@ This server layout simplifies infrastructure. It does not itself authorise perso
 - [Ollama local-only settings and resource guidance](https://docs.ollama.com/faq)
 - [Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https)
 - [German RDG territorial scope](https://www.gesetze-im-internet.de/rdg/__1.html)
+
+<details>
+<summary>🥚 Easter egg: wenn die Akte eskaliert</summary>
+
+![Wenn die Akte eskaliert](docs/assets/akten-chaos-easter-egg.jpg)
+
+</details>
 
 Plan prepared 3 October 2026.
