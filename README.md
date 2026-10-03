@@ -61,6 +61,21 @@ docker compose up -d --build
 
 The public web service is exposed through Caddy. The API and SQLite data remain on the internal network and persistent `app_data` volume.
 
+### Shadow PC development
+
+Shadow PC does not provide the nested virtualization that Docker Desktop needs. Develop the application directly on Shadow instead:
+
+```powershell
+# Terminal 1: API
+python -m uvicorn server.app:app --reload --port 8001
+
+# Terminal 2: landing page
+cd landing
+pnpm dev
+```
+
+Use Docker on the eventual Linux server, where Caddy, the landing page and the API can run together. Do not try to enable Hyper-V or WSL2 inside Shadow to work around this platform limitation.
+
 The owner supplies the server, domain, DNS and secret values. Target workflow once those deployment files exist:
 
 1. Clone the GitHub repository onto the server.
