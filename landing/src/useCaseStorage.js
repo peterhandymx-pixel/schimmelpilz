@@ -12,7 +12,7 @@ export function writePreference(key, value) {
   try { localStorage.setItem(key, value); } catch { /* Server data works without browser storage. */ }
 }
 
-async function request(path, options = {}) {
+export async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}/api${path}`, { ...options, credentials: "include", headers: { ...options.headers, "X-Schimmelpilz-Request": "1" } });
   if (!response.ok) {
     const error = new Error(`Request failed: ${response.status}`);
@@ -71,6 +71,20 @@ export function useCaseStorage(enabled = true) {
     return created;
   };
 
+  const replaceCase = item => setCases(current => current.map(saved => saved.id === item.id ? item : saved));
+  const updateCase = async (caseId, payload) => {
+    const { title, description, language, details } = payload;
+    const updated = await request(`/cases/${caseId}`, jsonOptions("PUT", { title, description, language, details }));
+    replaceCase(updated);
+    selectCase(updated.id);
+    return updated;
+  };
+  const saveTask = async (caseId, payload, taskId) => {
+    const updated = await request(`/cases/${caseId}/tasks${taskId ? `/${taskId}` : ""}`, jsonOptions(taskId ? "PUT" : "POST", payload));
+    replaceCase(updated);
+    return updated;
+  };
+
   const uploadDocuments = async (selected) => {
     if (!selectedId || uploading) return;
     const caseId = selectedId;
@@ -83,7 +97,7 @@ export function useCaseStorage(enabled = true) {
           body.append("file", file);
           const document = await request(`/cases/${caseId}/documents`, { method: "POST", body });
           // Keep each successful upload visible even if a later file fails.
-          setCases(current => current.map(item => item.id === caseId ? { ...item, documents: [...item.documents, document] } : item));
+          setCases(current => current.map(item => item.id === caseId ? { ...item, documents: [...item.documents, document], activities: [document.activity, ...(item.activities || [])].filter(Boolean) } : item));
           results.push({ name: file.name, ok: true });
         } catch (error) {
           results.push({ name: file.name, ok: false, status: error.status });
@@ -104,14 +118,14 @@ export function useCaseStorage(enabled = true) {
         `/cases/${caseId}/drafts${draftId ? `/${draftId}` : ""}`,
         jsonOptions(draftId ? "PUT" : "POST", payload),
       );
-      setCases(current => current.map(item => item.id === caseId ? { ...item, drafts: [draft, ...item.drafts.filter(saved => saved.id !== draft.id)] } : item));
+      setCases(current => current.map(item => item.id === caseId ? { ...item, drafts: [draft, ...item.drafts.filter(saved => saved.id !== draft.id)], activities: [draft.activity, ...(item.activities || [])].filter(Boolean) } : item));
       return draft;
     } finally {
       setSavingDraft(false);
     }
   };
 
-  return { cases, selectedCase, selectCase, loading, loadError, reload, createCase, uploadDocuments, saveDraft, uploading, savingDraft };
+  return { cases, selectedCase, selectCase, loading, loadError, reload, createCase, updateCase, saveTask, uploadDocuments, saveDraft, uploading, savingDraft };
 }
 
 export function letterTemplate(item, language) {

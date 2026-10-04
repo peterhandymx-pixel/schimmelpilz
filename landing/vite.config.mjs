@@ -12,7 +12,7 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: ["terminal.local"],
     proxy: {
-      "/api": "http://127.0.0.1:8001",
+      "/api": process.env.SCHIMMELPILZ_API_TARGET || "http://127.0.0.1:8001",
     },
     warmup: {
       clientFiles: ["./src/main.jsx"],

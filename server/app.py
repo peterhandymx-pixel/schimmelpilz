@@ -11,6 +11,7 @@ import json
 import sqlite3
 import uuid
 import secrets
+import threading
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -22,6 +23,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
+from .research import ollama_status, prepare_messages, generate_answer, OLLAMA_MODEL
+from urllib.error import URLError
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("DATA_DIR", ROOT / "data"))
@@ -29,6 +32,7 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 DB_PATH = DATA_DIR / "app.db"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg", ".zip"}
+RESEARCH_LOCK = threading.Lock()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,7 +40,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Virtuelle Rechtsassistenz Schimmelpilz", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Virtuelle Rechtsassistenz Schimmelpilz", version="0.4.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4173", "http://127.0.0.1:4173"],
@@ -59,6 +63,8 @@ async def guard_cookie_requests(request: Request, call_next):
 
 
 class CaseDetails(BaseModel):
+    status: Literal["active", "waiting", "closed"] = "active"
+    responsible: str = Field(default="", max_length=160)
     audience: Literal["consumer", "business", "law_firm"] = "consumer"
     client_name: str = Field(default="", max_length=160)
     client_role: Literal["claimant", "respondent", "applicant", "other"] = "other"
@@ -81,7 +87,7 @@ class CaseDetails(BaseModel):
     fee_basis: Literal["unknown", "statutory", "hourly", "agreement"] = "unknown"
     conflict_check: Literal["pending", "checked", "conflict"] = "pending"
 
-    @field_validator("client_name", "client_email", "client_address", "opponent_name", "opponent_address", "opponent_reference", "objective", "court", "court_reference", "deadline_note", mode="before")
+    @field_validator("responsible", "client_name", "client_email", "client_address", "opponent_name", "opponent_address", "opponent_reference", "objective", "court", "court_reference", "deadline_note", mode="before")
     @classmethod
     def strip_input(cls, value):
         return value.strip() if isinstance(value, str) else value
@@ -125,6 +131,47 @@ class DraftCreate(BaseModel):
         if self.kind != "letter" and self.body is None:
             raise ValueError("Specialised drafts require a completed body")
         return self
+
+
+class CaseUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    title: str = Field(min_length=3, max_length=120)
+    description: str = Field(min_length=10, max_length=4000)
+    language: Literal["de", "en"] = "de"
+    details: CaseDetails = Field(default_factory=CaseDetails)
+
+    @field_validator("title", "description", mode="before")
+    @classmethod
+    def strip_input(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class TaskCreate(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    note: str = Field(default="", max_length=2000)
+    due_on: date | None = None
+    priority: Literal["normal", "high"] = "normal"
+
+    @field_validator("title", "note", mode="before")
+    @classmethod
+    def strip_input(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class TaskUpdate(TaskCreate):
+    completed: bool
+
+
+class ResearchInput(BaseModel):
+    request_id: uuid.UUID
+    question: str = Field(min_length=3, max_length=4000)
+    language: Literal["de", "en"] = "de"
+    workflow: Literal["intake", "research", "jurisdiction", "costs", "drafting", "deadlines"] = "research"
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def strip_question(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class DraftUpdate(BaseModel):
@@ -188,6 +235,23 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS tasks (
+                id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+                title TEXT NOT NULL, note TEXT NOT NULL, due_on TEXT,
+                priority TEXT NOT NULL, completed INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL, completed_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS activities (
+                id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+                action TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS research_runs (
+                id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+                question TEXT NOT NULL, language TEXT NOT NULL, workflow TEXT NOT NULL,
+                answer TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
+                model TEXT NOT NULL, error_code TEXT, input_tokens INTEGER, output_tokens INTEGER,
+                truncated INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, finished_at TEXT
+            );
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL, salt TEXT NOT NULL,
@@ -300,7 +364,15 @@ def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
         "details": json.loads(row["details"]),
         "documents": [dict(item) for item in documents],
         "drafts": [dict(item) for item in drafts],
+        "tasks": [{**dict(item), "completed": bool(item["completed"])} for item in connection.execute("SELECT * FROM tasks WHERE case_id = ? ORDER BY created_at DESC", (row["id"],))],
+        "activities": [dict(item) for item in connection.execute("SELECT * FROM activities WHERE case_id = ? ORDER BY created_at DESC", (row["id"],))],
     }
+
+
+def record_activity(connection, case_id: str, action: str, detail: str = "") -> dict:
+    event = {"id": str(uuid.uuid4()), "case_id": case_id, "action": action, "detail": detail, "created_at": now()}
+    connection.execute("INSERT INTO activities(id, case_id, action, detail, created_at) VALUES (:id, :case_id, :action, :detail, :created_at)", event)
+    return event
 
 
 def get_case(case_id: str, user_id: str) -> dict:
@@ -342,6 +414,7 @@ def create_case(payload: CaseCreate, user: dict = Depends(require_user)) -> dict
             "INSERT INTO cases(id, reference, title, description, language, created_at, details, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (case_id, reference, payload.title, payload.description, payload.language, now(), payload.details.model_dump_json(), user["id"]),
         )
+        record_activity(connection, case_id, "case_created")
         row = connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone()
         return row_case(row, connection)
 
@@ -349,6 +422,83 @@ def create_case(payload: CaseCreate, user: dict = Depends(require_user)) -> dict
 @app.get("/api/cases/{case_id}")
 def read_case(case_id: str, user: dict = Depends(require_user)) -> dict:
     return get_case(case_id, user["id"])
+
+
+@app.put("/api/cases/{case_id}")
+def update_case(case_id: str, payload: CaseUpdate, user: dict = Depends(require_user)) -> dict:
+    get_case(case_id, user["id"])
+    with db() as connection:
+        connection.execute("UPDATE cases SET title = ?, description = ?, language = ?, details = ? WHERE id = ? AND user_id = ?", (payload.title, payload.description, payload.language, payload.details.model_dump_json(), case_id, user["id"]))
+        record_activity(connection, case_id, "case_updated")
+        return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
+
+
+@app.post("/api/cases/{case_id}/tasks", status_code=201)
+def create_task(case_id: str, payload: TaskCreate, user: dict = Depends(require_user)) -> dict:
+    get_case(case_id, user["id"])
+    with db() as connection:
+        connection.execute("INSERT INTO tasks(id, case_id, title, note, due_on, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), case_id, payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, now()))
+        record_activity(connection, case_id, "task_created", payload.title)
+        return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
+
+
+@app.put("/api/cases/{case_id}/tasks/{task_id}")
+def update_task(case_id: str, task_id: str, payload: TaskUpdate, user: dict = Depends(require_user)) -> dict:
+    get_case(case_id, user["id"])
+    with db() as connection:
+        task = connection.execute("SELECT * FROM tasks WHERE id = ? AND case_id = ?", (task_id, case_id)).fetchone()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        completed_at = (task["completed_at"] or now()) if payload.completed else None
+        connection.execute("UPDATE tasks SET title = ?, note = ?, due_on = ?, priority = ?, completed = ?, completed_at = ? WHERE id = ? AND case_id = ?", (payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, payload.completed, completed_at, task_id, case_id))
+        action = "task_completed" if payload.completed else "task_reopened" if task["completed"] else "task_updated"
+        record_activity(connection, case_id, action, payload.title)
+        return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
+
+
+@app.get("/api/research/status")
+def research_status(user: dict = Depends(require_user)) -> dict:
+    return ollama_status()
+
+
+@app.get("/api/cases/{case_id}/research")
+def research_history(case_id: str, user: dict = Depends(require_user)) -> list[dict]:
+    get_case(case_id, user["id"])
+    with db() as connection:
+        return [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? ORDER BY created_at", (case_id,))]
+
+
+@app.post("/api/cases/{case_id}/research", status_code=201)
+def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(require_user)) -> dict:
+    case = get_case(case_id, user["id"])
+    run_id = str(payload.request_id)
+    # One local inference at a time protects the single server's memory.
+    if not RESEARCH_LOCK.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="ai_busy")
+    try:
+        with db() as connection:
+            existing = connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone()
+            if existing:
+                if existing["case_id"] != case_id or existing["question"] != payload.question or existing["language"] != payload.language or existing["workflow"] != payload.workflow:
+                    raise HTTPException(status_code=409, detail="request_conflict")
+                if existing["status"] == "completed":
+                    return dict(existing)
+                raise HTTPException(status_code=409, detail="request_already_recorded")
+            history = [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 6", (case_id,))][::-1]
+            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, OLLAMA_MODEL, now()))
+        try:
+            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow))
+        except (URLError, OSError, TimeoutError, ValueError) as error:
+            code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_unavailable"
+            with db() as connection:
+                connection.execute("UPDATE research_runs SET status = 'failed', error_code = ?, finished_at = ? WHERE id = ?", (code, now(), run_id))
+            raise HTTPException(status_code=504 if code == "ai_timeout" else 503, detail=code) from None
+        with db() as connection:
+            connection.execute("UPDATE research_runs SET status = 'completed', answer = ?, input_tokens = ?, output_tokens = ?, truncated = ?, finished_at = ? WHERE id = ?", (result["answer"], result["input_tokens"], result["output_tokens"], result["truncated"], now(), run_id))
+            record_activity(connection, case_id, "research_answer")
+            return dict(connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone())
+    finally:
+        RESEARCH_LOCK.release()
 
 
 @app.post("/api/cases/{case_id}/documents", status_code=201)
@@ -378,10 +528,11 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: dict
                 "INSERT INTO documents(id, case_id, original_name, stored_name, content_type, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (document_id, case_id, original, stored_name, file.content_type, len(content), created),
             )
+            activity = record_activity(connection, case_id, "document_uploaded", original)
     except Exception:
         target.unlink(missing_ok=True)
         raise
-    return {"id": document_id, "case_id": case_id, "original_name": original, "content_type": file.content_type, "size_bytes": len(content), "created_at": created}
+    return {"id": document_id, "case_id": case_id, "original_name": original, "content_type": file.content_type, "size_bytes": len(content), "created_at": created, "activity": activity}
 
 
 @app.get("/api/cases/{case_id}/documents/{document_id}/download")
@@ -415,7 +566,8 @@ def create_draft(case_id: str, payload: DraftCreate, user: dict = Depends(requir
     created = now()
     with db() as connection:
         connection.execute("INSERT INTO drafts(id, case_id, language, recipient, body, created_at, kind) VALUES (?, ?, ?, ?, ?, ?, ?)", (draft_id, case_id, payload.language, payload.recipient.strip(), body, created, payload.kind))
-    return {"id": draft_id, "case_id": case_id, "language": payload.language, "recipient": payload.recipient, "kind": payload.kind, "body": body, "created_at": created, "disclaimer": "Draft only; have a qualified lawyer review it before sending."}
+        activity = record_activity(connection, case_id, "draft_created", payload.kind)
+    return {"id": draft_id, "case_id": case_id, "language": payload.language, "recipient": payload.recipient, "kind": payload.kind, "body": body, "created_at": created, "activity": activity, "disclaimer": "Draft only; have a qualified lawyer review it before sending."}
 
 
 @app.put("/api/cases/{case_id}/drafts/{draft_id}")
@@ -425,4 +577,5 @@ def update_draft(case_id: str, draft_id: str, payload: DraftUpdate, user: dict =
         result = connection.execute("UPDATE drafts SET body = ?, recipient = COALESCE(?, recipient), kind = COALESCE(?, kind), language = COALESCE(?, language) WHERE case_id = ? AND id = ?", (payload.body, payload.recipient, payload.kind, payload.language, case_id, draft_id))
         if result.rowcount != 1:
             raise HTTPException(status_code=404, detail="Draft not found")
-        return dict(connection.execute("SELECT id, case_id, language, recipient, body, kind, created_at FROM drafts WHERE id = ?", (draft_id,)).fetchone())
+        activity = record_activity(connection, case_id, "draft_updated", payload.kind or "")
+        return {**dict(connection.execute("SELECT id, case_id, language, recipient, body, kind, created_at FROM drafts WHERE id = ?", (draft_id,)).fetchone()), "activity": activity}

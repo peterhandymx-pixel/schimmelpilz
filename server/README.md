@@ -17,6 +17,11 @@ Endpoints:
 - `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`
 - `POST /api/cases` with `{ "title", "description", "language", "reference_mode", "reference", "details" }`. Use `generate` or `existing`; an existing reference must be unique within the account. Court and opponent references belong in `details`.
 - `GET /api/cases/{id}`
+- `PUT /api/cases/{id}` edits title, description, language and details; internal reference is immutable.
+- `POST /api/cases/{id}/tasks`, `PUT /api/cases/{id}/tasks/{task_id}` persist manual tasks (title, note, optional due date, priority, completion). Case responses include tasks and activity.
+- `GET /api/research/status` checks local model availability.
+- `GET /api/cases/{id}/research` returns the account-owned conversation.
+- `POST /api/cases/{id}/research` with UUID `request_id`, `question` (3–4000 characters), `language` and `workflow` (`intake`, `research`, `jurisdiction`, `costs`, `drafting`, `deadlines`). Completed requests are idempotent; conflicting reuse returns 409. Busy returns 429; unavailable model 503; timeout 504.
 - `POST /api/cases/{id}/documents` as multipart field `file`
 - `GET /api/cases/{id}/documents/{document_id}/download`
 - `POST /api/cases/{id}/drafts` with `{ "language", "recipient", "kind", "body" }`. Kinds: `letter`, `claim`, `application`, `objection`, `response`. Only a basic letter can omit `body`.
@@ -30,7 +35,7 @@ SQLite is included with Python; no separate database installation is needed. The
 
 In the default Shadow PC setup, data lives under `C:\Users\Shadow\Downloads\ai\data`:
 
-- `app.db`: accounts, password hashes, hashed session tokens, case particulars, references, document metadata and the exact saved draft text.
+- `app.db`: accounts, password hashes, hashed session tokens, case particulars, references, document metadata, exact draft text, tasks, activity and research runs with model/token/status metadata.
 - `uploads/`: document contents under generated filenames, outside the public web folder.
 - `app.db-wal` and `app.db-shm`, when present, are SQLite working files.
 
@@ -53,4 +58,10 @@ Passwords use salted scrypt hashes. Opaque sessions expire after seven days, are
 
 The first registered account takes ownership of local prototype cases created before accounts existed. Later accounts start with separate files. On an existing installation, register the owner's account locally before opening registration to the public. Startup preserves legacy case, document and draft IDs and adds the new fields. References are unique per account, not shared passwords.
 
-The current workflow supports consumers, businesses and law firms. It does not yet include shared firm memberships, invitation administration, email verification, password recovery, MFA or backup scheduling. Automatic AI analysis, source ingestion, fee/jurisdiction calculation and electronic filing remain planned. Drafts are editable templates, not automatically reviewed legal opinions.
+The current workflow supports consumers, businesses and law firms. It does not yet include shared firm memberships, invitation administration, email verification, password recovery, MFA or backup scheduling. Automatic source ingestion/verification, fee/jurisdiction calculation and electronic filing remain planned. Local AI answers and editable drafts are not reviewed legal opinions.
+
+## Local research AI
+
+Run official Ollama bound to `127.0.0.1:11434` with cloud features disabled (`OLLAMA_NO_CLOUD=1`), then pull `qwen2.5:7b`. Configure the API through `OLLAMA_BASE_URL` and `OLLAMA_MODEL` if needed. Docker uses the private `ollama` service and persistent model volume; run `docker compose exec ollama ollama pull qwen2.5:7b` once. Do not publish the model port.
+
+The API supplies selected account-owned particulars, filenames, project-specific workflow instructions and bounded completed conversation to the model. It does not extract uploads or fetch legal sources. Output is plain text and clearly labelled unverified. A generation is recorded before inference; failures remain visible without a fabricated answer. Requests time out after 180 seconds and a single-worker process lock prevents simultaneous inference. A request left pending after a server crash can be asked again with a new ID. API test cases use a mock model; the native preview is additionally tested against the installed runtime with synthetic cases.

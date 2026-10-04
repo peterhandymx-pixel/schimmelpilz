@@ -4,6 +4,7 @@ WORKDIR /app
 COPY server/requirements.txt /app/server/requirements.txt
 RUN pip install --no-cache-dir -r /app/server/requirements.txt
 COPY server /app/server
+COPY .agents/skills/schimmelpilz-german-law /app/.agents/skills/schimmelpilz-german-law
 
 ENV PYTHONUNBUFFERED=1
 ENV DATA_DIR=/data

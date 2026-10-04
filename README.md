@@ -2,9 +2,13 @@
 
 Implementation plan for an English/German legal assistant on one self-managed server.
 
-Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page, registration/sign-in, account-owned case files, structured intake, persistent documents and editable draft templates. Automatic AI research, document extraction and legal review workflows remain planned.
+Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page, registration/sign-in, account-owned case files, structured intake, persistent documents, editable drafts, manual tasks/activity and a local Ollama research bot. Automatic source retrieval/verification, document extraction, legal calculations and document approval remain planned.
 
-The local application now restores saved cases, documents and edited drafts after browser reloads and backend restarts. Select a case under **Gespeicherte Fälle**, download an uploaded document by clicking its filename, and save edits in the draft editor. SQLite and uploaded files are kept under `data/`, outside Git. See [storage and API instructions](server/README.md).
+The application restores saved cases, documents, drafts, tasks and research conversations after browser reloads and backend restarts. Open a case under **Aktenbestand** to use its overview, parties, documents, drafts, deadlines/tasks and history registers. Internal references stay unchanged when particulars are edited. Global registers provide search across the account. SQLite and uploaded files are kept under `data/`, outside Git. See [storage and API instructions](server/README.md).
+
+**Recherche** contains the AI bot with case selection, German/English output, six work modes and adoption of an answer as an editable draft. It uses only the selected account-owned case particulars, filenames and bounded chat history. Filenames do not provide file contents. Model suggestions are explicitly unverified; the bot does not browse, read uploads, calculate binding fees/deadlines or file documents. Responses, generation IDs, model, token counts and failures are persisted per case. Only one local generation runs at a time.
+
+The project-specific [German-law skill set](.agents/skills/schimmelpilz-german-law/SKILL.md) covers intake, legislation/decisions, jurisdiction, costs, drafting and deadlines. It adapts selected public workflows from [AI-Skills-German-Law](https://github.com/borghei/AI-Skills-German-Law), with provenance and licence in the package. The development-chat Google Drive connector was searched for the named package/project and returned no matching files; no private Drive documents were copied. Website Drive sign-in/ingestion is not implemented.
 
 After registration, the public introduction gives way to a separate workspace with a sidebar, case list, search, document/draft views, manually recorded deadlines and research sources. Registration collects account type and contact details. Consumers and businesses can reuse their profile in case intake; law firms enter client particulars separately.
 
@@ -14,19 +18,20 @@ The feature catalogue links to federal/EU legislation, judgments and orders, fee
 
 ## One-server architecture
 
-Use one Linux server in the location selected by the owner. Run three services through Docker Compose:
+Use one Linux server in the location selected by the owner. Run four services through Docker Compose:
 
 | Service | Responsibility |
 | --- | --- |
-| Web application | Bilingual interface, login, cases, uploads, chat, document editing and exports |
+| Frontend | React interface, login, cases, uploads, research chat and draft editor |
+| API | FastAPI authentication, ownership checks, SQLite, private uploads and local model requests |
 | Ollama | Run the chosen English/German model locally; disable cloud features |
 | Caddy | HTTPS and routing to the web application |
 
-Use a Python/FastAPI application with server-rendered templates and small amounts of JavaScript. Keep the database in SQLite and uploads in private local directories. Run a single application worker initially, with a persistent job queue in SQLite for document extraction and model requests. No separate database server, Redis, hosted vector database or external AI API is needed for the first version.
+The implemented application uses React/Vite and Python/FastAPI. Keep the database in SQLite and uploads in private local directories. Run a single API worker: a process lock serialises local generation and SQLite records pending/completed/failed requests. A durable background queue and document extraction are future work. No separate database server, Redis, hosted vector database or external AI API is needed.
 
 Only Caddy exposes public web ports. The application and Ollama communicate over an internal Docker network. The browser never calls Ollama directly. Pin dependency and container versions when implementation starts.
 
-All case storage, OCR, AI inference and document generation happen on this server. Optional off-server backups are operator-managed and must be treated as a separate data flow. GitHub holds source code and documentation; runtime data stays outside Git.
+Case storage, AI inference and draft preparation happen on this server; OCR is not implemented. Optional off-server backups are operator-managed and must be treated as a separate data flow. GitHub holds source code and documentation; runtime data stays outside Git.
 
 ## First release
 
@@ -65,9 +70,10 @@ For a local production-shaped run:
 cp .env.example .env
 # Set DOMAIN to the hostname that points to this server.
 docker compose up -d --build
+docker compose exec ollama ollama pull qwen2.5:7b
 ```
 
-The public web service is exposed through Caddy. The API and SQLite data remain on the internal network and persistent `app_data` volume.
+The public web service is exposed through Caddy. The API and SQLite data remain on the internal network and persistent `app_data` volume; downloaded models use `ollama_models`. Set `OLLAMA_MODEL` in `.env` and pull that same model when changing it. The supplied Compose configuration uses CPU inference unless the operator adds GPU support; Docker deployment has not been tested on Shadow.
 
 ### Shadow PC development
 
@@ -80,9 +86,17 @@ python -m uvicorn server.app:app --reload --port 8001
 # Terminal 2: landing page
 cd landing
 pnpm dev
+
+# Terminal 3, after installing Ollama from its official Windows distribution:
+$env:OLLAMA_NO_CLOUD = '1'
+$env:OLLAMA_HOST = '127.0.0.1:11434'
+ollama serve
+# Pull once in another terminal: ollama pull qwen2.5:7b
 ```
 
 Use Docker on the eventual Linux server, where Caddy, the landing page and the API can run together. Do not try to enable Hyper-V or WSL2 inside Shadow to work around this platform limitation.
+
+This workspace has the official portable Ollama 0.35.1 distribution under ignored `data/ollama-v0.35.1/`, with `qwen2.5:7b` downloaded under `data/models`. These runtime files are not on GitHub. Configure `OLLAMA_MODELS` to that directory when restarting the portable runtime. API defaults: `OLLAMA_BASE_URL=http://127.0.0.1:11434`, `OLLAMA_MODEL=qwen2.5:7b`; no external AI key is required. Model quality must be evaluated for the intended legal work.
 
 The owner supplies the server, domain, DNS and secret values. Target workflow once those deployment files exist:
 

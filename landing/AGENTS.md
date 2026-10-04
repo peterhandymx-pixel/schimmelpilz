@@ -6,6 +6,8 @@ Registration/sign-in comes before real case creation. Collect account/contact da
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
+The authenticated workspace should resemble law-office software: compact searchable file tables, global parties/documents/drafts/tasks registers, editable case particulars and per-case tabs for overview, parties, files, drafts, manual deadlines/tasks and activity. Keep internal references unchanged during edits. Research MUST contain the AI bot prominently, with case selection, persistent account-owned history, German/English answers and adoption as editable drafts. Use the project-specific German-law skill workflows; distinguish local AI suggestions from verified legal sources. Do not claim to read uploaded files or search the internet until those features are implemented. Google Drive in the development chat is separate from website authentication.
+
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.
 
 When implementing from a selected generated mock, treat that image as the source of truth for layout, component anatomy, density, spacing, color, typography, visible content, and hierarchy.

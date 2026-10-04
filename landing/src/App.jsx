@@ -84,6 +84,8 @@ export function App() {
   const [view, setView] = useState("overview");
   const [authMode, setAuthMode] = useState("login");
   const [modal, setModal] = useState(null);
+  const [editingCase, setEditingCase] = useState(null);
+  const [intakeSession, setIntakeSession] = useState(0);
   const [activeTab, setActiveTab] = useState("overview");
   const [menu, setMenu] = useState(false);
   const [question, setQuestion] = useState("");
@@ -122,19 +124,21 @@ export function App() {
     setQuestion(""); setAnswer(""); setUploadNotice(""); setActiveTab("overview");
   };
   const openCase = () => {
+    setEditingCase(null); setIntakeSession(value => value + 1);
     setCaseError("");
     if (!auth.user) { setAuthMode("register"); setModal("auth"); return; }
     setModal("case");
   };
+  const editCase = item => { setEditingCase(item); setIntakeSession(value => value + 1); setCaseError(""); setModal("case"); };
   const onAuthenticated = user => { auth.setUser(user); setModal(null); setView("overview"); };
   const signOut = async () => { try { await auth.logout(); setModal(null); setQuestion(""); setAnswer(""); } catch { showToast(lang === "de" ? "Abmelden fehlgeschlagen. Bitte erneut versuchen." : "Sign-out failed. Please try again."); } };
   const startCase = async payload => {
     if (savingCase) return false;
     setSavingCase(true); setCaseError("");
     try {
-      const created = await storage.createCase(payload);
+      const created = editingCase ? await storage.updateCase(editingCase.id, payload) : await storage.createCase(payload);
       setModal(null); setView("case"); setUploadNotice(""); setActiveTab("overview"); setQuestion(""); setAnswer("");
-      showToast(t.saved + " " + created.reference);
+      showToast((editingCase ? (lang === "de" ? "Akte aktualisiert." : "Case file updated.") : t.saved) + " " + created.reference);
       previewRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return true;
     } catch (error) { setCaseError(error.status === 409 ? intakeCopy[lang].duplicate : error.status === 422 ? intakeCopy[lang].invalid : t.error); return false; } finally { setSavingCase(false); }
@@ -156,14 +160,15 @@ export function App() {
       setUploadNotice([saved ? saved + " " + t.uploadSaved : "", ...failures].filter(Boolean).join(" · "));
     } finally { input.value = ""; }
   };
-  const openDraft = draft => {
+  const openDraft = (draft, caseItem = storage.selectedCase) => {
     if (!auth.user) { setAuthMode("login"); setModal("auth"); return; }
-    if (!storage.selectedCase) { showToast(t.noCase); openCase(); return; }
+    if (!caseItem) { showToast(t.noCase); openCase(); return; }
+    storage.selectCase(caseItem.id);
     setDraftId(draft?.id || null);
     setDraftLanguage(draft?.language || lang);
     setDraftKind(draft?.kind || "letter");
     setDraftRecipient(draft?.recipient || "");
-    const initialBody = draft?.body || documentTemplate(storage.selectedCase, lang);
+    const initialBody = draft?.body || documentTemplate(caseItem, lang);
     generatedDraft.current = draft ? null : initialBody;
     setDraftBody(initialBody);
     setDraftError(""); setModal("draft");
@@ -194,15 +199,15 @@ export function App() {
     document.body.appendChild(link); link.click(); link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const askAssistant = () => { if (!question.trim()) return; setAnswer(lang === "de" ? "Automatische KI-Recherche ist noch nicht angebunden. Öffnen Sie die Recherchequellen im Bereich Funktionen / Recherche und dokumentieren Sie Ihre Ergebnisse in der Akte." : "Automatic AI research is not connected yet. Open the sources in Features / Research and record your findings in the case file."); };
-  return <div className={auth.user ? "app-site" : "site"}>{auth.loading ? <div className="startup-screen" role="status">{lang === "de" ? "Arbeitsbereich wird geladen …" : "Loading workspace …"}</div> : auth.user ? <Dashboard lang={lang} setLang={setLang} t={t} user={auth.user} storage={storage} view={view} setView={setView} onNewCase={openCase} onLogout={signOut} workspaceProps={{ activeTab, setActiveTab, onFile, onDraft: openDraft, onSelectCase: selectCase, uploadNotice, question, setQuestion, answer, askAssistant }} /> : <>{auth.error && <div className="connection-notice" role="status">{lang === "de" ? "Anmeldung derzeit nicht erreichbar." : "Sign-in is currently unavailable."} <button onClick={auth.retry}>{t.retry}</button></div>}<a className="skip-link" href="#main">Zum Inhalt springen</a><header className="site-header"><a className="brand-link" href="#top"><Brand /></a><nav className={menu ? "open" : ""}><a href="#how" onClick={() => setMenu(false)}>{t.navHow}</a><a href="#features" onClick={() => setMenu(false)}>{t.navFeatures}</a><a href="#faq" onClick={() => setMenu(false)}>{t.navFaq}</a><span className="nav-divider" /><button className={lang === "de" ? "language active" : "language"} onClick={() => setLang("de")}>DE</button><span className="language-sep">|</span><button className={lang === "en" ? "language active" : "language"} onClick={() => setLang("en")}>EN</button><button className="header-login" onClick={() => { setAuthMode("login"); setModal("auth"); }}>{t.signIn}</button></nav><button className="menu-toggle" aria-label="Menü" onClick={() => setMenu(!menu)}>{menu ? <X /> : <Menu />}</button></header>
+  const askAssistant = () => { if (!question.trim()) return; setAnswer(lang === "de" ? "Melden Sie sich an und öffnen Sie Recherche. Dort steht der lokale KI-Bot für Ihre ausgewählte Akte bereit." : "Sign in and open Research to use the local AI bot for your selected case."); };
+  return <div className={auth.user ? "app-site" : "site"}>{auth.loading ? <div className="startup-screen" role="status">{lang === "de" ? "Arbeitsbereich wird geladen …" : "Loading workspace …"}</div> : auth.user ? <Dashboard lang={lang} setLang={setLang} t={t} user={auth.user} storage={storage} view={view} setView={setView} onNewCase={openCase} onLogout={signOut} workspaceProps={{ activeTab, setActiveTab, onFile, onDraft: openDraft, onSelectCase: selectCase, onEdit: editCase, uploadNotice, question, setQuestion, answer, askAssistant }} /> : <>{auth.error && <div className="connection-notice" role="status">{lang === "de" ? "Anmeldung derzeit nicht erreichbar." : "Sign-in is currently unavailable."} <button onClick={auth.retry}>{t.retry}</button></div>}<a className="skip-link" href="#main">Zum Inhalt springen</a><header className="site-header"><a className="brand-link" href="#top"><Brand /></a><nav className={menu ? "open" : ""}><a href="#how" onClick={() => setMenu(false)}>{t.navHow}</a><a href="#features" onClick={() => setMenu(false)}>{t.navFeatures}</a><a href="#faq" onClick={() => setMenu(false)}>{t.navFaq}</a><span className="nav-divider" /><button className={lang === "de" ? "language active" : "language"} onClick={() => setLang("de")}>DE</button><span className="language-sep">|</span><button className={lang === "en" ? "language active" : "language"} onClick={() => setLang("en")}>EN</button><button className="header-login" onClick={() => { setAuthMode("login"); setModal("auth"); }}>{t.signIn}</button></nav><button className="menu-toggle" aria-label="Menü" onClick={() => setMenu(!menu)}>{menu ? <X /> : <Menu />}</button></header>
     <main id="main"><section className="hero" id="top"><div className="hero-copy"><p className="eyebrow">{t.eyebrow}</p><h1>{t.title}</h1><p className="hero-intro">{t.intro}</p><div className="hero-actions"><button className="primary-button" onClick={openCase}>{t.start} <ArrowRight size={20} /></button><button className="secondary-button" onClick={() => previewRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>{t.demo}</button></div><p className="hero-meta">{t.meta}</p></div><div className="hero-visual"><div className="visual-wash" /><div ref={previewRef}><CaseWorkspace lang={lang} t={t} activeTab={activeTab} setActiveTab={setActiveTab} onFile={onFile} onDraft={openDraft} storage={storage} onSelectCase={selectCase} uploadNotice={uploadNotice} question={question} setQuestion={setQuestion} answer={answer} askAssistant={askAssistant} /></div><span className="visual-caption">{lang === "de" ? "Designkonzept · Vorschau" : "Design concept · Preview"}</span></div></section>
       <section className="steps-section" id="how"><p className="section-kicker">{lang === "de" ? "SO FUNKTIONIERT’S" : "HOW IT WORKS"}</p><h2>{t.stepsTitle}</h2><div className="steps-grid">{t.steps.map(([title, text], i) => <div className="step" key={title}><div className="step-number">0{i + 1}</div><div className="step-icon">{i === 0 ? <FileText /> : i === 1 ? <Upload /> : <PenLine />}</div><div><h3>{title}</h3><p>{text}</p></div></div>)}</div></section>
       <FeatureOverview lang={lang} onDraft={() => openDraft()} />
       <section className="faq-section" id="faq"><div className="section-heading"><p className="section-kicker">FAQ</p><h2>{t.faqTitle}</h2></div><div className="faq-list">{t.faq.map(([q, a]) => <details key={q}><summary>{q}<ChevronDown size={19} /></summary><p>{a}</p></details>)}</div></section>
     </main><footer className="site-footer"><Brand /><span>{t.limit}</span><a href="#faq">Datenschutz & Hinweise <ChevronRight size={15} /></a></footer></>}
     <input ref={fileRef} className="visually-hidden" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip" onChange={onFiles} />
-    <Dialog open={modal === "case"} onClose={() => { if (!savingCase) setModal(null); }} title={t.modalStart} className="intake-dialog" busy={savingCase}><CaseIntake key={auth.user?.id || "guest"} user={auth.user} lang={lang} t={t} saving={savingCase} error={caseError} onSubmit={startCase} onCancel={() => setModal(null)} /></Dialog>
+    <Dialog open={modal === "case"} onClose={() => { if (!savingCase) setModal(null); }} title={editingCase ? (lang === "de" ? "Aktenstammdaten bearbeiten" : "Edit case particulars") : t.modalStart} className="intake-dialog" busy={savingCase}><CaseIntake key={intakeSession} initialCase={editingCase} user={auth.user} lang={lang} t={t} saving={savingCase} error={caseError} onSubmit={startCase} onCancel={() => setModal(null)} /></Dialog>
     <Dialog open={modal === "auth"} onClose={() => setModal(null)} title={authCopy[lang][authMode]} className="auth-dialog"><AuthForm key={authMode} lang={lang} mode={authMode} setMode={setAuthMode} onAuthenticated={onAuthenticated} /></Dialog>
     <Dialog open={modal === "draft"} onClose={() => { if (!storage.savingDraft) setModal(null); }} title={dc.title} className="draft-dialog" busy={storage.savingDraft}><p className="dialog-intro">{dc.hint}</p><fieldset className="draft-settings" disabled={storage.savingDraft}><div className="intake-grid"><label>{dc.kind}<select aria-label={dc.kind} value={draftKind} onChange={e => changeDraftSettings(e.target.value, draftLanguage, draftRecipient)}>{dc.types.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><label>{dc.language}<select aria-label={dc.language} value={draftLanguage} onChange={e => changeDraftSettings(draftKind, e.target.value, draftRecipient)}><option value="de">Deutsch</option><option value="en">English</option></select></label><label className="span-two">{dc.recipient}<textarea rows={2} maxLength={500} value={draftRecipient} onChange={e => changeDraftSettings(draftKind, draftLanguage, e.target.value)} placeholder={dc.recipientPlaceholder} /></label></div><button className="small-action" onClick={insertDraftTemplate}>{dc.insert}</button><p className="field-help">{dc.replaceHint}</p>{draftKind === "claim" && <p className="field-help">{dc.courtHint} <a href="https://www.gesetze-im-internet.de/zpo/__253.html" target="_blank" rel="noreferrer">§ 253 ZPO ↗</a></p>}</fieldset><label htmlFor="draft-editor">{t.draftBody}</label><textarea id="draft-editor" aria-label={t.draftBody} className="draft-editor" value={draftBody} maxLength={50000} onChange={e => setDraftBody(e.target.value)} disabled={storage.savingDraft} />{draftError && <p className="storage-error" role="alert">{draftError}</p>}<button className="text-link" onClick={downloadDraft}>{t.downloadDraft}</button><div className="dialog-actions"><button className="secondary-button" disabled={storage.savingDraft} onClick={() => setModal(null)}>{t.cancel}</button><button className="primary-button" disabled={storage.savingDraft || !draftBody.trim()} onClick={saveDraft}><Check size={18} /> {storage.savingDraft ? "…" : t.save}</button></div></Dialog>
     {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}

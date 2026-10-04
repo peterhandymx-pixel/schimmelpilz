@@ -52,9 +52,10 @@ function SelectField({ label, name, options, defaultValue }) {
   return <label>{label}<select aria-label={label} name={name} defaultValue={defaultValue}>{options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>;
 }
 
-export function CaseIntake({ lang, t, saving, error, onSubmit, onCancel, user }) {
+export function CaseIntake({ lang, t, saving, error, onSubmit, onCancel, user, initialCase }) {
   const c = intakeCopy[lang];
-  const [audience, setAudience] = useState(user?.audience || "consumer");
+  const d = initialCase?.details || {};
+  const [audience, setAudience] = useState(d.audience || user?.audience || "consumer");
   const ownAccount = audience === user?.audience && audience !== "law_firm";
   const profileAddress = user ? `${user.street}\n${user.postal_code} ${user.city}\n${user.country}` : "";
   const [referenceMode, setReferenceMode] = useState("generate");
@@ -67,47 +68,48 @@ export function CaseIntake({ lang, t, saving, error, onSubmit, onCancel, user })
     details.dispute_value = details.dispute_value === "" ? null : Number(details.dispute_value);
     // Unchecked/disabled reference fields never enter the persisted payload.
     delete details.reference_mode;
-    const saved = await onSubmit({ title, description, language: lang, reference_mode: referenceMode, ...(referenceMode === "existing" ? { reference } : {}), details });
+    const saved = await onSubmit({ title, description, language: initialCase?.language || lang, reference_mode: referenceMode, ...(referenceMode === "existing" ? { reference } : {}), details: { ...d, ...details } });
     if (saved) { form.reset(); setReferenceMode("generate"); }
   };
   const audienceOptions = [["consumer", IconUser], ["business", IconBriefcase], ["law_firm", IconBuildingBank]];
   return <form className="case-intake" onSubmit={submit}>
-    <p className="dialog-intro">{c.intro}</p>
+    <p className="dialog-intro">{initialCase ? (lang === "de" ? "Aktualisieren Sie die Angaben zur bestehenden Akte. Das Aktenzeichen bleibt erhalten." : "Update the existing file's particulars. Its reference is retained.") : c.intro}</p>
     <fieldset disabled={saving} className="audience-picker"><legend>{c.audience}</legend>{audienceOptions.map(([id, Icon]) => <label key={id} className={audience === id ? "choice-card chosen" : "choice-card"}><input type="radio" name="audience" value={id} checked={audience === id} onChange={() => setAudience(id)} /><span><Icon size={20} /><strong>{c[id]}</strong><small>{c[`${id}Hint`]}</small></span></label>)}</fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.referenceHeading}</legend>
-      <div className="reference-picker">{["generate", "existing"].map(mode => <label key={mode} className={referenceMode === mode ? "reference-choice chosen" : "reference-choice"}><input type="radio" name="reference_mode" value={mode} checked={referenceMode === mode} onChange={() => setReferenceMode(mode)} />{c[mode]}</label>)}</div>
+      {initialCase ? <p><strong>{initialCase.reference}</strong> · {lang === "de" ? "Aktenzeichen bleibt erhalten" : "File reference retained"}</p> : <><div className="reference-picker">{["generate", "existing"].map(mode => <label key={mode} className={referenceMode === mode ? "reference-choice chosen" : "reference-choice"}><input type="radio" name="reference_mode" value={mode} checked={referenceMode === mode} onChange={() => setReferenceMode(mode)} />{c[mode]}</label>)}</div>
       <p className="field-help">{c[`${referenceMode}Hint`]}</p>
-      {referenceMode === "existing" && <label>{c.reference}<input name="reference" required maxLength={100} placeholder={c.referencePlaceholder} /></label>}
+      {referenceMode === "existing" && <label>{c.reference}<input name="reference" required maxLength={100} placeholder={c.referencePlaceholder} /></label>}</>}
+      <div className="intake-grid"><SelectField name="status" label={lang === "de" ? "Aktenstatus" : "File status"} options={lang === "de" ? [["active", "In Bearbeitung"], ["waiting", "Wartet auf Rückmeldung"], ["closed", "Abgeschlossen"]] : [["active", "Active"], ["waiting", "Awaiting response"], ["closed", "Closed"]]} defaultValue={d.status || "active"} /><label>{lang === "de" ? "Sachbearbeitung / Zuständigkeit" : "Responsible person"}<input name="responsible" maxLength={160} defaultValue={d.responsible || ""} /></label></div>
     </fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.partiesHeading}</legend><div className="intake-grid">
-      <label>{audience === "law_firm" ? c.client : audience === "business" ? c.company : c.person}<input key={`${audience}-name`} name="client_name" required maxLength={160} autoComplete="off" defaultValue={ownAccount ? user.organisation || user.full_name : ""} /></label>
-      <SelectField name="client_role" label={c.clientRole} options={c.roles} defaultValue="other" />
-      <label>{c.clientEmail}<input key={`${audience}-email`} name="client_email" type="email" maxLength={254} autoComplete="off" defaultValue={ownAccount ? user.email : ""} /></label>
-      <label>{c.opponent}<input name="opponent_name" maxLength={160} /></label>
-      <label>{c.clientAddress}<textarea key={`${audience}-address`} name="client_address" maxLength={500} rows={2} defaultValue={ownAccount ? profileAddress : ""} /></label>
-      <label>{c.opponentAddress}<textarea name="opponent_address" maxLength={500} rows={2} /></label>
-      <label className="span-two">{c.opponentReference}<input name="opponent_reference" maxLength={100} /></label>
+      <label>{audience === "law_firm" ? c.client : audience === "business" ? c.company : c.person}<input key={`${audience}-name`} name="client_name" required maxLength={160} autoComplete="off" defaultValue={initialCase ? d.client_name || "" : ownAccount ? user.organisation || user.full_name : ""} /></label>
+      <SelectField name="client_role" label={c.clientRole} options={c.roles} defaultValue={d.client_role || "other"} />
+      <label>{c.clientEmail}<input key={`${audience}-email`} name="client_email" type="email" maxLength={254} autoComplete="off" defaultValue={initialCase ? d.client_email || "" : ownAccount ? user.email : ""} /></label>
+      <label>{c.opponent}<input name="opponent_name" maxLength={160} defaultValue={d.opponent_name || ""} /></label>
+      <label>{c.clientAddress}<textarea key={`${audience}-address`} name="client_address" maxLength={500} rows={2} defaultValue={initialCase ? d.client_address || "" : ownAccount ? profileAddress : ""} /></label>
+      <label>{c.opponentAddress}<textarea name="opponent_address" maxLength={500} rows={2} defaultValue={d.opponent_address || ""} /></label>
+      <label className="span-two">{c.opponentReference}<input name="opponent_reference" maxLength={100} defaultValue={d.opponent_reference || ""} /></label>
     </div></fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.matterHeading}</legend><div className="intake-grid">
-      <label className="span-two">{c.title}<input name="title" required minLength={3} maxLength={120} placeholder={t.caseTitle} /></label>
-      <SelectField name="legal_area" label={c.legalArea} options={c.areas} defaultValue="general" />
-      <SelectField name="jurisdiction" label={c.jurisdiction} options={c.jurisdictions} defaultValue="DE" />
-      <SelectField name="stage" label={c.stage} options={c.stages} defaultValue="initial" />
-      <label className="span-two">{c.description}<textarea name="description" required minLength={10} maxLength={4000} rows={4} placeholder={c.descriptionHint} /></label>
-      <label className="span-two">{c.objective}<textarea name="objective" maxLength={2000} rows={2} placeholder={c.objectiveHint} /></label>
+      <label className="span-two">{c.title}<input name="title" required minLength={3} maxLength={120} placeholder={t.caseTitle} defaultValue={initialCase?.title || ""} /></label>
+      <SelectField name="legal_area" label={c.legalArea} options={c.areas} defaultValue={d.legal_area || "general"} />
+      <SelectField name="jurisdiction" label={c.jurisdiction} options={c.jurisdictions} defaultValue={d.jurisdiction || "DE"} />
+      <SelectField name="stage" label={c.stage} options={c.stages} defaultValue={d.stage || "initial"} />
+      <label className="span-two">{c.description}<textarea name="description" required minLength={10} maxLength={4000} rows={4} placeholder={c.descriptionHint} defaultValue={initialCase?.description || ""} /></label>
+      <label className="span-two">{c.objective}<textarea name="objective" maxLength={2000} rows={2} placeholder={c.objectiveHint} defaultValue={d.objective || ""} /></label>
     </div></fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.procedureHeading}</legend><div className="intake-grid">
-      <label>{c.court}<input name="court" maxLength={160} /></label><label>{c.courtReference}<input name="court_reference" maxLength={100} /></label>
-      <label>{c.receivedOn}<input name="received_on" type="date" /></label><label>{c.deadline}<input name="deadline" type="date" /></label>
-      <label className="span-two">{c.deadlineNote}<input name="deadline_note" maxLength={300} /></label>
+      <label>{c.court}<input name="court" maxLength={160} defaultValue={d.court || ""} /></label><label>{c.courtReference}<input name="court_reference" maxLength={100} defaultValue={d.court_reference || ""} /></label>
+      <label>{c.receivedOn}<input name="received_on" type="date" defaultValue={d.received_on || ""} /></label><label>{c.deadline}<input name="deadline" type="date" defaultValue={d.deadline || ""} /></label>
+      <label className="span-two">{c.deadlineNote}<input name="deadline_note" maxLength={300} defaultValue={d.deadline_note || ""} /></label>
     </div><p className="field-help">{c.deadlineHint}</p></fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.costsHeading}</legend><div className="intake-grid">
-      <label>{c.value}<input name="dispute_value" type="number" min="0" max="1000000000000" step="0.01" placeholder="0.00" /></label>
-      <SelectField name="currency" label={c.currency} options={[["EUR", "EUR"], ["MXN", "MXN"], ["USD", "USD"]]} defaultValue="EUR" />
-      <SelectField name="fee_basis" label={c.feeBasis} options={c.fees} defaultValue="unknown" />
-      {audience === "law_firm" && <SelectField name="conflict_check" label={c.conflict} options={c.conflicts} defaultValue="pending" />}
+      <label>{c.value}<input name="dispute_value" type="number" min="0" max="1000000000000" step="0.01" placeholder="0.00" defaultValue={d.dispute_value ?? ""} /></label>
+      <SelectField name="currency" label={c.currency} options={[["EUR", "EUR"], ["MXN", "MXN"], ["USD", "USD"]]} defaultValue={d.currency || "EUR"} />
+      <SelectField name="fee_basis" label={c.feeBasis} options={c.fees} defaultValue={d.fee_basis || "unknown"} />
+      {audience === "law_firm" && <SelectField name="conflict_check" label={c.conflict} options={c.conflicts} defaultValue={d.conflict_check || "pending"} />}
     </div>{audience === "law_firm" && <p className="field-help">{c.conflictHint}</p>}</fieldset>
-    <div className="intake-footer">{error && <p className="storage-error" role="alert">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary-button" disabled={saving} onClick={onCancel}>{t.cancel}</button><button type="submit" className="primary-button" disabled={saving}>{saving ? "…" : t.create}<IconArrowRight size={18} /></button></div></div>
+    <div className="intake-footer">{error && <p className="storage-error" role="alert">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary-button" disabled={saving} onClick={onCancel}>{t.cancel}</button><button type="submit" className="primary-button" disabled={saving}>{saving ? "…" : initialCase ? t.save : t.create}<IconArrowRight size={18} /></button></div></div>
   </form>;
 }
 

@@ -4,6 +4,9 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
+from urllib.error import URLError
+import uuid
 
 from fastapi.testclient import TestClient
 
@@ -164,6 +167,91 @@ class PersistentStorageTests(unittest.TestCase):
             self.assertEqual(client.get(f"/api/cases/old-case/documents/{document['id']}/download").content, b"legacy file")
             with api.db() as connection:
                 self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+    def test_case_edit_tasks_history_persistence_and_isolation(self):
+        with TestClient(api.app) as first, TestClient(api.app) as other:
+            case = self.create_case(first)
+            another_case = self.create_case(first)
+            route = f"/api/cases/{case['id']}"
+            edit = {"title": "Aktualisierte Mandatsakte", "description": "Geänderter synthetischer Sachverhalt.", "language": "de", "details": {"status": "waiting", "responsible": "Test Sachbearbeitung", "client_name": "Testmandant", "deadline": "2026-11-03"}}
+            result = first.put(route, json=edit)
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.json()["reference"], case["reference"])
+            self.assertEqual(result.json()["details"]["status"], "waiting")
+            self.assertEqual(first.put(route, json={**edit, "reference": "CHANGED"}).status_code, 422)
+            self.assertEqual(first.put(route, json={**edit, "details": {"status": "invalid"}}).status_code, 422)
+            task_payload = {"title": "Unterlagen prüfen", "note": "Manuelle Wiedervorlage", "due_on": "2026-10-08", "priority": "high"}
+            result = first.post(route + "/tasks", json=task_payload)
+            self.assertEqual(result.status_code, 201, result.text)
+            task = result.json()["tasks"][0]
+            self.assertFalse(task["completed"])
+            self.assertEqual(first.post(route + "/tasks", json={**task_payload, "title": " "}).status_code, 422)
+            self.assertEqual(first.post(route + "/tasks", json={**task_payload, "due_on": "bad"}).status_code, 422)
+            self.assertEqual(first.put(f"/api/cases/{another_case['id']}/tasks/{task['id']}", json={**task_payload, "completed": True}).status_code, 404)
+            self.authenticate(other, "task-other@example.invalid")
+            for suffix, method, payload in [("", "put", edit), ("/tasks", "post", task_payload), (f"/tasks/{task['id']}", "put", {**task_payload, "completed": True})]:
+                self.assertEqual(getattr(other, method)(route + suffix, json=payload).status_code, 404)
+            result = first.put(route + f"/tasks/{task['id']}", json={**task_payload, "title": "Geänderte Aufgabe", "completed": True})
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertIsNotNone(result.json()["tasks"][0]["completed_at"])
+            first.post(route + "/documents", files={"file": ("Test.pdf", b"test")})
+            draft = first.post(route + "/drafts", json={"body": "Original draft"}).json()
+            first.put(route + f"/drafts/{draft['id']}", json={"body": "Updated draft"})
+        with TestClient(api.app) as client:
+            self.authenticate(client)
+            loaded = client.get(route).json()
+            self.assertEqual(loaded["title"], edit["title"])
+            self.assertEqual(loaded["reference"], case["reference"])
+            self.assertEqual(loaded["tasks"][0]["title"], "Geänderte Aufgabe")
+            self.assertTrue(loaded["tasks"][0]["completed"])
+            self.assertEqual([row["action"] for row in reversed(loaded["activities"])], ["case_created", "case_updated", "task_created", "task_completed", "document_uploaded", "draft_created", "draft_updated"])
+            reopened = client.put(route + f"/tasks/{task['id']}", json={**task_payload, "completed": False}).json()
+            self.assertIsNone(reopened["tasks"][0]["completed_at"])
+            self.assertEqual(reopened["activities"][0]["action"], "task_reopened")
+
+    def test_research_persists_scopes_context_and_deduplicates(self):
+        with TestClient(api.app) as first, TestClient(api.app) as other:
+            case = self.create_case(first)
+            other_case = self.create_case(first)
+            route = f"/api/cases/{case['id']}/research"
+            payload = {"request_id": str(uuid.uuid4()), "question": "Welche Unterlagen fehlen?", "language": "de", "workflow": "intake"}
+            fake = {"answer": "Bitte klären Sie die fehlenden Tatsachen.", "input_tokens": 100, "output_tokens": 15, "truncated": False}
+            with patch.object(api, "generate_answer", return_value=fake) as generate:
+                result = first.post(route, json=payload)
+                self.assertEqual(result.status_code, 201, result.text)
+                self.assertEqual(result.json()["status"], "completed")
+                messages = generate.call_args[0][0]
+                self.assertIn(case["reference"], messages[0]["content"])
+                self.assertNotIn(other_case["reference"], messages[0]["content"])
+                self.assertEqual(messages[-1]["content"], payload["question"])
+                self.assertEqual(first.post(route, json=payload).json()["id"], payload["request_id"])
+                self.assertEqual(generate.call_count, 1)
+                self.assertEqual(first.post(route, json={**payload, "question": "Changed question"}).status_code, 409)
+                follow_up = {**payload, "request_id": str(uuid.uuid4()), "question": "Welche Frage folgt daraus?"}
+                first.post(route, json=follow_up)
+                self.assertEqual(generate.call_args[0][0][1]["content"], payload["question"])
+                self.assertEqual(first.get(f"/api/cases/{other_case['id']}/research").json(), [])
+            self.authenticate(other, "research-other@example.invalid")
+            self.assertEqual(other.get(route).status_code, 404)
+            self.assertEqual(other.post(route, json=payload).status_code, 404)
+            self.assertEqual(first.post(route, json={**payload, "request_id": str(uuid.uuid4()), "question": " "}).status_code, 422)
+            with patch.object(api, "generate_answer", side_effect=URLError("Unavailable")):
+                failed = first.post(route, json={**payload, "request_id": str(uuid.uuid4())})
+                self.assertEqual(failed.status_code, 503)
+                history = first.get(route).json()
+                self.assertEqual(history[-1]["status"], "failed")
+                self.assertEqual(history[-1]["answer"], "")
+            api.RESEARCH_LOCK.acquire()
+            try:
+                self.assertEqual(first.post(route, json={**payload, "request_id": str(uuid.uuid4())}).status_code, 429)
+            finally:
+                api.RESEARCH_LOCK.release()
+        with TestClient(api.app) as client:
+            self.authenticate(client)
+            history = client.get(route).json()
+            self.assertEqual(history[0]["answer"], fake["answer"])
+            self.assertEqual(history[0]["input_tokens"], 100)
+            self.assertEqual(len(history), 3)
 
     def test_invalid_sign_in_expired_session_and_secure_cookie(self):
         with TestClient(api.app, base_url="https://testserver") as client:
