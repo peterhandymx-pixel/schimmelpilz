@@ -12,6 +12,7 @@ services:
     restart: unless-stopped
     environment:
       DATA_DIR: /data
+      COOKIE_SECURE: "true"
     volumes:
       - app_data:/data
     expose:

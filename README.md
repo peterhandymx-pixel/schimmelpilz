@@ -2,7 +2,15 @@
 
 Implementation plan for an English/German legal assistant on one self-managed server.
 
-Status: working prototype. The bilingual landing page and the first single-server API are implemented; authentication, production document processing and legal review workflows still belong to the next milestones.
+Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page, registration/sign-in, account-owned case files, structured intake, persistent documents and editable draft templates. Automatic AI research, document extraction and legal review workflows remain planned.
+
+The local application now restores saved cases, documents and edited drafts after browser reloads and backend restarts. Select a case under **Gespeicherte Fälle**, download an uploaded document by clicking its filename, and save edits in the draft editor. SQLite and uploaded files are kept under `data/`, outside Git. See [storage and API instructions](server/README.md).
+
+After registration, the public introduction gives way to a separate workspace with a sidebar, case list, search, document/draft views, manually recorded deadlines and research sources. Registration collects account type and contact details. Consumers and businesses can reuse their profile in case intake; law firms enter client particulars separately.
+
+Case intake supports a new sequential reference or an unchanged existing reference, separate court/opponent references, parties, jurisdiction, legal area, objectives, procedural stage, dates and value/fee details. The draft editor supplies German/English correspondence, civil-claim, application, objection and response templates for courts, authorities, law firms and other recipients. Missing information stays visible as placeholders; automatic filing is not implemented.
+
+The feature catalogue links to federal/EU legislation, judgments and orders, fee statutes and justice directories. Automatic legal, cost and jurisdiction checks are clearly labelled as planned. Register the owner's first account locally: existing pre-account prototype files become its property. Database contents, uploaded files and credentials are excluded from GitHub.
 
 ## One-server architecture
 
@@ -49,7 +57,7 @@ Set OLLAMA_NO_CLOUD=1, select a local model, and do not publish Ollama's port. Q
 
 ## Deployment handoff
 
-The repository now includes the first Dockerfile, `compose.yaml`, `Caddyfile`, `.env.example`, version-locked API dependencies and a health endpoint. Authentication, migrations, first-admin setup and backup/restore automation remain before public launch.
+The repository includes Dockerfiles, `compose.yaml`, `Caddyfile`, `.env.example`, version-locked API dependencies, cookie authentication and additive storage migrations. First-admin/invitation workflows and backup/restore automation remain future milestones. Native Shadow PC development runs the API and Vite without Docker.
 
 For a local production-shaped run:
 
