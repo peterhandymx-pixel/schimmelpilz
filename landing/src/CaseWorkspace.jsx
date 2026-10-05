@@ -2,6 +2,7 @@ import { IconHome, IconFileText, IconEdit, IconMessageCircle, IconUpload, IconDo
 import { API_BASE, letterTemplate } from "./useCaseStorage.js";
 import { CaseFacts } from "./CaseIntake.jsx";
 import { draftCopy } from "./draftTemplates.js";
+import { BrandLogo } from "./BrandLogo.jsx";
 
 const demoDocuments = [
   { id: "demo1", original_name: "Mietvertrag.pdf", size_bytes: 2100000 },
@@ -46,7 +47,7 @@ export function CaseWorkspace({ lang, t, activeTab, setActiveTab, onFile, onDraf
 
   return <div className={`workspace-shell ${appMode ? "app-workspace" : ""}`} id="preview">
     <div className="workspace-sidebar">
-      <img className="brand-logo" src="/assets/schimmelpilz-logo.png" alt="Virtuelle Rechtsassistenz Schimmelpilz" />
+      <BrandLogo />
       <div className="workspace-nav">{tabs.map(([id, label, Icon]) => <button key={id} aria-label={label} className={activeTab === id ? "selected" : ""} onClick={() => setActiveTab(id)}><Icon size={18} />{label}</button>)}</div>
       <div className="sidebar-foot">{t.localStorage}</div>
     </div>

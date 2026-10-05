@@ -4,6 +4,7 @@ import { App } from "./App.jsx";
 import "./styles.css";
 import "./workbench.css";
 import "./research-chat.css";
+import "./document-review.css";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

@@ -8,6 +8,7 @@ import { useCaseStorage, readPreference, writePreference } from "./useCaseStorag
 import { AuthForm, authCopy } from "./AuthForm.jsx";
 import { Dashboard } from "./Dashboard.jsx";
 import { useAuth } from "./useAuth.js";
+import { BrandLogo } from "./BrandLogo.jsx";
 import {
   IconArrowRight as ArrowRight, IconCheck as Check, IconChevronDown as ChevronDown, IconChevronRight as ChevronRight, IconFileText as FileText,
   IconMenu2 as Menu, IconEdit as PenLine, IconUpload as Upload, IconX as X,
@@ -66,7 +67,7 @@ const storageCopy = {
   },
 };
 
-function Brand() { return <img className="brand-logo" src="/assets/schimmelpilz-logo.png" alt="Virtuelle Rechtsassistenz Schimmelpilz" />; }
+function Brand() { return <BrandLogo />; }
 
 function Dialog({ open, onClose, title, children, className = "", busy = false }) {
   const ref = useRef(null);

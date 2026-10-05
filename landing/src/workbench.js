@@ -4,8 +4,8 @@ export const statusLabels = {
 };
 
 export const activityLabels = {
-  de: { case_created: "Akte angelegt", case_updated: "Stammdaten aktualisiert", document_uploaded: "Dokument hinzugefügt", draft_created: "Entwurf erstellt", draft_updated: "Entwurf bearbeitet", task_created: "Aufgabe angelegt", task_updated: "Aufgabe bearbeitet", task_completed: "Aufgabe erledigt", task_reopened: "Aufgabe wieder geöffnet", research_answer: "KI-Rechercheantwort gespeichert" },
-  en: { case_created: "Case opened", case_updated: "Particulars updated", document_uploaded: "Document added", draft_created: "Draft created", draft_updated: "Draft edited", task_created: "Task created", task_updated: "Task edited", task_completed: "Task completed", task_reopened: "Task reopened", research_answer: "AI research answer saved" },
+  de: { case_created: "Akte angelegt", case_updated: "Stammdaten aktualisiert", document_uploaded: "Dokument hinzugefügt", draft_created: "Entwurf erstellt", draft_updated: "Entwurf bearbeitet", task_created: "Aufgabe angelegt", task_updated: "Aufgabe bearbeitet", task_completed: "Aufgabe erledigt", task_reopened: "Aufgabe wieder geöffnet", research_answer: "KI-Rechercheantwort gespeichert", document_extracted: "Dokumentauslesen bearbeitet", document_text_reviewed: "Dokumenttext geprüft", document_text_unreviewed: "Dokumenttext ohne Freigabe gespeichert" },
+  en: { case_created: "Case opened", case_updated: "Particulars updated", document_uploaded: "Document added", draft_created: "Draft created", draft_updated: "Draft edited", task_created: "Task created", task_updated: "Task edited", task_completed: "Task completed", task_reopened: "Task reopened", research_answer: "AI research answer saved", document_extracted: "Document extraction processed", document_text_reviewed: "Document text reviewed", document_text_unreviewed: "Document text saved without approval" },
 };
 
 export function localToday(value = new Date()) {

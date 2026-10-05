@@ -12,6 +12,8 @@ import sqlite3
 import uuid
 import secrets
 import threading
+import subprocess
+import sys
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -24,6 +26,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ollama_status, prepare_messages, generate_answer, OLLAMA_MODEL
+from .document_context import select_sources
 from urllib.error import URLError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +36,7 @@ DB_PATH = DATA_DIR / "app.db"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg", ".zip"}
 RESEARCH_LOCK = threading.Lock()
+EXTRACTION_LOCK = threading.Lock()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -167,11 +171,23 @@ class ResearchInput(BaseModel):
     question: str = Field(min_length=3, max_length=4000)
     language: Literal["de", "en"] = "de"
     workflow: Literal["intake", "research", "jurisdiction", "costs", "drafting", "deadlines"] = "research"
+    document_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
 
     @field_validator("question", mode="before")
     @classmethod
     def strip_question(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+
+class DocumentTextReview(BaseModel):
+    text: str = Field(max_length=12000)
+    reviewed: bool
+
+    @model_validator(mode="after")
+    def require_review_text(self):
+        if self.reviewed and not self.text.strip():
+            raise ValueError("Reviewed text must not be empty")
+        return self
 
 
 class DraftUpdate(BaseModel):
@@ -234,6 +250,17 @@ def init_db() -> None:
                 body TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS document_extractions (
+                document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+                status TEXT NOT NULL, error_code TEXT, unit_kind TEXT NOT NULL,
+                truncated INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS document_pages (
+                document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                unit_no INTEGER NOT NULL, original_text TEXT NOT NULL,
+                reviewed_text TEXT, reviewed_at TEXT,
+                PRIMARY KEY(document_id, unit_no)
+            );
             CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
@@ -275,6 +302,10 @@ def init_db() -> None:
         draft_columns = {row["name"] for row in connection.execute("PRAGMA table_info(drafts)")}
         if "kind" not in draft_columns:
             connection.execute("ALTER TABLE drafts ADD COLUMN kind TEXT NOT NULL DEFAULT 'letter'")
+        research_columns = {row["name"] for row in connection.execute("PRAGMA table_info(research_runs)")}
+        for column in ("sources", "document_selection"):
+            if column not in research_columns:
+                connection.execute(f"ALTER TABLE research_runs ADD COLUMN {column} TEXT NOT NULL DEFAULT '[]'")
         connection.commit()
         # Legacy databases made references globally unique. They are now per account.
         if any(index["origin"] == "u" for index in connection.execute("PRAGMA index_list(cases)")):
@@ -352,7 +383,11 @@ def logout(request: Request, response: Response):
 
 def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
     documents = connection.execute(
-        "SELECT id, original_name, content_type, size_bytes, created_at FROM documents WHERE case_id = ? ORDER BY created_at",
+        """SELECT d.id, d.original_name, d.content_type, d.size_bytes, d.created_at,
+            e.status AS extraction_status, e.truncated AS extraction_truncated,
+            (SELECT COUNT(*) FROM document_pages p WHERE p.document_id=d.id AND p.reviewed_at IS NOT NULL) AS reviewed_units
+            FROM documents d LEFT JOIN document_extractions e ON e.document_id=d.id
+            WHERE d.case_id = ? ORDER BY d.created_at""",
         (row["id"],),
     ).fetchall()
     drafts = connection.execute(
@@ -465,13 +500,18 @@ def research_status(user: dict = Depends(require_user)) -> dict:
 def research_history(case_id: str, user: dict = Depends(require_user)) -> list[dict]:
     get_case(case_id, user["id"])
     with db() as connection:
-        return [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? ORDER BY created_at", (case_id,))]
+        return [research_row(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? ORDER BY created_at", (case_id,))]
+
+
+def research_row(row):
+    return {**dict(row), "sources": json.loads(row["sources"]), "document_selection": json.loads(row["document_selection"])}
 
 
 @app.post("/api/cases/{case_id}/research", status_code=201)
 def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(require_user)) -> dict:
     case = get_case(case_id, user["id"])
     run_id = str(payload.request_id)
+    document_ids = sorted(set(str(value) for value in payload.document_ids))
     # One local inference at a time protects the single server's memory.
     if not RESEARCH_LOCK.acquire(blocking=False):
         raise HTTPException(status_code=429, detail="ai_busy")
@@ -479,15 +519,20 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
         with db() as connection:
             existing = connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone()
             if existing:
-                if existing["case_id"] != case_id or existing["question"] != payload.question or existing["language"] != payload.language or existing["workflow"] != payload.workflow:
+                if existing["case_id"] != case_id or existing["question"] != payload.question or existing["language"] != payload.language or existing["workflow"] != payload.workflow or json.loads(existing["document_selection"]) != document_ids:
                     raise HTTPException(status_code=409, detail="request_conflict")
                 if existing["status"] == "completed":
-                    return dict(existing)
+                    return research_row(existing)
                 raise HTTPException(status_code=409, detail="request_already_recorded")
             history = [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 6", (case_id,))][::-1]
-            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, OLLAMA_MODEL, now()))
+            for document_id in document_ids:
+                get_document(connection, case_id, document_id)
+                if not connection.execute("SELECT 1 FROM document_pages WHERE document_id=? AND reviewed_at IS NOT NULL LIMIT 1", (document_id,)).fetchone():
+                    raise HTTPException(status_code=422, detail="document_not_reviewed")
+            sources = select_sources(connection, case_id, document_ids, payload.question)
+            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, OLLAMA_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids)))
         try:
-            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow))
+            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources))
         except (URLError, OSError, TimeoutError, ValueError) as error:
             code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_unavailable"
             with db() as connection:
@@ -496,9 +541,71 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
         with db() as connection:
             connection.execute("UPDATE research_runs SET status = 'completed', answer = ?, input_tokens = ?, output_tokens = ?, truncated = ?, finished_at = ? WHERE id = ?", (result["answer"], result["input_tokens"], result["output_tokens"], result["truncated"], now(), run_id))
             record_activity(connection, case_id, "research_answer")
-            return dict(connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone())
+            return research_row(connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone())
     finally:
         RESEARCH_LOCK.release()
+
+
+def get_document(connection, case_id, document_id):
+    document = connection.execute("SELECT * FROM documents WHERE id=? AND case_id=?", (document_id, case_id)).fetchone()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return document
+
+
+def document_text(connection, document_id):
+    extraction = connection.execute("SELECT * FROM document_extractions WHERE document_id=?", (document_id,)).fetchone()
+    units = [dict(row) for row in connection.execute("SELECT * FROM document_pages WHERE document_id=? ORDER BY unit_no", (document_id,))]
+    return {"extraction": dict(extraction) if extraction else None, "units": units}
+
+
+@app.get("/api/cases/{case_id}/documents/{document_id}/text")
+def read_document_text(case_id: str, document_id: str, user: dict = Depends(require_user)):
+    get_case(case_id, user["id"])
+    with db() as connection:
+        get_document(connection, case_id, document_id)
+        return document_text(connection, document_id)
+
+
+@app.post("/api/cases/{case_id}/documents/{document_id}/extract")
+def extract_document(case_id: str, document_id: str, user: dict = Depends(require_user)):
+    get_case(case_id, user["id"])
+    with db() as connection:
+        document = get_document(connection, case_id, document_id)
+        if connection.execute("SELECT 1 FROM document_extractions WHERE document_id=?", (document_id,)).fetchone():
+            return document_text(connection, document_id)
+    if not EXTRACTION_LOCK.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="extraction_busy")
+    try:
+        target = UPLOAD_DIR / document["stored_name"]
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="Stored file not found")
+        try:
+            worker = subprocess.run([sys.executable, "-m", "server.document_extraction", str(target.resolve())], cwd=ROOT, capture_output=True, timeout=30, check=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+            result = json.loads(worker.stdout)
+        except (subprocess.SubprocessError, ValueError, OSError):
+            result = {"status": "failed", "error_code": "extraction_failed", "unit_kind": "page" if target.suffix == ".pdf" else "section", "truncated": False, "units": []}
+        with db() as connection:
+            # Another request may have completed before the lock was acquired.
+            if not connection.execute("SELECT 1 FROM document_extractions WHERE document_id=?", (document_id,)).fetchone():
+                connection.execute("INSERT INTO document_extractions(document_id,status,error_code,unit_kind,truncated,created_at) VALUES (?,?,?,?,?,?)", (document_id, result["status"], result["error_code"], result["unit_kind"], result["truncated"], now()))
+                connection.executemany("INSERT INTO document_pages(document_id,unit_no,original_text) VALUES (?,?,?)", [(document_id, unit["unit_no"], unit["text"]) for unit in result["units"]])
+                record_activity(connection, case_id, "document_extracted", document["original_name"])
+            return document_text(connection, document_id)
+    finally:
+        EXTRACTION_LOCK.release()
+
+
+@app.put("/api/cases/{case_id}/documents/{document_id}/text/{unit_no}")
+def review_document_text(case_id: str, document_id: str, unit_no: int, payload: DocumentTextReview, user: dict = Depends(require_user)):
+    get_case(case_id, user["id"])
+    with db() as connection:
+        document = get_document(connection, case_id, document_id)
+        updated = connection.execute("UPDATE document_pages SET reviewed_text=?,reviewed_at=? WHERE document_id=? AND unit_no=?", (payload.text, now() if payload.reviewed else None, document_id, unit_no))
+        if not updated.rowcount:
+            raise HTTPException(status_code=404, detail="Text unit not found")
+        record_activity(connection, case_id, "document_text_reviewed" if payload.reviewed else "document_text_unreviewed", document["original_name"])
+        return document_text(connection, document_id)
 
 
 @app.post("/api/cases/{case_id}/documents", status_code=201)

@@ -98,6 +98,8 @@ Use Docker on the eventual Linux server, where Caddy, the landing page and the A
 
 This workspace has the official portable Ollama 0.35.1 distribution under ignored `data/ollama-v0.35.1/`, with `qwen2.5:7b` downloaded under `data/models`. These runtime files are not on GitHub. Configure `OLLAMA_MODELS` to that directory when restarting the portable runtime. API defaults: `OLLAMA_BASE_URL=http://127.0.0.1:11434`, `OLLAMA_MODEL=qwen2.5:7b`; no external AI key is required. Model quality must be evaluated for the intended legal work.
 
+The installed native services can be started together with `./start-local.ps1` from the repository root. The launcher reuses running services and existing data; it does not install dependencies. Research chat calls the real local model, retains case-specific conversation and can use explicitly selected, transcription-reviewed PDF text pages or DOCX body sections. Each answer preserves its supplied document excerpts and page/section provenance. The native browser test verified a synthetic invoice amount against PDF page 1. Automatic OCR and external legal-source search/verification remain pending. See [API documentation](server/README.md) for extraction/context limits and endpoint details.
+
 The owner supplies the server, domain, DNS and secret values. Target workflow once those deployment files exist:
 
 1. Clone the GitHub repository onto the server.
