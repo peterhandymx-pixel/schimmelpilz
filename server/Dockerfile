@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends libreoffice-writer fonts-dejavu fonts-liberation && rm -rf /var/lib/apt/lists/*
 COPY server/requirements.txt /app/server/requirements.txt
 RUN pip install --no-cache-dir -r /app/server/requirements.txt
 COPY server /app/server

@@ -5,6 +5,7 @@ import hmac
 import re
 import secrets
 import os
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -14,6 +15,25 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 COOKIE_NAME = "schimmelpilz_session"
 SESSION_DAYS = 7
 failed_logins: dict[str, list[datetime]] = {}
+
+
+class OrganisationProfile(BaseModel):
+    legal_form: str = Field(default="", max_length=80)
+    role: str = Field(default="", max_length=100)
+    representative: str = Field(default="", max_length=160)
+    register_court: str = Field(default="", max_length=160)
+    register_number: str = Field(default="", max_length=80)
+    vat_id: str = Field(default="", max_length=80)
+    industry: str = Field(default="", max_length=160)
+    responsible_lawyer: str = Field(default="", max_length=160)
+    bar_association: str = Field(default="", max_length=160)
+    admission_country: str = Field(default="", max_length=100)
+    practice_areas: str = Field(default="", max_length=500)
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def strip_input(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class RegisterInput(BaseModel):
@@ -27,6 +47,7 @@ class RegisterInput(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     country: str = Field(min_length=2, max_length=100)
     phone: str = Field(default="", max_length=60)
+    profile: OrganisationProfile = Field(default_factory=OrganisationProfile)
 
     @field_validator("email", "full_name", "organisation", "street", "postal_code", "city", "country", "phone", mode="before")
     @classmethod
@@ -65,7 +86,7 @@ def token_hash(token: str) -> str:
 
 
 def public_user(row) -> dict:
-    return {key: row[key] for key in ("id", "email", "audience", "full_name", "organisation", "street", "postal_code", "city", "country", "phone", "created_at")}
+    return {**{key: row[key] for key in ("id", "email", "audience", "full_name", "organisation", "street", "postal_code", "city", "country", "phone", "created_at")}, "profile": json.loads(row["profile"]), "letterhead_id": row["letterhead_id"]}
 
 
 def set_session(connection, user_id: str, request: Request, response: Response) -> None:

@@ -20,13 +20,16 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response as BinaryResponse
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ollama_status, prepare_messages, generate_answer, OLLAMA_MODEL
 from .document_context import select_sources
+from .letterheads import normalize, compose_pdf, office_path
+import hashlib
+from tempfile import TemporaryDirectory
 from urllib.error import URLError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +40,7 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg", ".zip"}
 RESEARCH_LOCK = threading.Lock()
 EXTRACTION_LOCK = threading.Lock()
+LETTERHEAD_LOCK = threading.Lock()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -190,7 +194,26 @@ class DocumentTextReview(BaseModel):
         return self
 
 
+class LetterheadLayout(BaseModel):
+    top_mm: float = Field(default=70, ge=5, le=160)
+    bottom_mm: float = Field(default=30, ge=5, le=120)
+    left_mm: float = Field(default=25, ge=5, le=100)
+    right_mm: float = Field(default=25, ge=5, le=100)
+    font_size: float = Field(default=11, ge=8, le=16)
+
+
+class LetterheadActivation(LetterheadLayout):
+    confirmed: bool
+
+
+class DraftPdfInput(BaseModel):
+    body: str = Field(min_length=1, max_length=50000)
+    draft_id: uuid.UUID | None = None
+    use_current_letterhead: bool = False
+
+
 class DraftUpdate(BaseModel):
+    use_current_letterhead: bool = False
     body: str = Field(min_length=1, max_length=50000)
     recipient: str | None = Field(default=None, max_length=500)
     kind: Literal["letter", "claim", "application", "objection", "response"] | None = None
@@ -290,6 +313,13 @@ def init_db() -> None:
                 token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 expires_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS letterheads (
+                id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+                original_name TEXT NOT NULL, original_stored TEXT NOT NULL,
+                pdf_stored TEXT NOT NULL, pdf_sha256 TEXT NOT NULL,
+                geometry TEXT NOT NULL, layout TEXT NOT NULL DEFAULT '{}',
+                confirmed_at TEXT, created_at TEXT NOT NULL
+            );
             INSERT OR IGNORE INTO counters(name, value) VALUES ('case_reference', 0);
             """
         )
@@ -302,6 +332,14 @@ def init_db() -> None:
         draft_columns = {row["name"] for row in connection.execute("PRAGMA table_info(drafts)")}
         if "kind" not in draft_columns:
             connection.execute("ALTER TABLE drafts ADD COLUMN kind TEXT NOT NULL DEFAULT 'letter'")
+        for column, declaration in (("letterhead_id", "TEXT"), ("letterhead_layout", "TEXT")):
+            if column not in draft_columns:
+                connection.execute(f"ALTER TABLE drafts ADD COLUMN {column} {declaration}")
+        user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)")}
+        if "profile" not in user_columns:
+            connection.execute("ALTER TABLE users ADD COLUMN profile TEXT NOT NULL DEFAULT '{}'")
+        if "letterhead_id" not in user_columns:
+            connection.execute("ALTER TABLE users ADD COLUMN letterhead_id TEXT")
         research_columns = {row["name"] for row in connection.execute("PRAGMA table_info(research_runs)")}
         for column in ("sources", "document_selection"):
             if column not in research_columns:
@@ -347,6 +385,7 @@ def register(payload: RegisterInput, request: Request, response: Response) -> di
             raise HTTPException(status_code=409, detail="Email already registered")
         first_account = not connection.execute("SELECT 1 FROM users LIMIT 1").fetchone()
         connection.execute("INSERT INTO users(id, email, password_hash, salt, audience, full_name, organisation, street, postal_code, city, country, phone, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user_id, payload.email, hashed, salt, payload.audience, payload.full_name, payload.organisation, payload.street, payload.postal_code, payload.city, payload.country, payload.phone, now()))
+        connection.execute("UPDATE users SET profile=? WHERE id=?", (json.dumps(payload.profile.model_dump(), ensure_ascii=False), user_id))
         if first_account:
             # Preserve pre-account local prototype files for its first owner.
             connection.execute("UPDATE cases SET user_id = ? WHERE user_id IS NULL", (user_id,))
@@ -381,6 +420,141 @@ def logout(request: Request, response: Response):
     response.delete_cookie(COOKIE_NAME, path="/", httponly=True, samesite="strict")
 
 
+def owned_letterhead(connection, letterhead_id, user_id):
+    row = connection.execute("SELECT * FROM letterheads WHERE id=? AND user_id=?", (letterhead_id, user_id)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Letterhead not found")
+    return row
+
+
+def public_letterhead(row):
+    return {key: (json.loads(row[key]) if key in {"geometry", "layout"} else row[key]) for key in ("id", "original_name", "pdf_sha256", "geometry", "layout", "confirmed_at", "created_at")}
+
+
+@app.get("/api/auth/letterheads")
+def letterhead_list(user: dict = Depends(require_user)):
+    with db() as connection:
+        return {"active_id": user["letterhead_id"], "word_conversion_ready": bool(office_path()), "items": [public_letterhead(row) for row in connection.execute("SELECT * FROM letterheads WHERE user_id=? ORDER BY created_at DESC", (user["id"],))]}
+
+
+@app.post("/api/auth/letterheads", status_code=201)
+def upload_letterhead(file: UploadFile = File(...), user: dict = Depends(require_user)):
+    original_name = Path((file.filename or "").replace('\\', '/')).name[:200]
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in {'.pdf', '.doc', '.docx'}:
+        raise HTTPException(status_code=415, detail="PDF, DOC or DOCX required")
+    if not LETTERHEAD_LOCK.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="letterhead_busy")
+    try:
+        with TemporaryDirectory(prefix='letterhead-') as temporary:
+            source, output = Path(temporary) / ('source' + suffix), Path(temporary) / 'normalized.pdf'
+            count = 0
+            with source.open('wb') as stream:
+                while chunk := file.file.read(65536):
+                    count += len(chunk)
+                    if count > MAX_UPLOAD_BYTES:
+                        raise HTTPException(status_code=413, detail="Letterhead exceeds 10 MB")
+                    stream.write(chunk)
+            if not count:
+                raise HTTPException(status_code=422, detail="Empty letterhead")
+            try:
+                geometry = normalize(source, output)
+            except Exception as failure:
+                code = str(failure) if str(failure) in {'converter_unavailable', 'one_or_two_pages_required', 'plain_pdf_required', 'portrait_letter_paper_required', 'matching_page_sizes_required'} else 'invalid_letterhead'
+                raise HTTPException(status_code=503 if code == 'converter_unavailable' else 422, detail=code) from None
+            letterhead_id = str(uuid.uuid4())
+            folder = DATA_DIR / 'letterheads'
+            folder.mkdir(exist_ok=True, parents=True)
+            original_stored, pdf_stored = letterhead_id + suffix, letterhead_id + '-normalized.pdf'
+            import shutil
+            shutil.copyfile(source, folder / original_stored)
+            shutil.copyfile(output, folder / pdf_stored)
+            digest = hashlib.sha256(output.read_bytes()).hexdigest()
+            with db() as connection:
+                connection.execute("INSERT INTO letterheads(id,user_id,original_name,original_stored,pdf_stored,pdf_sha256,geometry,layout,created_at) VALUES (?,?,?,?,?,?,?,?,?)", (letterhead_id, user['id'], original_name, original_stored, pdf_stored, digest, json.dumps(geometry), json.dumps(LetterheadLayout().model_dump()), now()))
+                return public_letterhead(owned_letterhead(connection, letterhead_id, user['id']))
+    finally:
+        LETTERHEAD_LOCK.release()
+
+
+@app.get("/api/auth/letterheads/{letterhead_id}/pdf")
+def read_letterhead_pdf(letterhead_id: str, user: dict = Depends(require_user)):
+    with db() as connection:
+        row = owned_letterhead(connection, letterhead_id, user['id'])
+        return FileResponse(DATA_DIR / 'letterheads' / row['pdf_stored'], media_type='application/pdf', headers={'Cache-Control': 'no-store'})
+
+
+def letterhead_pdf_response(body, letterhead_id, layout, user_id):
+    template = None
+    if letterhead_id:
+        with db() as connection:
+            row = owned_letterhead(connection, letterhead_id, user_id)
+            template = DATA_DIR / 'letterheads' / row['pdf_stored']
+    try:
+        content = compose_pdf(body, template, layout)
+    except ValueError:
+        raise HTTPException(status_code=422, detail='body_frame_too_small') from None
+    return BinaryResponse(content, media_type='application/pdf', headers={'Cache-Control': 'no-store', 'Content-Disposition': 'inline; filename="Schimmelpilz-Entwurf.pdf"'})
+
+
+@app.post("/api/auth/letterheads/{letterhead_id}/preview")
+def preview_letterhead(letterhead_id: str, payload: LetterheadLayout, user: dict = Depends(require_user)):
+    with db() as connection:
+        owned_letterhead(connection, letterhead_id, user['id'])
+    body = 'BEISPIELENTWURF / SAMPLE DRAFT\n\nEmpfänger / Recipient\nBeispielstraße 1\n10115 Berlin\n\nIhr Zeichen: [Referenz]\nUnser Zeichen: [Aktenzeichen]\n\nSehr geehrte Damen und Herren,\n\nDieser Mustertext zeigt den gewählten Schreibbereich. Prüfen Sie, dass weder Logo noch Fußzeile überdeckt werden.\n\nMit freundlichen Grüßen\n[Name]\n\n' + ('Beispieltext für die Folgeseite. Sample continuation text.\n' * 70)
+    return letterhead_pdf_response(body, letterhead_id, payload.model_dump(), user['id'])
+
+
+@app.put("/api/auth/letterheads/{letterhead_id}/activate")
+def activate_letterhead(letterhead_id: str, payload: LetterheadActivation, user: dict = Depends(require_user)):
+    if not payload.confirmed:
+        raise HTTPException(status_code=422, detail='preview_confirmation_required')
+    layout = payload.model_dump(exclude={'confirmed'})
+    # Validate the usable frame before making it the default for new drafts.
+    letterhead_pdf_response('Layoutprüfung', letterhead_id, layout, user['id'])
+    with db() as connection:
+        row = owned_letterhead(connection, letterhead_id, user['id'])
+        if row['confirmed_at']:
+            raise HTTPException(status_code=409, detail='letterhead_version_immutable')
+        connection.execute("UPDATE letterheads SET layout=?,confirmed_at=? WHERE id=?", (json.dumps(layout), now(), row['id']))
+        connection.execute("UPDATE users SET letterhead_id=? WHERE id=?", (row['id'], user['id']))
+        return public_letterhead(owned_letterhead(connection, letterhead_id, user['id']))
+
+
+def draft_letterhead(user):
+    if not user['letterhead_id']:
+        return None, None
+    with db() as connection:
+        row = owned_letterhead(connection, user['letterhead_id'], user['id'])
+        return row['id'], row['layout']
+
+
+@app.post("/api/cases/{case_id}/drafts/preview-pdf")
+def preview_draft_pdf(case_id: str, payload: DraftPdfInput, user: dict = Depends(require_user)):
+    get_case(case_id, user['id'])
+    if payload.draft_id:
+        with db() as connection:
+            draft = connection.execute('SELECT * FROM drafts WHERE case_id=? AND id=?', (case_id, str(payload.draft_id))).fetchone()
+            if not draft:
+                raise HTTPException(status_code=404, detail='Draft not found')
+            letterhead_id, layout = draft['letterhead_id'], draft['letterhead_layout']
+        if payload.use_current_letterhead:
+            letterhead_id, layout = draft_letterhead(user)
+    else:
+        letterhead_id, layout = draft_letterhead(user)
+    return letterhead_pdf_response(payload.body, letterhead_id, json.loads(layout) if layout else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump(), user['id'])
+
+
+@app.get("/api/cases/{case_id}/drafts/{draft_id}/pdf")
+def export_draft_pdf(case_id: str, draft_id: str, user: dict = Depends(require_user)):
+    get_case(case_id, user['id'])
+    with db() as connection:
+        row = connection.execute('SELECT * FROM drafts WHERE case_id=? AND id=?', (case_id, draft_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='Draft not found')
+    return letterhead_pdf_response(row['body'], row['letterhead_id'], json.loads(row['letterhead_layout']) if row['letterhead_layout'] else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump(), user['id'])
+
+
 def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
     documents = connection.execute(
         """SELECT d.id, d.original_name, d.content_type, d.size_bytes, d.created_at,
@@ -391,7 +565,7 @@ def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
         (row["id"],),
     ).fetchall()
     drafts = connection.execute(
-        "SELECT id, language, recipient, body, kind, created_at FROM drafts WHERE case_id = ? ORDER BY created_at DESC",
+        "SELECT id, language, recipient, body, kind, created_at, letterhead_id FROM drafts WHERE case_id = ? ORDER BY created_at DESC",
         (row["id"],),
     ).fetchall()
     return {
@@ -671,10 +845,11 @@ def create_draft(case_id: str, payload: DraftCreate, user: dict = Depends(requir
     )
     draft_id = str(uuid.uuid4())
     created = now()
+    letterhead_id, letterhead_layout = draft_letterhead(user)
     with db() as connection:
-        connection.execute("INSERT INTO drafts(id, case_id, language, recipient, body, created_at, kind) VALUES (?, ?, ?, ?, ?, ?, ?)", (draft_id, case_id, payload.language, payload.recipient.strip(), body, created, payload.kind))
+        connection.execute("INSERT INTO drafts(id, case_id, language, recipient, body, created_at, kind, letterhead_id, letterhead_layout) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (draft_id, case_id, payload.language, payload.recipient.strip(), body, created, payload.kind, letterhead_id, letterhead_layout))
         activity = record_activity(connection, case_id, "draft_created", payload.kind)
-    return {"id": draft_id, "case_id": case_id, "language": payload.language, "recipient": payload.recipient, "kind": payload.kind, "body": body, "created_at": created, "activity": activity, "disclaimer": "Draft only; have a qualified lawyer review it before sending."}
+    return {"id": draft_id, "case_id": case_id, "language": payload.language, "recipient": payload.recipient, "kind": payload.kind, "body": body, "created_at": created, "letterhead_id": letterhead_id, "activity": activity, "disclaimer": "Draft only; have a qualified lawyer review it before sending."}
 
 
 @app.put("/api/cases/{case_id}/drafts/{draft_id}")
@@ -684,5 +859,8 @@ def update_draft(case_id: str, draft_id: str, payload: DraftUpdate, user: dict =
         result = connection.execute("UPDATE drafts SET body = ?, recipient = COALESCE(?, recipient), kind = COALESCE(?, kind), language = COALESCE(?, language) WHERE case_id = ? AND id = ?", (payload.body, payload.recipient, payload.kind, payload.language, case_id, draft_id))
         if result.rowcount != 1:
             raise HTTPException(status_code=404, detail="Draft not found")
+        if payload.use_current_letterhead:
+            letterhead_id, layout = draft_letterhead(user)
+            connection.execute('UPDATE drafts SET letterhead_id=?,letterhead_layout=? WHERE id=?', (letterhead_id, layout, draft_id))
         activity = record_activity(connection, case_id, "draft_updated", payload.kind or "")
-        return {**dict(connection.execute("SELECT id, case_id, language, recipient, body, kind, created_at FROM drafts WHERE id = ?", (draft_id,)).fetchone()), "activity": activity}
+        return {**dict(connection.execute("SELECT id, case_id, language, recipient, body, kind, created_at, letterhead_id FROM drafts WHERE id = ?", (draft_id,)).fetchone()), "activity": activity}

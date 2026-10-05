@@ -7,4 +7,5 @@ RUN pnpm exec vite build
 
 FROM nginx:1.27-alpine
 COPY --from=build /app/dist/client /usr/share/nginx/html
+COPY landing/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

@@ -13,8 +13,10 @@ Endpoints:
 
 - `GET /api/health`
 - `GET /api/cases` returns saved cases, documents and drafts.
-- `POST /api/auth/register` with email, password (12+ characters), audience, name and contact address. Business/law-firm accounts also require an organisation.
+- `POST /api/auth/register` with email, password (12+ characters), audience, name and contact address. Business/law-firm accounts also require an organisation; optional `profile` stores legal form, role, representative, registry court/number, VAT ID and industry or responsible lawyer, bar association, admission country and practice areas. These are self-declared details, not verified professional status or shared-staff permissions.
 - `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`
+- `GET /api/auth/letterheads`, `POST /api/auth/letterheads` (multipart `file`, PDF/DOC/DOCX, maximum 10 MB).
+- `GET /api/auth/letterheads/{id}/pdf`, `POST /api/auth/letterheads/{id}/preview` with margin settings, and `PUT /api/auth/letterheads/{id}/activate` with the same settings and `confirmed: true`.
 - `POST /api/cases` with `{ "title", "description", "language", "reference_mode", "reference", "details" }`. Use `generate` or `existing`; an existing reference must be unique within the account. Court and opponent references belong in `details`.
 - `GET /api/cases/{id}`
 - `PUT /api/cases/{id}` edits title, description, language and details; internal reference is immutable.
@@ -28,7 +30,8 @@ Endpoints:
 - `POST /api/cases/{id}/documents/{document_id}/extract` extracts PDF text layers or DOCX body paragraphs/tables in a local, time-limited worker. Repeated extraction preserves corrections. Scans require OCR; images and legacy DOC are unsupported. Encrypted/invalid files retain their original upload.
 - `PUT /api/cases/{id}/documents/{document_id}/text/{unit_no}` with `text` and `reviewed` saves a corrected page/section. Review checks transcription, not factual truth or legal validity. Empty text cannot be marked reviewed.
 - `POST /api/cases/{id}/drafts` with `{ "language", "recipient", "kind", "body" }`. Kinds: `letter`, `claim`, `application`, `objection`, `response`. Only a basic letter can omit `body`.
-- `PUT /api/cases/{id}/drafts/{draft_id}` with `{ "body", "recipient", "kind", "language" }` stores the edited text and metadata.
+- `PUT /api/cases/{id}/drafts/{draft_id}` with `{ "body", "recipient", "kind", "language" }` stores the edited text and metadata. Optional `use_current_letterhead: true` adopts the currently active briefpaper version; otherwise the saved version is retained.
+- `POST /api/cases/{id}/drafts/preview-pdf` with `body`, optional `draft_id` and `use_current_letterhead` exports current editor text without saving it. `GET /api/cases/{id}/drafts/{draft_id}/pdf` exports the saved version.
 
 All case, document and draft routes require a signed-in account. Every write request, including login/register/logout, must include `X-Schimmelpilz-Request: 1`. The frontend includes the header and session cookie automatically.
 
@@ -40,6 +43,7 @@ In the default Shadow PC setup, data lives under `C:\Users\Shadow\Downloads\ai\d
 
 - `app.db`: accounts, password hashes, hashed session tokens, case particulars, references, document metadata, exact draft text, tasks, activity and research runs with model/token/status metadata.
 - `uploads/`: document contents under generated filenames, outside the public web folder.
+- `letterheads/`: private original uploads and normalized PDF templates. SQLite stores ownership, dimensions, SHA-256, margins, confirmation and the version used by each draft.
 - `app.db-wal` and `app.db-shm`, when present, are SQLite working files.
 
 After a browser reload, the frontend fetches saved cases from the API. The saved-case selector restores the last chosen case. Browser storage holds only that case ID and the interface language, not the document contents or draft text. Clearing browser storage does not delete server records. Data also survives an API restart, provided the data directory is retained. This does not protect against disk loss or a Shadow PC reset.
@@ -54,6 +58,16 @@ Set `DATA_DIR` before starting the API to choose another directory. Docker uses 
 ```
 
 The tests use temporary storage, leaving real cases untouched. They check persistence, edited text, account isolation, migration of legacy data, references, uploaded-byte downloads and validation.
+
+## Registration and letter paper
+
+The bilingual registration form separates consumer, company and law-firm fields. Companies and firms receive an optional second onboarding step for blank letter paper; existing accounts can configure it under their profile. Upload a template without an old letter body or recipient. Accept one or two equal-size portrait pages: page one is used first, and the last template page repeats on continuation pages. PDF templates must be unencrypted, without annotations, form fields, rotation or cropped pages.
+
+PDF drawing content is reused at its original size and position; draft text is added inside a user-selected writing frame. Top, bottom, left and right margins apply to every page. Activation requires a sample preview and an explicit layout confirmation in the UI. Confirmed versions are immutable. New drafts snapshot the active version and margins; older drafts keep their version until the user opts to adopt the current briefhead when saving. Plain-text downloads cannot contain a graphic letterhead. PDF output is available; editable DOCX output, automatic signature and dispatch are not implemented.
+
+Word templates are converted locally using LibreOffice with a separate temporary profile, macros disabled and a 60-second timeout. Font substitution and line breaks can change during conversion, so the converted PDF must be checked before confirmation. Original uploads are retained privately. This is not a process sandbox for untrusted Office files; production operators must add converter isolation and maintain its security updates.
+
+Install LibreOffice Writer on the server or set `SOFFICE_PATH` to its executable. Native Shadow development detects the official extracted runtime at `data/libreoffice/program/soffice.exe`; this ignored runtime is not uploaded to GitHub. Docker installs LibreOffice Writer and fonts. No converter means Word upload returns 503; PDF templates continue to work. PDF.js renders preview pages in the browser using bundled worker/font assets; licences are under `docs/licenses/`.
 
 ## Accounts and migration
 
