@@ -27,6 +27,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ollama_status, prepare_messages, generate_answer, OLLAMA_MODEL
 from .document_context import select_sources
+from . import legal_catalogue
+from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
 import hashlib
 from tempfile import TemporaryDirectory
@@ -176,6 +178,8 @@ class ResearchInput(BaseModel):
     language: Literal["de", "en"] = "de"
     workflow: Literal["intake", "research", "jurisdiction", "costs", "drafting", "deadlines"] = "research"
     document_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
+    legal_source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
+    use_legal_catalogue: bool = False
 
     @field_validator("question", mode="before")
     @classmethod
@@ -191,6 +195,21 @@ class DocumentTextReview(BaseModel):
     def require_review_text(self):
         if self.reviewed and not self.text.strip():
             raise ValueError("Reviewed text must not be empty")
+        return self
+
+
+class LegalAttachInput(BaseModel):
+    key: str = Field(min_length=3,max_length=180,pattern=r'^(law|decision):[A-Za-z0-9:_-]+$')
+
+
+class LegalReviewInput(BaseModel):
+    status: Literal['pending','checked','excluded']
+    note: str = Field(default='',max_length=1500)
+
+    @model_validator(mode='after')
+    def review_needs_note(self):
+        if self.status == 'checked' and len(self.note.strip()) < 10:
+            raise ValueError('Describe version, applicability and passage review')
         return self
 
 
@@ -320,6 +339,13 @@ def init_db() -> None:
                 geometry TEXT NOT NULL, layout TEXT NOT NULL DEFAULT '{}',
                 confirmed_at TEXT, created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS case_legal_sources (
+                id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+                snapshot_id TEXT NOT NULL, snapshot TEXT NOT NULL,
+                review_status TEXT NOT NULL, review_note TEXT NOT NULL,
+                reviewed_at TEXT, reviewed_by TEXT, created_at TEXT NOT NULL,
+                UNIQUE(case_id,snapshot_id)
+            );
             INSERT OR IGNORE INTO counters(name, value) VALUES ('case_reference', 0);
             """
         )
@@ -341,9 +367,12 @@ def init_db() -> None:
         if "letterhead_id" not in user_columns:
             connection.execute("ALTER TABLE users ADD COLUMN letterhead_id TEXT")
         research_columns = {row["name"] for row in connection.execute("PRAGMA table_info(research_runs)")}
-        for column in ("sources", "document_selection"):
+        for column in ("sources", "document_selection", "legal_sources"):
             if column not in research_columns:
                 connection.execute(f"ALTER TABLE research_runs ADD COLUMN {column} TEXT NOT NULL DEFAULT '[]'")
+        for column in ('legal_selection','citation_audit','retrieval_report'):
+            if column not in research_columns:
+                connection.execute(f"ALTER TABLE research_runs ADD COLUMN {column} TEXT NOT NULL DEFAULT '{{}}'")
         connection.commit()
         # Legacy databases made references globally unique. They are now per account.
         if any(index["origin"] == "u" for index in connection.execute("PRAGMA index_list(cases)")):
@@ -670,6 +699,68 @@ def research_status(user: dict = Depends(require_user)) -> dict:
     return ollama_status()
 
 
+@app.get('/api/legal/status')
+def legal_status(user: dict = Depends(require_user)):
+    return legal_catalogue.catalogue_status()
+
+
+@app.post('/api/legal/refresh',status_code=202)
+def legal_refresh(user: dict = Depends(require_user)):
+    return {'started':legal_catalogue.start_sync(),'status':legal_catalogue.catalogue_status()}
+
+
+@app.get('/api/legal/search')
+def legal_search(q: str, kind: Literal['all','law','decision']='all', user: dict = Depends(require_user)):
+    if not 2 <= len(q.strip()) <= 200:
+        raise HTTPException(status_code=422,detail='query_length')
+    results = legal_catalogue.search(q,kind)
+    return {'results':[{key:value for key,value in item.items() if key not in {'text','units'}} for item in results],'coverage':legal_catalogue.catalogue_status()}
+
+
+@app.get('/api/legal/source')
+def legal_source(key: str, user: dict = Depends(require_user)):
+    try:
+        return legal_catalogue.source(key)
+    except LookupError:
+        raise HTTPException(status_code=404,detail='source_not_found') from None
+    except (ValueError,OSError,URLError):
+        raise HTTPException(status_code=503,detail='official_source_unavailable') from None
+
+
+@app.get('/api/cases/{case_id}/legal-sources')
+def case_legal_sources(case_id: str, user: dict = Depends(require_user)):
+    get_case(case_id,user['id'])
+    with db() as connection:
+        return [legal_row(row) for row in connection.execute('SELECT * FROM case_legal_sources WHERE case_id=? ORDER BY created_at DESC',(case_id,))]
+
+
+@app.post('/api/cases/{case_id}/legal-sources',status_code=201)
+def add_legal_source(case_id: str, payload: LegalAttachInput, user: dict = Depends(require_user)):
+    get_case(case_id,user['id'])
+    try:
+        snapshot = legal_catalogue.source(payload.key)
+        with db() as connection:
+            identifier = attach_snapshot(connection,case_id,snapshot)
+            return legal_row(connection.execute('SELECT * FROM case_legal_sources WHERE id=?',(identifier,)).fetchone())
+    except LookupError:
+        raise HTTPException(status_code=404,detail='source_not_found') from None
+    except (ValueError,OSError,URLError):
+        raise HTTPException(status_code=503,detail='official_source_unavailable') from None
+
+
+@app.put('/api/cases/{case_id}/legal-sources/{source_id}/review')
+def review_legal_source(case_id: str, source_id: str, payload: LegalReviewInput, user: dict = Depends(require_user)):
+    get_case(case_id,user['id'])
+    with db() as connection:
+        row = connection.execute('SELECT * FROM case_legal_sources WHERE case_id=? AND id=?',(case_id,source_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404,detail='source_not_found')
+        checked = payload.status == 'checked'
+        connection.execute('UPDATE case_legal_sources SET review_status=?,review_note=?,reviewed_at=?,reviewed_by=? WHERE id=?',(payload.status,payload.note.strip(),now() if checked else None,user['id'] if checked else None,source_id))
+        record_activity(connection,case_id,'legal_source_review',payload.status)
+        return legal_row(connection.execute('SELECT * FROM case_legal_sources WHERE id=?',(source_id,)).fetchone())
+
+
 @app.get("/api/cases/{case_id}/research")
 def research_history(case_id: str, user: dict = Depends(require_user)) -> list[dict]:
     get_case(case_id, user["id"])
@@ -678,7 +769,7 @@ def research_history(case_id: str, user: dict = Depends(require_user)) -> list[d
 
 
 def research_row(row):
-    return {**dict(row), "sources": json.loads(row["sources"]), "document_selection": json.loads(row["document_selection"])}
+    return {**dict(row), **{key:json.loads(row[key]) for key in ('sources','document_selection','legal_sources','legal_selection','citation_audit','retrieval_report')}}
 
 
 @app.post("/api/cases/{case_id}/research", status_code=201)
@@ -686,6 +777,8 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
     case = get_case(case_id, user["id"])
     run_id = str(payload.request_id)
     document_ids = sorted(set(str(value) for value in payload.document_ids))
+    legal_ids = sorted(set(str(value) for value in payload.legal_source_ids))
+    selection = {'ids':legal_ids,'automatic':payload.use_legal_catalogue}
     # One local inference at a time protects the single server's memory.
     if not RESEARCH_LOCK.acquire(blocking=False):
         raise HTTPException(status_code=429, detail="ai_busy")
@@ -693,7 +786,8 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
         with db() as connection:
             existing = connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone()
             if existing:
-                if existing["case_id"] != case_id or existing["question"] != payload.question or existing["language"] != payload.language or existing["workflow"] != payload.workflow or json.loads(existing["document_selection"]) != document_ids:
+                stored_selection = json.loads(existing['legal_selection']) or {'ids':[],'automatic':False}
+                if existing["case_id"] != case_id or existing["question"] != payload.question or existing["language"] != payload.language or existing["workflow"] != payload.workflow or json.loads(existing["document_selection"]) != document_ids or stored_selection != selection:
                     raise HTTPException(status_code=409, detail="request_conflict")
                 if existing["status"] == "completed":
                     return research_row(existing)
@@ -704,16 +798,48 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
                 if not connection.execute("SELECT 1 FROM document_pages WHERE document_id=? AND reviewed_at IS NOT NULL LIMIT 1", (document_id,)).fetchone():
                     raise HTTPException(status_code=422, detail="document_not_reviewed")
             sources = select_sources(connection, case_id, document_ids, payload.question)
-            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, OLLAMA_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids)))
+            for identifier in legal_ids:
+                row = connection.execute('SELECT review_status FROM case_legal_sources WHERE case_id=? AND id=?',(case_id,identifier)).fetchone()
+                if not row:
+                    raise HTTPException(status_code=404,detail='source_not_found')
+                if row['review_status'] == 'excluded':
+                    raise HTTPException(status_code=422,detail='source_excluded')
+        if (legal_ids or payload.use_legal_catalogue) and case['details'].get('jurisdiction','DE') != 'DE':
+            raise HTTPException(status_code=422,detail='legal_catalogue_jurisdiction')
+        retrieval = {'automatic':payload.use_legal_catalogue,'errors':[],'coverage':None}
+        if payload.use_legal_catalogue:
+            retrieval['coverage'] = legal_catalogue.catalogue_status()
+            for hit in legal_catalogue.search(payload.question,limit=4):
+                try:
+                    snapshot = legal_catalogue.source(hit['key'])
+                    with db() as connection:
+                        identifier = attach_snapshot(connection,case_id,snapshot)
+                        excluded = connection.execute('SELECT review_status FROM case_legal_sources WHERE id=?',(identifier,)).fetchone()['review_status'] == 'excluded'
+                        if not excluded and identifier not in legal_ids and len(legal_ids) < 8:
+                            legal_ids.append(identifier)
+                except (ValueError,OSError,URLError,LookupError):
+                    retrieval['errors'].append({'title':hit['title'],'reason':'retrieval_failed'})
+        with db() as connection:
+            legal_rows = []
+            for identifier in legal_ids:
+                row = connection.execute('SELECT * FROM case_legal_sources WHERE case_id=? AND id=?',(case_id,identifier)).fetchone()
+                if not row:
+                    raise HTTPException(status_code=404,detail='source_not_found')
+                legal_rows.append(row)
+            try:
+                legal_passages = supplied_legal_passages(legal_rows,payload.question)
+            except ValueError:
+                raise HTTPException(status_code=422,detail='source_excluded') from None
+            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, OLLAMA_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False)))
         try:
-            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources))
+            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages))
         except (URLError, OSError, TimeoutError, ValueError) as error:
             code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_unavailable"
             with db() as connection:
                 connection.execute("UPDATE research_runs SET status = 'failed', error_code = ?, finished_at = ? WHERE id = ?", (code, now(), run_id))
             raise HTTPException(status_code=504 if code == "ai_timeout" else 503, detail=code) from None
         with db() as connection:
-            connection.execute("UPDATE research_runs SET status = 'completed', answer = ?, input_tokens = ?, output_tokens = ?, truncated = ?, finished_at = ? WHERE id = ?", (result["answer"], result["input_tokens"], result["output_tokens"], result["truncated"], now(), run_id))
+            connection.execute("UPDATE research_runs SET status = 'completed', answer = ?, input_tokens = ?, output_tokens = ?, truncated = ?, finished_at = ?, citation_audit=? WHERE id = ?", (result["answer"], result["input_tokens"], result["output_tokens"], result["truncated"], now(),json.dumps(citation_audit(result['answer'],legal_passages)), run_id))
             record_activity(connection, case_id, "research_answer")
             return research_row(connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone())
     finally:

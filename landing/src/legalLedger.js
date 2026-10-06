@@ -1,0 +1,6 @@
+// Preserve the supplied snapshot in the editable draft and its PDF, including citation warnings.
+export function legalLedger(sources = [], audit = {}, lang = 'de') {
+  if (!sources.length && !audit.unknown?.length && !audit.missing_citations) return '';
+  const de = lang === 'de';
+  return `\n\n${de ? 'RECHTSQUELLEN DIESER ANFRAGE – RECHTLICHE PRÜFUNG ERFORDERLICH' : 'LEGAL SOURCES FOR THIS REQUEST – LEGAL REVIEW REQUIRED'}\n` + sources.map(item => `[${item.citation_id}] ${item.title}\n${item.pinpoint}\n${item.url}\n${de ? 'Abruf' : 'Retrieved'}: ${item.fetched_at}\n${item.metadata.version_note || [item.metadata.decision_type,item.metadata.decision_date,item.metadata.reference,item.metadata.ecli].filter(Boolean).join(' · ')}\n${de ? 'Eigene Prüfung' : 'User review'}: ${item.review_status} ${item.review_note || ''}\n${item.text}${item.excerpt_truncated ? '\n[Auszug / Excerpt]' : ''}\nSHA-256: ${item.source_sha256}\n${de ? 'Auszug SHA-256' : 'Excerpt SHA-256'}: ${item.excerpt_sha256}`).join('\n\n') + (audit.unknown?.length ? `\n\n${de ? 'Nicht zugeordnete KI-Verweise' : 'Unmatched AI references'}: ${audit.unknown.join(', ')}` : '') + (audit.missing_citations ? `\n\n${de ? 'Die Antwort enthält keine zugeordneten Quellenverweise.' : 'The answer contains no matched source references.'}` : '');
+}
