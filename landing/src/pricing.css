@@ -1,0 +1,23 @@
+.pricing-section{max-width:1292px;margin:0 auto;padding:90px 0 30px;scroll-margin-top:30px}
+.pricing-heading{max-width:800px;margin:0 auto;text-align:center}
+.pricing-heading h2{font:400 44px/1.15 var(--serif);margin:12px 0 18px;color:var(--ink)}
+.pricing-heading>p:last-child{font-size:19px;line-height:1.5;color:var(--muted);margin:0}
+.pricing-trial{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:12px 24px;margin:26px 0 32px;color:var(--green)}
+.pricing-trial strong{background:#e4eee7;border-radius:100px;padding:9px 18px;font-size:16px}
+.pricing-trial span{font-size:15px;color:var(--muted)}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.pricing-card{background:#fffdf9;border:1px solid var(--line);border-radius:12px;padding:30px;display:flex;flex-direction:column;box-shadow:0 8px 24px #173d3206}
+.pricing-card h3{font:400 32px var(--serif);margin:0 0 10px}
+.pricing-description{font-size:16px;line-height:1.5;color:var(--muted);min-height:72px;margin:0}
+.pricing-amount{font:400 48px var(--serif);letter-spacing:-1px;margin:26px 0;color:var(--green)}
+.pricing-amount small{display:block;font:400 14px var(--sans);letter-spacing:0;color:var(--muted);margin-top:6px}
+.pricing-card ul{padding:0;margin:0 0 28px;list-style:none;display:grid;gap:13px;font-size:15px;line-height:1.4}
+.pricing-card li{display:flex;gap:9px;align-items:flex-start}.pricing-card li svg{flex-shrink:0;color:var(--green);margin-top:2px}
+.pricing-cta{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--green);color:#fff;border:1px solid var(--green);border-radius:6px;padding:12px 16px;font-weight:600;font-size:16px;margin-top:auto;cursor:pointer;min-height:48px}
+.pricing-cta:hover{background:#07372b}.pricing-shared{font-size:16px;line-height:1.5;color:var(--ink);text-align:center;margin:26px 0 18px}
+.pricing-pilot{background:#f0ede5;border:1px solid var(--line);border-radius:8px;padding:15px 20px;color:#514635;font-size:15px;line-height:1.5;text-align:center;margin:0}
+.pricing-note{font-size:14px;line-height:1.5;color:var(--muted);text-align:center;margin:14px auto 0;max-width:900px}
+@media(max-width:1364px){.pricing-section{margin-left:36px;margin-right:36px}}
+@media(max-width:900px){.pricing-grid{gap:14px}.pricing-card{padding:22px}.pricing-amount{font-size:40px}.pricing-card h3{font-size:28px}}
+@media(max-width:720px){.pricing-grid{grid-template-columns:1fr}.pricing-heading h2{font-size:35px}.pricing-section{padding-top:65px}.pricing-description{min-height:0}.pricing-card{padding:26px}.pricing-trial{flex-direction:column;gap:10px}}
+@media(max-width:600px){.pricing-section{margin-left:20px;margin-right:20px}.pricing-heading>p:last-child{font-size:17px}}

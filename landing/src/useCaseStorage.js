@@ -125,7 +125,8 @@ export function useCaseStorage(enabled = true) {
     }
   };
 
-  return { cases, selectedCase, selectCase, loading, loadError, reload, createCase, updateCase, saveTask, uploadDocuments, saveDraft, uploading, savingDraft };
+  const applyDraft = draft => setCases(current => current.map(item => item.id === selectedId ? {...item,drafts:item.drafts.map(saved => saved.id === draft.id && (saved.version < draft.version || (saved.version === draft.version && saved.review_revision <= draft.review_revision)) ? draft : saved),activities:[draft.activity,...(item.activities || [])].filter(Boolean)} : item));
+  return { cases, selectedCase, selectCase, loading, loadError, reload, createCase, updateCase, saveTask, uploadDocuments, saveDraft, applyDraft, uploading, savingDraft };
 }
 
 export function letterTemplate(item, language) {

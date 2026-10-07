@@ -28,6 +28,7 @@ from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_
 from .research import ollama_status, prepare_messages, generate_answer, OLLAMA_MODEL
 from .document_context import select_sources
 from . import legal_catalogue
+from . import draft_review
 from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
 import hashlib
@@ -126,6 +127,7 @@ class CaseCreate(BaseModel):
 
 
 class DraftCreate(BaseModel):
+    research_run_id: uuid.UUID | None = None
     language: str = Field(default="de", pattern="^(de|en)$")
     recipient: str = Field(default="", max_length=500)
     kind: Literal["letter", "claim", "application", "objection", "response"] = "letter"
@@ -232,6 +234,7 @@ class DraftPdfInput(BaseModel):
 
 
 class DraftUpdate(BaseModel):
+    expected_version: int | None = Field(default=None,ge=1)
     use_current_letterhead: bool = False
     body: str = Field(min_length=1, max_length=50000)
     recipient: str | None = Field(default=None, max_length=500)
@@ -242,6 +245,16 @@ class DraftUpdate(BaseModel):
     @classmethod
     def strip_body(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+
+class DraftReviewInput(BaseModel):
+    action: Literal['begin','check','approve','reopen']
+    expected_version: int = Field(ge=1)
+    expected_review_revision: int = Field(ge=0)
+    check_id: str | None = Field(default=None,max_length=100)
+    checked: bool = False
+    note: str = Field(default='',max_length=2500)
+    confirmed: bool = False
 
 
 def now() -> str:
@@ -391,6 +404,7 @@ def init_db() -> None:
             """)
             connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS case_owner_reference ON cases(user_id, reference COLLATE NOCASE)")
+        draft_review.migrate(connection)
 
 
 def require_user(request: Request) -> dict:
@@ -581,7 +595,11 @@ def export_draft_pdf(case_id: str, draft_id: str, user: dict = Depends(require_u
         row = connection.execute('SELECT * FROM drafts WHERE case_id=? AND id=?', (case_id, draft_id)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail='Draft not found')
-    return letterhead_pdf_response(row['body'], row['letterhead_id'], json.loads(row['letterhead_layout']) if row['letterhead_layout'] else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump(), user['id'])
+    result = letterhead_pdf_response(row['body'], row['letterhead_id'], json.loads(row['letterhead_layout']) if row['letterhead_layout'] else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump(), user['id'])
+    result.headers['X-Draft-Version'] = str(row['version'])
+    result.headers['X-Draft-Review-Status'] = row['review_status']
+    result.headers['Content-Disposition'] = f'attachment; filename="Schimmelpilz-v{row["version"]}-{row["review_status"]}.pdf"'
+    return result
 
 
 def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
@@ -594,7 +612,7 @@ def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
         (row["id"],),
     ).fetchall()
     drafts = connection.execute(
-        "SELECT id, language, recipient, body, kind, created_at, letterhead_id FROM drafts WHERE case_id = ? ORDER BY created_at DESC",
+        "SELECT id, language, recipient, body, kind, created_at, letterhead_id,version,updated_at,review_status,review_revision,approved_by,approved_name,approved_at,research_run_id FROM drafts WHERE case_id = ? ORDER BY created_at DESC",
         (row["id"],),
     ).fetchall()
     return {
@@ -973,20 +991,112 @@ def create_draft(case_id: str, payload: DraftCreate, user: dict = Depends(requir
     created = now()
     letterhead_id, letterhead_layout = draft_letterhead(user)
     with db() as connection:
-        connection.execute("INSERT INTO drafts(id, case_id, language, recipient, body, created_at, kind, letterhead_id, letterhead_layout) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (draft_id, case_id, payload.language, payload.recipient.strip(), body, created, payload.kind, letterhead_id, letterhead_layout))
+        context = {}
+        if payload.research_run_id:
+            run = connection.execute("SELECT * FROM research_runs WHERE id=? AND case_id=? AND status='completed'",(str(payload.research_run_id),case_id)).fetchone()
+            if not run:
+                raise HTTPException(status_code=404,detail='research_not_found')
+            context = {key:json.loads(run[key]) for key in ('legal_sources','sources','citation_audit','retrieval_report')}
+            context.update(run_id=run['id'],question=run['question'],answer=run['answer'],model=run['model'],created_at=run['created_at'])
+        connection.execute("INSERT INTO drafts(id, case_id, language, recipient, body, created_at, kind, letterhead_id, letterhead_layout,research_run_id,source_context,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (draft_id, case_id, payload.language, payload.recipient.strip(), body, created, payload.kind, letterhead_id, letterhead_layout,str(payload.research_run_id) if payload.research_run_id else None,json.dumps(context,ensure_ascii=False),created))
+        row = connection.execute('SELECT * FROM drafts WHERE id=?',(draft_id,)).fetchone()
+        draft_review.snapshot_version(connection,row,user)
+        draft_review.event(connection,row,user,'created')
         activity = record_activity(connection, case_id, "draft_created", payload.kind)
-    return {"id": draft_id, "case_id": case_id, "language": payload.language, "recipient": payload.recipient, "kind": payload.kind, "body": body, "created_at": created, "letterhead_id": letterhead_id, "activity": activity, "disclaimer": "Draft only; have a qualified lawyer review it before sending."}
+        return {**draft_review.public_draft(row),'activity':activity}
 
 
 @app.put("/api/cases/{case_id}/drafts/{draft_id}")
 def update_draft(case_id: str, draft_id: str, payload: DraftUpdate, user: dict = Depends(require_user)) -> dict:
     get_case(case_id, user["id"])
+    active_head = draft_letterhead(user) if payload.use_current_letterhead else None
     with db() as connection:
-        result = connection.execute("UPDATE drafts SET body = ?, recipient = COALESCE(?, recipient), kind = COALESCE(?, kind), language = COALESCE(?, language) WHERE case_id = ? AND id = ?", (payload.body, payload.recipient, payload.kind, payload.language, case_id, draft_id))
-        if result.rowcount != 1:
+        connection.execute('BEGIN IMMEDIATE')
+        row = connection.execute('SELECT * FROM drafts WHERE case_id=? AND id=?',(case_id,draft_id)).fetchone()
+        if not row:
             raise HTTPException(status_code=404, detail="Draft not found")
-        if payload.use_current_letterhead:
-            letterhead_id, layout = draft_letterhead(user)
-            connection.execute('UPDATE drafts SET letterhead_id=?,letterhead_layout=? WHERE id=?', (letterhead_id, layout, draft_id))
-        activity = record_activity(connection, case_id, "draft_updated", payload.kind or "")
-        return {**dict(connection.execute("SELECT id, case_id, language, recipient, body, kind, created_at, letterhead_id FROM drafts WHERE id = ?", (draft_id,)).fetchone()), "activity": activity}
+        if payload.expected_version is not None and payload.expected_version != row['version']:
+            raise HTTPException(status_code=409,detail='draft_version_conflict')
+        values = {**draft_review.content(row),'body':payload.body}
+        for key in ('recipient','kind','language'):
+            if getattr(payload,key) is not None:
+                values[key] = getattr(payload,key).strip()
+        if active_head:
+            values['letterhead_id'],values['letterhead_layout'] = active_head
+        activity = None
+        if values != draft_review.content(row):
+            prior_status = row['review_status']
+            connection.execute('UPDATE drafts SET body=?,recipient=?,kind=?,language=?,letterhead_id=?,letterhead_layout=?,version=version+1,updated_at=?,review_status=\'draft\',review_revision=review_revision+1,approved_by=NULL,approved_name=NULL,approved_at=NULL WHERE id=?',(values['body'],values['recipient'],values['kind'],values['language'],values['letterhead_id'],values['letterhead_layout'],now(),draft_id))
+            row = connection.execute('SELECT * FROM drafts WHERE id=?',(draft_id,)).fetchone()
+            draft_review.snapshot_version(connection,row,user)
+            draft_review.event(connection,row,user,'edited',evidence={'previous_status':prior_status,'approval_reset':prior_status=='approved'})
+            activity = record_activity(connection,case_id,'draft_updated',f'v{row["version"]}')
+        return {**draft_review.public_draft(row),'activity':activity}
+
+
+def owned_draft(connection, case_id, draft_id):
+    row = connection.execute('SELECT * FROM drafts WHERE case_id=? AND id=?',(case_id,draft_id)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404,detail='draft_not_found')
+    return row
+
+
+@app.get('/api/cases/{case_id}/drafts/{draft_id}/review')
+def draft_review_detail(case_id: str, draft_id: str, user: dict = Depends(require_user)):
+    get_case(case_id,user['id'])
+    with db() as connection:
+        return draft_review.response(connection,owned_draft(connection,case_id,draft_id))
+
+
+@app.get('/api/cases/{case_id}/drafts/{draft_id}/versions/{version}')
+def draft_version_detail(case_id: str, draft_id: str, version: int, user: dict = Depends(require_user)):
+    get_case(case_id,user['id'])
+    with db() as connection:
+        owned_draft(connection,case_id,draft_id)
+        row = connection.execute('SELECT * FROM draft_versions WHERE draft_id=? AND version=?',(draft_id,version)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404,detail='version_not_found')
+        return {**dict(row),'snapshot':json.loads(row['snapshot'])}
+
+
+@app.post('/api/cases/{case_id}/drafts/{draft_id}/review')
+def draft_review_action(case_id: str, draft_id: str, payload: DraftReviewInput, user: dict = Depends(require_user)):
+    get_case(case_id,user['id'])
+    with db() as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        row = owned_draft(connection,case_id,draft_id)
+        if row['version'] != payload.expected_version or row['review_revision'] != payload.expected_review_revision:
+            raise HTTPException(status_code=409,detail='review_version_conflict')
+        state = draft_review.analysis(connection,row)
+        note = payload.note.strip()
+        evidence = {}
+        if payload.action == 'begin':
+            if row['review_status'] != 'draft':
+                raise HTTPException(status_code=409,detail='review_transition')
+            status = 'in_review'
+        elif payload.action == 'check':
+            if row['review_status'] != 'in_review':
+                raise HTTPException(status_code=409,detail='review_transition')
+            if payload.check_id not in {item['id'] for item in state['checks']} or (payload.checked and len(note)<10):
+                raise HTTPException(status_code=422,detail='review_check_note_required')
+            connection.execute('INSERT INTO draft_review_checks(draft_id,version,check_id,checked,note,actor_id,actor_name,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(draft_id,version,check_id) DO UPDATE SET checked=excluded.checked,note=excluded.note,actor_id=excluded.actor_id,actor_name=excluded.actor_name,updated_at=excluded.updated_at',(draft_id,row['version'],payload.check_id,int(payload.checked),note,user['id'],user['full_name'],now()))
+            status = 'in_review'
+            evidence = {'check_id':payload.check_id,'checked':payload.checked}
+        elif payload.action == 'approve':
+            if not payload.confirmed or len(note)<20:
+                raise HTTPException(status_code=422,detail='approval_confirmation_required')
+            if not state['can_approve']:
+                raise HTTPException(status_code=409,detail='review_unresolved')
+            status = 'approved'
+            evidence = {'sha256':connection.execute('SELECT sha256 FROM draft_versions WHERE draft_id=? AND version=?',(draft_id,row['version'])).fetchone()['sha256'],'checks':[{**dict(item)} for item in connection.execute('SELECT * FROM draft_review_checks WHERE draft_id=? AND version=?',(draft_id,row['version']))],'scope':'account_holder_review_not_verified_lawyer_approval'}
+        else:
+            if row['review_status'] != 'approved':
+                raise HTTPException(status_code=409,detail='review_transition')
+            status = 'in_review'
+        connection.execute('UPDATE drafts SET review_status=?,review_revision=review_revision+1,approved_by=?,approved_name=?,approved_at=? WHERE id=?',(status,user['id'] if status=='approved' else None,user['full_name'] if status=='approved' else None,now() if status=='approved' else None,draft_id))
+        row = owned_draft(connection,case_id,draft_id)
+        draft_review.event(connection,row,user,payload.action,note,evidence)
+        activity = record_activity(connection,case_id,'draft_review_'+payload.action,f'v{row["version"]}')
+        result = draft_review.response(connection,row)
+        result['draft']['activity'] = activity
+        return result

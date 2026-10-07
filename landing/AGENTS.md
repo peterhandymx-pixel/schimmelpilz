@@ -17,3 +17,7 @@ Before making substantial visual changes, use the Product Design plugin's `get-c
 When implementing from a selected generated mock, treat that image as the source of truth for layout, component anatomy, density, spacing, color, typography, visible content, and hierarchy.
 
 Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts/prepare-sites-build.mjs`, and `tests/sites-worker.test.mjs` intact so the same local prototype can be handed to Sites. Before a Sites handoff, run `npm run build` and `npm run test:sites`; the build must leave `dist/client/index.html`, `dist/server/index.js`, and `dist/.openai/hosting.json`.
+
+The front page includes an ivory/green bilingual price overview: proposed monthly final prices Personal €9.90, Business €29.90, Law firm €49.90 per individual account with a seven-day launch trial. Buttons preselect the relevant registration profile. Keep the current free pilot explicit in pricing and registration: no checkout, automatic charge, subscription or enforced trial expiry exists yet. Do not imply shared team seats, unlimited use or paid advice.
+
+Draft review is manual account-holder review: Draft → In review → Approved (own review), original passages beside text blocks, per-item notes, immutable versions and actor/date history. Real edits clear approval and require a new checklist; unchanged saves preserve it. Unsaved text must not inherit saved approval. Keep technical source mapping separate from substantive legal/procedural review, and label missing/untrusted source context for old drafts honestly.

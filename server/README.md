@@ -29,8 +29,8 @@ Endpoints:
 - `GET /api/cases/{id}/documents/{document_id}/text` returns original extracted units, corrected text and review status.
 - `POST /api/cases/{id}/documents/{document_id}/extract` extracts PDF text layers or DOCX body paragraphs/tables in a local, time-limited worker. Repeated extraction preserves corrections. Scans require OCR; images and legacy DOC are unsupported. Encrypted/invalid files retain their original upload.
 - `PUT /api/cases/{id}/documents/{document_id}/text/{unit_no}` with `text` and `reviewed` saves a corrected page/section. Review checks transcription, not factual truth or legal validity. Empty text cannot be marked reviewed.
-- `POST /api/cases/{id}/drafts` with `{ "language", "recipient", "kind", "body" }`. Kinds: `letter`, `claim`, `application`, `objection`, `response`. Only a basic letter can omit `body`.
-- `PUT /api/cases/{id}/drafts/{draft_id}` with `{ "body", "recipient", "kind", "language" }` stores the edited text and metadata. Optional `use_current_letterhead: true` adopts the currently active briefpaper version; otherwise the saved version is retained.
+- `POST /api/cases/{id}/drafts` with `{ "language", "recipient", "kind", "body", "research_run_id" }`. Kinds: `letter`, `claim`, `application`, `objection`, `response`. Only a basic letter can omit `body`.
+- `PUT /api/cases/{id}/drafts/{draft_id}` with `{ "body", "recipient", "kind", "language", "expected_version" }` stores the edited text and metadata. Optional `use_current_letterhead: true` adopts the currently active briefpaper version; otherwise the saved version is retained.
 - `POST /api/cases/{id}/drafts/preview-pdf` with `body`, optional `draft_id` and `use_current_letterhead` exports current editor text without saving it. `GET /api/cases/{id}/drafts/{draft_id}/pdf` exports the saved version.
 
 All case, document and draft routes require a signed-in account. Every write request, including login/register/logout, must include `X-Schimmelpilz-Request: 1`. The frontend includes the header and session cookie automatically.
@@ -106,3 +106,13 @@ The model receives at most eight legal passages, two per source, 1,800 character
 Extraction is limited to 80 physical PDF pages or DOCX body sections, 12,000 characters per unit and 120,000 characters total. DOCX headers, footnotes and page layout are not extracted. The chat receives up to 12 reviewed excerpts, each at most 2,400 characters and 8,000 characters combined, ranked by question terms. This is partial document context, not a full file analysis. Each research run stores the exact excerpt, filename, page/section, text-review timestamp and full reviewed-unit SHA-256. Later corrections do not change historical runs; revoking review prevents using that text in a new request. Existing chat history remains part of the bounded conversation. Original uploads stay private and unchanged. Draft adoption retains the document provenance ledger.
 
 From the repository root, `./start-local.ps1` starts/reuses the native local model, API (8001) and frontend (4173). It uses the existing `.venv`, installed frontend dependencies and portable Ollama, and does not download models or reset data. The separate preview can be started with `-ApiPort 8002 -WebPort 4174 -DataDirectory data/desk-preview`. Runtime logs are in the selected data directory. This launcher is not a Windows login task or production process supervisor.
+
+## Versioned draft review
+
+See [review workflow and boundaries](../docs/draft-review.md). Draft creation optionally accepts a completed same-case `research_run_id`; only server-saved provenance is trusted. Legacy snapshots are backfilled additively without inventing source context or older history.
+
+- `GET /api/cases/{id}/drafts/{draft_id}/review`: current draft, checklist/text blocks, original supplied passages, hard blocks, versions and review events.
+- `GET /api/cases/{id}/drafts/{draft_id}/versions/{version}`: read-only content snapshot and hash.
+- `POST /api/cases/{id}/drafts/{draft_id}/review`: `action` (`begin`, `check`, `approve`, `reopen`), required `expected_version` and `expected_review_revision`. Check includes `check_id`, `checked`, `note` (10+ characters when checked); approve requires `confirmed: true`, `note` (20+ characters), no blockers and all checklist/text blocks reviewed. Conflicts/unresolved checks return 409; invalid notes/confirmation return 422.
+
+Every successful review write increments the review revision. Actual draft edits increment the content version, clear current approval and preserve immutable versions/earlier approval evidence. Unchanged saves do not increment/reset. Saved PDF exports include `X-Draft-Version`, `X-Draft-Review-Status` and version/status filenames, not a signature or legal approval stamp. These remain account-holder reviews; no role-based independent reviewer has been added.
