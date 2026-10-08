@@ -110,6 +110,8 @@ This workspace has the official portable Ollama 0.35.1 distribution under ignore
 
 The installed native services can be started together with `./start-local.ps1` from the repository root. The launcher reuses running services and existing data; it does not install dependencies. A hidden, independent Windows worker starts the services and the launcher checks the API and web proxy before reporting readiness. It does not register a Windows login task or restart services after a crash/reboot. Research chat calls the real local model and retains case-specific conversation and supplied document/legal-source passages. The native browser tests use separate synthetic preview data. OCR and automated substantive legal approval remain pending. See [API documentation](server/README.md) for extraction/context limits and endpoint details.
 
+The Adressen module now provides an account-owned central address book: create/edit contacts, assign multiple case files with a role per case, search/filter and copy existing case parties explicitly. The same contacts appear in case Beteiligte tabs and can be selected as draft recipients. Existing case particulars and saved draft addresses remain unchanged after contact edits. Version checks prevent stale contact edits from silently overwriting newer data.
+
 The owner supplies the server, domain, DNS and secret values. Target workflow once those deployment files exist:
 
 1. Clone the GitHub repository onto the server.

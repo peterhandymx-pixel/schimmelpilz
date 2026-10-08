@@ -107,6 +107,14 @@ Extraction is limited to 80 physical PDF pages or DOCX body sections, 12,000 cha
 
 From the repository root, `./start-local.ps1` starts/reuses the native local model, API (8001) and frontend (4173). It uses the existing `.venv`, installed frontend dependencies and portable Ollama, and does not download models or reset data. The separate preview can be started with `-ApiPort 8002 -WebPort 4174 -DataDirectory data/desk-preview`. A hidden Windows WMI worker launches the services outside the calling terminal's process job and supplies their runtime environment. The launcher waits up to 25 seconds for both the API and frontend's `/api/health` proxy before reporting readiness; startup failures identify the logs. Runtime logs, including `startup-{web_port}.log`, are in the selected data directory. Closing the calling terminal does not intentionally stop the services. This launcher is not a Windows login task or production process supervisor: it does not auto-restart after a crash, reboot, sign-out or Shadow PC shutdown.
 
+## Central address book
+
+`GET /api/contacts` lists only the signed-in account's contacts. `POST /api/contacts` creates a contact; `GET /api/contacts/{id}` reads it and `PUT /api/contacts/{id}` updates it with a required `expected_version`. Stale writes return 409. Foreign contacts or case IDs return 404, and failed link validation rolls back the entire write. The existing cookie/request-header guard also applies.
+
+Fields: `name`, `kind` (client/opponent/law_firm/court/authority/company/person/other), `attention`, multiline `address`, `email`, `phone`, internal `note`, and `case_links` containing `case_id` and a per-case `role` (client/opponent/counsel/court/authority/other). Contacts may exist without a case; one contact may link to up to 200 owned cases. Each case link is unique. Additive SQLite tables `contacts` and `contact_cases` preserve existing files and case particulars. Link changes appear in case activity.
+
+The bilingual Adressen module and case Beteiligte tab use this register. Existing case parties remain separately visible with an explicit copy action. There is no automatic deduplication, synchronization to case particulars or external contact lookup. Draft selection copies only the name, attention and postal address (up to the existing 500-character recipient limit); email, telephone and internal notes are excluded. Generated templates update their address, while manually edited text is preserved with a reminder to update the address inside it. Saved draft text/recipients stay unchanged after later contact edits.
+
 ## Versioned draft review
 
 See [review workflow and boundaries](../docs/draft-review.md). Draft creation optionally accepts a completed same-case `research_run_id`; only server-saved provenance is trusted. Legacy snapshots are backfilled additively without inventing source context or older history.

@@ -29,6 +29,7 @@ from .research import ollama_status, prepare_messages, generate_answer, OLLAMA_M
 from .document_context import select_sources
 from . import legal_catalogue
 from . import draft_review
+from . import contacts
 from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
 import hashlib
@@ -405,6 +406,7 @@ def init_db() -> None:
             connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS case_owner_reference ON cases(user_id, reference COLLATE NOCASE)")
         draft_review.migrate(connection)
+        contacts.migrate(connection)
 
 
 def require_user(request: Request) -> dict:
@@ -1100,3 +1102,6 @@ def draft_review_action(case_id: str, draft_id: str, payload: DraftReviewInput, 
         result = draft_review.response(connection,row)
         result['draft']['activity'] = activity
         return result
+
+
+app.include_router(contacts.router(db, require_user, now, record_activity))
