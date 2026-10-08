@@ -1,7 +1,8 @@
 param(
-    [int]$ApiPort = 8001,
-    [int]$WebPort = 4173,
-    [string]$DataDirectory = 'data'
+    [ValidateRange(1, 65535)][int]$ApiPort = 8001,
+    [ValidateRange(1, 65535)][int]$WebPort = 4173,
+    [string]$DataDirectory = 'data',
+    [switch]$Worker
 )
 $ErrorActionPreference = 'Stop'
 $projectDirectory = $PSScriptRoot
@@ -19,6 +20,35 @@ function Test-LocalService([string]$Url) {
 }
 function Start-LocalService([string]$Program, [string[]]$Arguments, [string]$WorkingDirectory, [string]$LogName) {
     Start-Process -FilePath $Program -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDirectory ($LogName + '-output.log')) -RedirectStandardError (Join-Path $logDirectory ($LogName + '-error.log')) | Out-Null
+}
+if (!$Worker) {
+    # WMI launches outside the calling terminal's process job. The hidden worker
+    # supplies the runtime environment before starting the ordinary local services.
+    # No scheduled task, new permissions or automatic Windows login startup.
+    $startupLog = Join-Path $logDirectory "startup-$WebPort.log"
+    $escapedScript = $PSCommandPath.Replace("'", "''")
+    $escapedData = $resolvedData.Replace("'", "''")
+    $escapedLog = $startupLog.Replace("'", "''")
+    $workerCode = "& '$escapedScript' -ApiPort $ApiPort -WebPort $WebPort -DataDirectory '$escapedData' -Worker *> '$escapedLog'"
+    $encodedWorker = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($workerCode))
+    # Reuse the caller's PowerShell edition and its existing execution policy.
+    $runtimePowerShell = Join-Path $PSHOME 'pwsh.exe'
+    if (!(Test-Path -LiteralPath $runtimePowerShell)) { $runtimePowerShell = Join-Path $PSHOME 'powershell.exe' }
+    $launched = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+        CommandLine = ('"' + $runtimePowerShell + '" -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand ' + $encodedWorker)
+        CurrentDirectory = $projectDirectory
+    }
+    if ($launched.ReturnValue -ne 0) { throw "Could not start independent local services (Windows status $($launched.ReturnValue))." }
+    $deadline = [DateTime]::UtcNow.AddSeconds(25)
+    do {
+        $ready = (Test-LocalService "http://127.0.0.1:$ApiPort/api/health") -and (Test-LocalService "http://127.0.0.1:$WebPort/api/health")
+        if ($ready) {
+            Write-Output "Schimmelpilz ready: http://localhost:$WebPort/ | API and sign-in proxy responding | Data: $resolvedData | Logs: $logDirectory"
+            return
+        }
+        Start-Sleep -Milliseconds 300
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Local services did not become ready. Check $startupLog and api-$ApiPort / web-$WebPort logs in $logDirectory."
 }
 $env:OLLAMA_NO_CLOUD = '1'
 $env:OLLAMA_HOST = '127.0.0.1:11434'
