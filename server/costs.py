@@ -10,7 +10,8 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from .fee_tables import FeeBasis, lookup
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
@@ -34,6 +35,13 @@ class Line(BaseModel):
     tax_rate: str = '0'
     billed_net: str | None = None
     evidence: str = Field(default='', max_length=500)
+    fee_basis: FeeBasis | None = None
+
+    @model_validator(mode='after')
+    def verify_table_amount(self):
+        if self.fee_basis and Decimal(self.unit_net) != Decimal(lookup(self.fee_basis)['base_fee']):
+            raise ValueError('Table fee amount mismatch')
+        return self
 
     @field_validator('description')
     @classmethod
@@ -79,6 +87,12 @@ class Invoice(BaseModel):
     billed_total: str
     lines: list[Line] = Field(min_length=1, max_length=100)
 
+    @model_validator(mode='after')
+    def table_currency(self):
+        if self.currency!='EUR' and any(line.fee_basis for line in self.lines):
+            raise ValueError('German fee tables require EUR')
+        return self
+
     @field_validator('title')
     @classmethod
     def title_nonblank(cls, value):
@@ -118,7 +132,7 @@ def calculate(invoice):
         rate = Decimal(line.tax_rate)
         groups[rate] = groups.get(rate, Decimal(0)) + net
         billed = Decimal(line.billed_net) if line.billed_net is not None else None
-        rows.append({'net': money(net), 'difference': money(billed - net) if billed is not None else None})
+        rows.append({'net': money(net), 'difference': money(billed - net) if billed is not None else None, 'fee_source': lookup(line.fee_basis) if line.fee_basis else None})
     taxes = [{'rate': format(rate, 'f'), 'net': money(net), 'tax': money(net * rate / 100)} for rate, net in sorted(groups.items())]
     net = sum((Decimal(row['net']) for row in rows), Decimal(0))
     tax = sum((Decimal(group['tax']) for group in taxes), Decimal(0))
@@ -163,6 +177,8 @@ def router(db, require_user, now, record_activity):
         case = connection.execute('SELECT * FROM cases WHERE id=? AND user_id=?', (case_id, user_id)).fetchone()
         if not case:
             raise HTTPException(404, 'Case not found')
+        if any(line.fee_basis for line in payload.lines) and (payload.currency != 'EUR' or json.loads(case['details']).get('jurisdiction','DE') != 'DE'):
+            raise HTTPException(422, 'German fee tables require an EUR case with DE jurisdiction')
         if payload.document_id and not connection.execute('SELECT 1 FROM documents WHERE id=? AND case_id=?', (str(payload.document_id), case_id)).fetchone():
             raise HTTPException(404, 'Case document not found')
 
@@ -246,6 +262,10 @@ def router(db, require_user, now, record_activity):
         for idx, (line, checked) in enumerate(zip(inv['lines'], result['lines']), 1):
             paragraph(f"{idx}. {line['description']}: {line['quantity']} × {line['unit_net']} = {checked['net']} {inv['currency']}; {line['tax_rate']}%", 'Heading3')
             paragraph(f"{'Rechnungsnetto / Differenz' if de else 'Billed net / difference'}: {line['billed_net'] or '-'} / {checked['difference'] or '-'}; {'Beleg' if de else 'Evidence'}: {line['evidence'] or '-'}")
+            source=checked.get('fee_source')
+            if source:
+                paragraph(f"{source['source']['citation']} · {source['version']} · 1.0: {source['base_fee']} EUR · {'Wertstufe' if de else 'Value bracket'}: {source['bracket']} EUR · {'Quellen geprüft' if de else 'Sources checked'}: {source['source_checked_on']}")
+                paragraph(source['source']['table']+'\n'+source['source']['transition']+'\n'+source['applicability_note']+'\nSHA-256: '+source['table_sha256'])
         for group in result['tax_groups']:
             paragraph(f"{'Steuer auf netto' if de else 'Tax on net'} {group['net']} {inv['currency']} × {group['rate']}% = {group['tax']} {inv['currency']}")
         for label, value in [(('Netto' if de else 'Net'), result['net']), (('Steuer' if de else 'Tax'), result['tax']), (('Brutto' if de else 'Gross'), result['gross']), (('Abzüge brutto' if de else 'Gross credits'), inv['credit_gross']), (('Errechnet zahlbar' if de else 'Calculated payable'), result['payable']), (('Rechnung zahlbar' if de else 'Billed payable'), inv['billed_total']), (('Differenz: Rechnung minus errechnet' if de else 'Difference: billed minus calculated'), result['difference'])]:

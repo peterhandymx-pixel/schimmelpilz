@@ -1,6 +1,9 @@
 .cost-workspace {display:grid;gap:20px;min-width:0}
+.cost-fee-lookup {border:1px solid #dbe0dc;padding:14px;margin:15px 0}.cost-fee-lookup summary {font-weight:600;cursor:pointer}
 .cost-workspace fieldset {border:0;padding:0;margin:0;min-width:0}
 .cost-workspace label {display:flex;flex-direction:column;gap:5px;font-weight:600;margin-bottom:12px}
+.cost-workspace label.desk-checkbox {flex-direction:row;align-items:flex-start;gap:10px;font-weight:400}
+.cost-workspace .desk-checkbox input {width:auto;margin-top:4px;flex-shrink:0}
 .cost-workspace input,.cost-workspace select,.cost-workspace textarea {width:100%;min-width:0;border:1px solid #ced5d1;border-radius:4px;padding:9px;background:white;color:#202e28;font:inherit;font-weight:400;box-sizing:border-box}
 .cost-form-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}
 .cost-lines {width:100%;min-width:820px;table-layout:fixed;border-collapse:collapse;margin:12px 0}

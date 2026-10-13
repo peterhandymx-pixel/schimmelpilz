@@ -9,13 +9,13 @@ const internal = [
   ['research', 'KI-Recherche', 'AI research', IconMessageChatbot, '#087967'],
   ['account', 'Briefpapier & Profil', 'Letter paper & profile', IconFileDescription, '#9b7252'],
   ['activity', 'Aktuelle Akten', 'Recent files', IconListCheck, '#4583a0'],
+  ['routes', 'Verfahrenswege', 'Procedural routes', IconScale, '#8a7751'],
   ['costs', 'Kostenprüfung', 'Cost review', IconReceipt, '#b99142'],
   ['inbox', 'Posteingang', 'Inbox', IconInbox, '#658454'],
 ];
 const external = [
   ['Gesetze im Internet', 'German federal statutes', IconBook2, '#388652', 'https://www.gesetze-im-internet.de/'],
   ['Urteile & Beschlüsse', 'Judgments & orders', IconGavel, '#9a5151', 'https://www.rechtsprechung-im-internet.de/'],
-  ['Gerichtsverzeichnis', 'Court directory', IconBuildingBank, '#427e97', 'https://www.justiz.de/service/verzeichnisse/index.php'],
   ['RVG · Anwaltsgebühren', 'RVG · Lawyer fees', IconReceipt, '#b99142', 'https://www.gesetze-im-internet.de/rvg/'],
   ['GKG · Gerichtskosten', 'GKG · Court fees', IconReportMoney, '#658aaa', 'https://www.gesetze-im-internet.de/gkg_2004/'],
   ['FamGKG · Familienverfahren', 'FamGKG · Family proceedings', IconScale, '#ba8051', 'https://www.gesetze-im-internet.de/famgkg/'],
@@ -36,6 +36,6 @@ export function OfficeModules({ lang, services = false, onNavigate, onNewCase })
         <Icon size={62} stroke={1.55} color={color} aria-hidden="true" /><span>{de ? german : english}<IconExternalLink size={13} aria-hidden="true" /></span>
       </a>)}
     </div>
-    <p className="office-services-note">{services ? (de ? 'Online Services: Module öffnen Ihren Arbeitsbereich; Links öffnen die jeweiligen Originalangebote in einem neuen Tab.' : 'Online services: modules open your workspace; links open the original providers in a new tab.') : (de ? 'Ihr Arbeitsplatz: Modul auswählen und direkt mit Ihren Akten arbeiten.' : 'Your workspace: choose a module to work with your case files.')} {de ? 'Externe Angebote sind separat verlinkt; Gebühren werden nicht automatisch berechnet. Es werden keine Aktenangaben übermittelt.' : 'External services are linked separately; fees are not calculated automatically. No case particulars are sent.'}</p>
+    <p className="office-services-note">{services ? (de ? 'Online Services: Module öffnen Ihren Arbeitsbereich; Links öffnen die jeweiligen Originalangebote in einem neuen Tab.' : 'Online services: modules open your workspace; links open the original providers in a new tab.') : (de ? 'Ihr Arbeitsplatz: Modul auswählen und direkt mit Ihren Akten arbeiten.' : 'Your workspace: choose a module to work with your case files.')} {de ? 'Externe Angebote sind separat verlinkt; Gebührenansprüche werden nicht automatisch rechtlich geprüft. Es werden keine Aktenangaben übermittelt.' : 'External services are linked separately; fee entitlement is not assessed automatically. No case particulars are sent.'}</p>
   </section>;
 }

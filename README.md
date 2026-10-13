@@ -159,3 +159,7 @@ Plan prepared 3 October 2026.
 ### Kostenprüfung
 
 Working invoice arithmetic is available after login: manual net items × quantity/factor, tax groups, gross advances, line/total differences, private case-linked versions, PDF review reports and editable clarification letters. Legal fee entitlement and statutory RVG/GKG/FamGKG tables remain manual. See [calculation rules and scope](docs/cost-review.md).
+
+### Office modules
+
+Word draft export, reversible case archive, confidential case ZIP packages, calendar reminders, basic 2025 value-fee tables and case-linked procedural working papers are implemented. See [working limits](docs/office-modules.md) and [remaining module build status](docs/module-build-status.md).

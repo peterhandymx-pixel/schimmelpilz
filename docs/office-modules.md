@@ -1,0 +1,39 @@
+# Office modules added 2026-10-13
+
+## Editable Word documents
+
+The draft editor offers Word downloads alongside PDF and text. The export uses current editor text without saving it, and the saved draft's letter-paper version unless the account holder explicitly selects the current letter paper. Body text remains editable. The normalized private PDF is rasterized locally and embedded behind the text in page-anchored headers; two-page templates use a separate first-page background and repeat the continuation background. Page dimensions, writing margins and font size follow the confirmed template. Word rendering and later edits may change page breaks; PDF remains the export that preserves original PDF drawing instructions. A Word export is editable, and changes in Word do not inherit review approval. No external image relationships or macros are generated.
+
+Dependencies: python-docx 1.2.0, pypdfium2 5.14.0. PDFium calls are serialized because its native API is not thread-safe. Three dedicated tests check editable text, headers/media, geometry, template-version retention, unsaved editor exports and privacy isolation. A three-page synthetic document was rendered with the document skill's LibreOffice renderer; all pages and all 70 unique text lines were checked.
+
+## Archive and portable case export
+
+Each case has Archive / Restore and ZIP export controls. Archiving is reversible, leaves original files and records intact and does not change the internal reference or underlying matter status. The case register defaults to the active collection and offers Archive and All filters. Archived matters are excluded from global open-case/due counters and pending task views; opening the archived case still allows access to its records.
+
+ZIP exports include a consistent SQLite read snapshot of case records, documents and reviewed text, contacts linked to that case, drafts and immutable versions/review history, research runs and legal-source snapshots, cost-review versions, route-plan versions and used letter-paper templates. Original files are stored under safe ID-based names. A manifest records SHA-256 and size for each payload. Required missing/changed/unsafe originals fail the export; the 200 MB maximum includes original bytes and structured data. Passwords, sessions and other cases are excluded. The archive is confidential, not an automatic import or server backup. Temporary export files are removed after the response.
+
+Three tests check persistence/reversal/conflicts, original bytes, historical drafts, manifests, account isolation and missing/path-traversal originals.
+
+## Calendar reminders
+
+Tasks have all/overdue/today/next-seven-days filters. Calendar downloads contain open tasks with explicit due dates and open case deadlines; archived cases are excluded globally. A case-specific download is limited to that case, including its recorded dates when opened from the archive. Date-range/search filters do not change calendar export scope; the UI states this. Events are all-day, with stable IDs, and can request no alarm or a reminder 1/3/7 days before. Import and reminder display depend on the user's calendar application; there is no continuous sync or outbound calendar access. Reimport or update changed dates separately. This does not compute legal time limits.
+
+Tests cover day/month boundaries, injection-safe iCalendar escaping, UTF-8 line folding, alarms, owner isolation and archive scope.
+
+## Value-fee tables
+
+Kostenprüfung includes **basic 1.0 value fees only** from RVG Anlage 2 / § 13, GKG Anlage 2 / § 34 and FamGKG Anlage 2 / § 28, table identifier `2025-bgbl-109`. Values above zero through EUR 500,000 are supported. Current primary table texts and transition provisions were checked on 2026-10-13. [RVG table](https://www.gesetze-im-internet.de/rvg/anlage_2.html), [GKG table](https://www.gesetze-im-internet.de/gkg_2004/anlage_2.html), [FamGKG table](https://www.gesetze-im-internet.de/famgkg/anlage_2.html). The statute-specific transition rules remain an explicit user's review: [RVG § 60](https://www.gesetze-im-internet.de/rvg/__60.html), [GKG § 71](https://www.gesetze-im-internet.de/gkg_2004/__71.html), [FamGKG § 63](https://www.gesetze-im-internet.de/famgkg/__63.html).
+
+The lookup does not choose the applicable law from invoice date, determine a fee event or entitlement, select a multiplier or tax, compute statutory minimum fees or credits, or apply older tables, § 49 RVG, fixed/range fees or special collection rules. Users record an applicability note and confirmation, then explicitly adopt a fee as an invoice item. Quantity/multiplier is manual invoice arithmetic, not an assessment of a legally permissible rate. Special/minimum fees must be checked separately. Editing a unit amount removes its table binding. Server validation rejects a changed table amount, non-EUR inputs or saved table-based reviews in non-DE cases. Result snapshots/PDFs retain source URLs, checked date, table hash and applicability declaration. Every table bracket and immediately higher boundary is tested against the independent statutory step formula, with persistence/tampering/scope tests.
+
+## Jurisdiction and procedural working papers
+
+Verfahrenswege is a global module and a case tab. The user records goal, category, value, proceedings start, opposing party/location, premises, international elements, unresolved special jurisdiction, chosen body, evidence and review note. The deterministic working paper compares preparation routes and identifies unresolved matters; it does not verify the chosen court/address, file documents, calculate deadlines or promise success.
+
+For ordinary German civil money claims without special jurisdiction and with proceedings starting from 2026-01-01, the bounded classification uses the current [GVG § 23](https://www.gesetze-im-internet.de/gvg/__23.html) EUR 10,000 threshold and [GVG § 71](https://www.gesetze-im-internet.de/gvg/__71.html); [ZPO § 78](https://www.gesetze-im-internet.de/zpo/__78.html) identifies the general Landgericht representation requirement. Missing value/start or possible special jurisdiction prevents that value-based classification. The general venue starting points are [ZPO §§ 13](https://www.gesetze-im-internet.de/zpo/__13.html) / [17](https://www.gesetze-im-internet.de/zpo/__17.html), with special/exclusive venues left for separate review.
+
+Residential tenancy uses [GVG § 23 no. 2(a)](https://www.gesetze-im-internet.de/gvg/__23.html) and [ZPO § 29a](https://www.gesetze-im-internet.de/zpo/__29a.html), with exceptions stated. Employment, administrative and social matters give conditional court-system candidates from [ArbGG § 2](https://www.gesetze-im-internet.de/arbgg/__2.html), [VwGO § 40](https://www.gesetze-im-internet.de/vwgo/__40.html), and [SGG § 51](https://www.gesetze-im-internet.de/sgg/__51.html), leaving specialised jurisdiction, preliminary procedures, venue and remedies unresolved. Foreign-law/cross-border cases do not receive a German value-based conclusion. A public email address is never treated as a formal filing channel.
+
+Saving creates immutable versions with exact result/source snapshots, expected-version conflicts, PDF working papers and editable working-note adoption. Tests cover the EUR 10,000 boundary, older/unknown proceedings, special jurisdiction, cross-border blocking, residential-tenancy rules, privacy, historical PDFs and case ZIP inclusion.
+
+Browser validation: synthetic TEST-QUELLEN-2026 case only; RVG 5,000 EUR → 354.50 EUR basic fee → manually entered 1.3 multiplier gives 460.85 EUR, saved with provenance. A 10,000 EUR ordinary civil test yields an Amtsgericht candidate with unresolved venue/special-rule checks. Archive/restore retained references/files; case ZIP hashes and calendar date/alarm were checked. Actual Word download retained editable text, umlauts and two background images.

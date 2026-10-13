@@ -32,8 +32,13 @@ from . import draft_review
 from . import contacts
 from . import inbox
 from . import costs
+from . import case_tools
+from . import calendar_export
+from . import fee_tables
+from . import route_plans
 from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
+from .word_export import compose_docx
 import hashlib
 from tempfile import TemporaryDirectory
 from urllib.error import URLError
@@ -411,6 +416,8 @@ def init_db() -> None:
         contacts.migrate(connection)
         inbox.migrate(connection)
         costs.migrate(connection)
+        case_tools.migrate(connection)
+        route_plans.migrate(connection)
 
 
 def require_user(request: Request) -> dict:
@@ -580,6 +587,11 @@ def draft_letterhead(user):
 
 @app.post("/api/cases/{case_id}/drafts/preview-pdf")
 def preview_draft_pdf(case_id: str, payload: DraftPdfInput, user: dict = Depends(require_user)):
+    letterhead_id, layout = preview_draft_material(case_id, payload, user)
+    return letterhead_pdf_response(payload.body, letterhead_id, layout, user['id'])
+
+
+def preview_draft_material(case_id, payload, user):
     get_case(case_id, user['id'])
     if payload.draft_id:
         with db() as connection:
@@ -591,7 +603,40 @@ def preview_draft_pdf(case_id: str, payload: DraftPdfInput, user: dict = Depends
             letterhead_id, layout = draft_letterhead(user)
     else:
         letterhead_id, layout = draft_letterhead(user)
-    return letterhead_pdf_response(payload.body, letterhead_id, json.loads(layout) if layout else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump(), user['id'])
+    return letterhead_id, json.loads(layout) if layout else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump()
+
+
+def word_response(body, letterhead_id, layout, user_id, reference='', version=None):
+    template = None
+    if letterhead_id:
+        with db() as connection:
+            row = owned_letterhead(connection, letterhead_id, user_id)
+            template = DATA_DIR / 'letterheads' / row['pdf_stored']
+    try:
+        content = compose_docx(body, template, layout, reference, version)
+    except ValueError:
+        raise HTTPException(422, 'invalid_body_or_layout') from None
+    response = BinaryResponse(content, media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', headers={'Content-Disposition': f'attachment; filename="Schimmelpilz-Entwurf{("-v"+str(version)) if version else ""}.docx"'})
+    response.headers['X-Draft-Review-Status'] = 'editable-export'
+    if version is not None:
+        response.headers['X-Draft-Version'] = str(version)
+    return response
+
+
+@app.post('/api/cases/{case_id}/drafts/export-docx')
+def export_editor_docx(case_id: str, payload: DraftPdfInput, user: dict = Depends(require_user)):
+    letterhead_id, layout = preview_draft_material(case_id, payload, user)
+    return word_response(payload.body, letterhead_id, layout, user['id'])
+
+
+@app.get('/api/cases/{case_id}/drafts/{draft_id}/docx')
+def export_saved_docx(case_id: str, draft_id: str, user: dict = Depends(require_user)):
+    case = get_case(case_id, user['id'])
+    with db() as connection:
+        row = connection.execute('SELECT * FROM drafts WHERE case_id=? AND id=?', (case_id, draft_id)).fetchone()
+        if not row:
+            raise HTTPException(404, 'Draft not found')
+    return word_response(row['body'], row['letterhead_id'], json.loads(row['letterhead_layout']) if row['letterhead_layout'] else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump(), user['id'], case['reference'], row['version'])
 
 
 @app.get("/api/cases/{case_id}/drafts/{draft_id}/pdf")
@@ -1111,3 +1156,7 @@ def draft_review_action(case_id: str, draft_id: str, payload: DraftReviewInput, 
 app.include_router(contacts.router(db, require_user, now, record_activity))
 app.include_router(inbox.router(db, require_user, now, record_activity, lambda: UPLOAD_DIR, MAX_UPLOAD_BYTES, ALLOWED_EXTENSIONS))
 app.include_router(costs.router(db, require_user, now, record_activity))
+app.include_router(case_tools.router(db, require_user, now, record_activity, row_case, lambda: DATA_DIR, lambda: UPLOAD_DIR))
+app.include_router(calendar_export.router(db, require_user, now))
+app.include_router(fee_tables.router(require_user))
+app.include_router(route_plans.router(db, require_user, now, record_activity))
