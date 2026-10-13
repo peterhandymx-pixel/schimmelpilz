@@ -3,3 +3,4 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 pypdf==6.19.0
 reportlab==4.4.9
+cryptography==50.0.2

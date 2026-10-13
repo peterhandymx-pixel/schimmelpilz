@@ -12,6 +12,8 @@ Saved drafts now have **Draft → In review → Approved (user review)**, per-it
 
 The application restores saved cases, documents, drafts, tasks and research conversations after browser reloads and backend restarts. Open a case under **Aktenbestand** to use its overview, parties, documents, drafts, deadlines/tasks and history registers. Internal references stay unchanged when particulars are edited. Global registers provide search across the account. SQLite and uploaded files are kept under `data/`, outside Git. See [storage and API instructions](server/README.md).
 
+Encrypted operator backups now capture a consistent database and its referenced uploads/letter-paper versions, validate their integrity, and restore only to a new directory. Restore revokes saved sessions. Native Windows daily/sign-in backup tasks are installed for both local installations; no automatic deletion or off-host copy is configured. See [backup/restore operation and verification](docs/backup-restore.md).
+
 **Recherche** contains the AI bot with case selection, German/English output, six work modes and adoption of an answer as an editable draft. It uses selected account-owned case particulars, bounded chat history, explicitly selected transcription-reviewed PDF/DOCX excerpts and selected or automatically found public legal passages. Filenames alone do not provide file contents. Responses, exact supplied passages, generation IDs, model, token counts and failures are persisted per case. Only one local generation runs at a time.
 
 The new source finder imports 23 federal-law collections from Gesetze im Internet and the published federal decision index from Rechtsprechung im Internet. Search runs locally; only public source identifiers are used for provider downloads. Topic search includes downloaded decision texts, while case-reference search covers the published index. Refresh progress, collection timestamps and failures are visible. Case snapshots and per-answer passages remain unchanged after later refreshes or review changes. Citation IDs link to their originals; unknown or missing IDs are flagged. These technical checks do not verify the legal proposition or applicable historical version. Draft adoption carries the source ledger into the editable text and PDF. See the [implementation plan](docs/legal-research-plan.md) and [coverage/API details](server/README.md#public-legal-source-catalogue).
@@ -74,7 +76,7 @@ Set OLLAMA_NO_CLOUD=1, select a local model, and do not publish Ollama's port. Q
 
 ## Deployment handoff
 
-The repository includes Dockerfiles, `compose.yaml`, `Caddyfile`, `.env.example`, version-locked API dependencies, cookie authentication and additive storage migrations. First-admin/invitation workflows and backup/restore automation remain future milestones. Native Shadow PC development runs the API and Vite without Docker.
+The repository includes Dockerfiles, `compose.yaml`, `Caddyfile`, `.env.example`, version-locked API dependencies, cookie authentication, additive storage migrations and encrypted backup/restore tools. First-admin/invitation workflows and external backup storage remain future milestones. Native Shadow PC development runs the API and Vite without Docker.
 
 For a local production-shaped run:
 

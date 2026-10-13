@@ -31,6 +31,8 @@ The current pilot is free. Proposed monthly prices and the seven-day launch tria
 
 ## Recommended next implementation
 
-Build the backup/restore tooling first, including an isolated restore test and a storage health/status view. Then address account recovery and restart reliability. Continue with the cost-review working-paper module once the data can be recovered safely.
+Backup/restore tooling, operator storage-health checks and native daily/sign-in scheduling are now implemented and tested. Both local installations have verified encrypted backups; a preview backup was restored in isolation. See [completed checks and remaining external-copy/retention setup](backup-restore.md). Local backups remain on the Shadow PC; an external destination is still needed for protection against host loss. No automatic deletion is enabled.
+
+Next address account recovery and restart reliability. Continue with the cost-review working-paper module once the data can be recovered safely.
 
 The developer can implement and verify the software. The operator must ultimately supply the production host/domain, backup destination, email/payment credentials and approved business/privacy information. These dependencies should not block independent local implementation, and no real-case data should be sent to external providers merely to test a feature.

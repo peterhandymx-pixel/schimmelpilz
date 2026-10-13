@@ -85,7 +85,7 @@ Passwords use salted scrypt hashes. Opaque sessions expire after seven days, are
 
 The first registered account takes ownership of local prototype cases created before accounts existed. Later accounts start with separate files. On an existing installation, register the owner's account locally before opening registration to the public. Startup preserves legacy case, document and draft IDs and adds the new fields. References are unique per account, not shared passwords.
 
-The current workflow supports consumers, businesses and law firms. It does not yet include shared firm memberships, invitation administration, email verification, password recovery, MFA or backup scheduling. Public German federal sources can be imported and searched locally. Substantive legal approval, fee/jurisdiction calculation and electronic filing remain planned. Local AI answers and editable drafts are not reviewed legal opinions.
+The current workflow supports consumers, businesses and law firms. It does not yet include shared firm memberships, invitation administration, email verification, password recovery or MFA. Encrypted operator backups and safe isolated restore are implemented, with native Windows daily/sign-in scheduling; external storage and automatic retention deletion are not configured. See [backup/restore](../docs/backup-restore.md). Public German federal sources can be imported and searched locally. Substantive legal approval, fee/jurisdiction calculation and electronic filing remain planned. Local AI answers and editable drafts are not reviewed legal opinions.
 
 ## Local research AI
 
