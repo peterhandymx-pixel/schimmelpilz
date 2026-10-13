@@ -1,4 +1,4 @@
-import { IconFolders, IconUsers, IconFileText, IconEdit, IconCalendar, IconMessageChatbot, IconFileDescription, IconBuilding, IconPlus, IconListCheck, IconBook2, IconGavel, IconBuildingBank, IconReceipt, IconWorld, IconScale, IconBuildingCommunity, IconReportMoney, IconExternalLink, IconClipboardCheck } from '@tabler/icons-react';
+import { IconFolders, IconUsers, IconFileText, IconEdit, IconCalendar, IconMessageChatbot, IconFileDescription, IconBuilding, IconPlus, IconListCheck, IconBook2, IconGavel, IconBuildingBank, IconReceipt, IconWorld, IconScale, IconBuildingCommunity, IconReportMoney, IconExternalLink, IconInbox } from '@tabler/icons-react';
 
 const internal = [
   ['cases', 'Akten', 'Case files', IconFolders, '#b3984c'],
@@ -10,7 +10,7 @@ const internal = [
   ['account', 'Briefpapier & Profil', 'Letter paper & profile', IconFileDescription, '#9b7252'],
   ['activity', 'Aktuelle Akten', 'Recent files', IconListCheck, '#4583a0'],
   ['new', 'Neue Akte anlegen', 'Open a new case', IconPlus, '#438260'],
-  ['drafts', 'Entwürfe & Freigaben', 'Drafts & approvals', IconClipboardCheck, '#658454'],
+  ['inbox', 'Posteingang', 'Inbox', IconInbox, '#658454'],
 ];
 const external = [
   ['Gesetze im Internet', 'German federal statutes', IconBook2, '#388652', 'https://www.gesetze-im-internet.de/'],

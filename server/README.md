@@ -37,6 +37,16 @@ All case, document and draft routes require a signed-in account. Every write req
 
 ## Persistent local storage
 
+### Private incoming-file inbox
+
+- `GET /api/inbox` lists only the signed-in account's incoming files, with pending/assigned metadata and reviewed-passage counts.
+- `POST /api/inbox` accepts multipart `file`, required ISO `received_on`, optional `subject`/`sender` (160 characters each) and `note` (2,000 characters). The existing allowed extensions and 10 MB per-file limit apply. The frontend can upload multiple files sequentially and reports individual failures.
+- `GET /api/inbox/{id}/download` serves the private original as an attachment.
+- `PUT /api/inbox/{id}` accepts metadata and required `expected_version`. Only pending files can be edited; stale edits return 409.
+- `POST /api/inbox/{id}/assign` accepts `case_id` and `expected_version`. Both entry and case must belong to the account. A transaction creates the case document, binds the inbox entry and records case activity; stale or repeated assignments return 409. No new physical copy is made. The document uses the inbox entry's ID.
+
+The additive `inbox_documents` table stores ownership, received metadata, original filename, SHA-256 and assignment references. Original files stay in private `uploads/`; schema initialization preserves existing records. Pending files are outside all case documents and cannot provide research excerpts. Once assigned, use the existing document extraction and explicit transcription-review endpoints. Assignment cannot currently be moved or undone. No email connection, automatic case matching, deadline creation or OCR is implemented.
+
 SQLite is included with Python; no separate database installation is needed. The API opens and initialises the existing database on startup without deleting records. It uses transactions for case references and draft writes.
 
 In the default Shadow PC setup, data lives under `C:\Users\Shadow\Downloads\ai\data`:
