@@ -1,0 +1,36 @@
+# Schimmelpilz release plan
+
+Planning baseline: 2026-10-12. This is a proposed order of work, not a statement that the missing features are available.
+
+## Current position
+
+The local prototype includes German/English registration and login, private case storage, generated or retained file references, contacts with per-case roles, incoming-file upload and explicit assignment, PDF/DOCX text extraction with transcription review, local Ollama research with a German federal-source catalogue, editable drafts with versioned own-review status, confirmed letter-paper PDF exports and manually recorded tasks/deadlines. The inbox release passed 36 backend and six frontend tests and a production build.
+
+The current pilot is free. Proposed monthly prices and the seven-day launch trial are displayed, but subscriptions, billing and trial enforcement are not active. Accounts remain individual; law-firm registration does not create a shared firm workspace.
+
+## Work in priority order
+
+| Order | Work package | Concrete outcome | Completion check |
+| --- | --- | --- | --- |
+| 1 | Backup and recovery | Consistent database plus upload/letter-paper backups; integrity manifest, encrypted protected storage, retention and clear recovery instructions. A copy on another disk/location is needed for protection against host loss; its destination must be configured by the operator. | Restore a backup into an isolated installation and verify login, cases, original files, drafts, letter paper and research provenance. Never test restore over live data. |
+| 2 | Accounts and reliable operation | Controlled pilot registration/invitations, verified email and password recovery, session revocation, administrator access with MFA, service supervision, startup after reboot, health monitoring and privacy-conscious error logs. | Recovery and expired-session flows work; a crashed service restarts; a server reboot recovers access. Shared preview accounts and synthetic demo data are absent from the production installation. |
+| 3 | Finish everyday office work | Search/filter registers consistently, case archive and account export, a reversible correction workflow for mistaken inbox assignment, useful task/deadline reminders and readable document layouts across devices. Add version checks where remaining edits could overwrite concurrent changes. | Complete intake → incoming document → case → contact → research → draft → review → PDF using synthetic data; repeat in both languages and narrow screens. Dates remain manual until any legal calculation is separately implemented and reviewed. |
+| 4 | Cost-review working papers | A dedicated module for consumer invoices, legal fees and court costs. Record invoice date, applicable version, value, fee items/rates, credits, expenses, tax and evidence. Begin with itemized arithmetic and explicit manual assumptions; add sourced rule calculations incrementally. | Independently reviewed example invoices produce reproducible calculations with source/version, assumptions and unresolved items. Distinguish arithmetic checks from legal entitlement to a fee; do not label AI output as verified. |
+| 5 | Research and document quality | Scheduled public-source refresh with failures/age visible, broader decision coverage, tested retrieval, answer-quality evaluation, unsupported-citation handling and durable generation recovery/queueing. Add isolated OCR/document conversion and editable DOCX export after the core checks are reliable. | A maintained set of synthetic/reference cases checks correct passage retrieval, citations, omissions, conflicting authority, version limitations and privacy isolation. Source IDs alone do not count as proof that an answer is supported. OCR remains reviewable against the original. |
+| 6 | Real law-firm collaboration | Separate organization membership from account profile, invitations, staff roles, case access, assignments, independent reviewer permissions and access/change history. | Two staff users collaborate on an authorized case; unauthorized members cannot read files, downloads, research, drafts or exports. Removing membership revokes access, including existing sessions where appropriate. |
+| 7 | Public one-server pilot | Rehearse the existing container setup on the selected host; configure domain/HTTPS, private API/model networking, persistent storage, converter isolation, upload/content limits, capacity limits, monitoring and tested update/rollback procedures. Review operator identity, privacy notices, retention/deletion/export, hosting country and applicable legal/service boundaries with qualified advice before launch. | Deploy, reboot, update and restore without losing data; test cross-account isolation and external port exposure. Measure actual model latency/storage/capacity. Hosting in Mexico versus the EU is a deployment and data-flow decision requiring a current review, not a switch that determines compliance by itself. |
+| 8 | Paid launch | Validate server/support cost and tariff scope; implement persistent plans and seven-day trial state, explicit subscription consent, payment callbacks, invoices, cancellation, failed-payment handling and access/export rules after expiry. Confirm tax and commercial terms before charging. | Test trial start/end, timezone boundaries, cancellation, duplicate/out-of-order callbacks, failed payments and invoices in the payment provider's sandbox. Existing free registrations never silently become chargeable. |
+
+## Release gates
+
+**Local pilot:** complete backup/restore and the current end-to-end workflow. Keep development/preview data separate from real accounts.
+
+**Invited external pilot:** finish account recovery, operating supervision, public-server/security/privacy preparation and sufficient research evaluation for the advertised scope. Shared firm functionality is required before offering shared firm seats; otherwise clearly offer individual accounts only. Cost review is optional until it is advertised as available.
+
+**Paid release:** pass the external-pilot checks, validate pricing against measured operating costs, and test subscriptions, trial expiry, invoicing and cancellation. Team access, OCR, proprietary databases, filing, automated jurisdiction checks and legal deadline calculations must remain marked unavailable until implemented and validated.
+
+## Recommended next implementation
+
+Build the backup/restore tooling first, including an isolated restore test and a storage health/status view. Then address account recovery and restart reliability. Continue with the cost-review working-paper module once the data can be recovered safely.
+
+The developer can implement and verify the software. The operator must ultimately supply the production host/domain, backup destination, email/payment credentials and approved business/privacy information. These dependencies should not block independent local implementation, and no real-case data should be sent to external providers merely to test a feature.
