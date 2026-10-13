@@ -1,0 +1,25 @@
+.cost-workspace {display:grid;gap:20px;min-width:0}
+.cost-workspace fieldset {border:0;padding:0;margin:0;min-width:0}
+.cost-workspace label {display:flex;flex-direction:column;gap:5px;font-weight:600;margin-bottom:12px}
+.cost-workspace input,.cost-workspace select,.cost-workspace textarea {width:100%;min-width:0;border:1px solid #ced5d1;border-radius:4px;padding:9px;background:white;color:#202e28;font:inherit;font-weight:400;box-sizing:border-box}
+.cost-form-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}
+.cost-lines {width:100%;min-width:820px;table-layout:fixed;border-collapse:collapse;margin:12px 0}
+.cost-lines caption {text-align:left;font-weight:600;padding:6px 0}
+.cost-lines th {text-align:left;font-size:13px;background:#f2f4f2;padding:8px}
+.cost-lines td {padding:8px;vertical-align:top;border-bottom:1px solid #e1e5e1}
+.cost-lines th:first-child {width:30%}.cost-lines th:last-child {width:56px}
+.cost-lines input+input {margin-top:6px;font-size:13px}
+.cost-totals {margin-top:20px}
+.cost-actions {display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0}
+.cost-result {background:#f2f6f3;border:1px solid #d4ded7;padding:20px;margin-top:20px;border-radius:4px}
+.cost-result h3 {margin:0;font-size:22px}.cost-result dl {max-width:650px}
+.cost-result dl div {display:flex;justify-content:space-between;gap:20px;padding:7px 0;border-bottom:1px solid #dae2dc}
+.cost-result dd {margin:0;font-weight:600;text-align:right}.cost-result dt {flex:1}
+.cost-result dl div:last-child {font-size:18px;color:#684923;border-bottom:0}
+.cost-difference {color:#885224;font-weight:600}
+.cost-tax-groups {display:flex;flex-wrap:wrap;gap:14px;font-size:13px}
+.cost-register article {display:flex;justify-content:space-between;align-items:center;gap:20px;padding:15px 0;border-bottom:1px solid #e0e4e1}
+.cost-register article>div:first-child {display:grid;gap:5px;overflow-wrap:anywhere;min-width:0}
+.cost-register small {color:#68736c}.cost-register .cost-actions {flex-shrink:0}
+.cost-version {display:flex;gap:15px;flex-wrap:wrap;padding:8px 0}
+@media(max-width:760px){.cost-form-grid {grid-template-columns:1fr;gap:0}.cost-register article {flex-direction:column;align-items:stretch;gap:5px}.cost-result {padding:14px}.cost-result dl div {gap:10px}.cost-result dt {font-size:14px}.cost-result dd {white-space:nowrap}.cost-actions .desk-button {max-width:100%;white-space:normal}}

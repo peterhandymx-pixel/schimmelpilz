@@ -155,3 +155,7 @@ This server layout simplifies infrastructure. It does not itself authorise perso
 </details>
 
 Plan prepared 3 October 2026.
+
+### Kostenprüfung
+
+Working invoice arithmetic is available after login: manual net items × quantity/factor, tax groups, gross advances, line/total differences, private case-linked versions, PDF review reports and editable clarification letters. Legal fee entitlement and statutory RVG/GKG/FamGKG tables remain manual. See [calculation rules and scope](docs/cost-review.md).

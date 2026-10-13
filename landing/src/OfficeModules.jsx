@@ -9,7 +9,7 @@ const internal = [
   ['research', 'KI-Recherche', 'AI research', IconMessageChatbot, '#087967'],
   ['account', 'Briefpapier & Profil', 'Letter paper & profile', IconFileDescription, '#9b7252'],
   ['activity', 'Aktuelle Akten', 'Recent files', IconListCheck, '#4583a0'],
-  ['new', 'Neue Akte anlegen', 'Open a new case', IconPlus, '#438260'],
+  ['costs', 'Kostenprüfung', 'Cost review', IconReceipt, '#b99142'],
   ['inbox', 'Posteingang', 'Inbox', IconInbox, '#658454'],
 ];
 const external = [
