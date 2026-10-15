@@ -1,6 +1,6 @@
 # Automatic module build
 
-Updated 2026-10-13. User requests automatic implementation of all missing modules, prioritizing usable legal work. Continue this checklist in order; mark items complete only after implementation and validation. Existing account recovery/operational extras were previously deferred, but remain listed for a complete system.
+Updated 2026-10-15. User requests automatic implementation of all missing modules, prioritizing usable legal work. Continue this checklist in order; mark items complete only after implementation and validation. Existing account recovery/operational extras were previously deferred, but remain listed for a complete system.
 
 | Module | Status | Acceptance |
 |---|---|---|
@@ -14,7 +14,7 @@ Updated 2026-10-13. User requests automatic implementation of all missing module
 | Deadlines and reminders | Implemented calendar export and validated | Explicit manually entered dates, upcoming/overdue views, downloadable calendar reminders; legal deadline computation separate |
 | Jurisdiction and procedural routes | Implemented bounded working papers and validated | Case-linked working paper with supported rules, required facts and formal requirements; no guessed court or filing channel |
 | Statutory fee calculator | Implemented basic 2025 value-fee tables and validated | Dated sourced fee table, explicit applicability, bounded fee events and credits, independently checked examples |
-| OCR | Queued | Local page text generation, resource bounds, transcription review against original before research use |
+| OCR | Implemented and validated | Local page text generation, resource bounds, transcription review against original before research use |
 | Inbox correction | Queued | Versioned reversible correction without losing original bytes or silently invalidating document/research snapshots |
 | Research quality and broader coverage | Queued | Public-source freshness, retrieval examples, missing/unknown citation handling, clearly stated jurisdiction coverage |
 | Shared firm workspace | Queued | Membership, staff/case permissions and revocation; account profile alone is not membership |

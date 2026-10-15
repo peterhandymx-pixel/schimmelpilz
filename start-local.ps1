@@ -59,6 +59,7 @@ if (!(Test-LocalService 'http://127.0.0.1:11434/api/tags')) {
     Start-LocalService $ollamaPath @('serve') $projectDirectory 'ollama'
 }
 $env:DATA_DIR = $resolvedData
+$env:OCR_NODE_PATH = $nodePath
 if (!(Test-LocalService "http://127.0.0.1:$ApiPort/api/health")) {
     Start-LocalService $pythonPath @('-m', 'uvicorn', 'server.app:app', '--host', '127.0.0.1', '--port', "$ApiPort") $projectDirectory "api-$ApiPort"
 }

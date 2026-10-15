@@ -2,9 +2,9 @@
 
 Implementation plan for an English/German legal assistant on one self-managed server.
 
-Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page with planned pricing/trial offers, tailored registration/sign-in, account-owned case files, structured intake, persistent documents with reviewed PDF/DOCX text extraction, versioned drafts with manual review and account-holder approval, private letter-paper PDF exports, manual tasks/activity and a local Ollama research bot with a German federal-law catalogue. Billing, team roles, OCR and automatic legal calculations/approval remain planned.
+Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page with planned pricing/trial offers, tailored registration/sign-in, account-owned case files, structured intake, persistent documents with reviewed PDF/DOCX text extraction, versioned drafts with manual review and account-holder approval, private letter-paper PDF exports, manual tasks/activity and a local Ollama research bot with a German federal-law catalogue. Local OCR, invoice arithmetic, bounded fee-table lookup, procedural working papers, Word/ZIP/calendar exports are also implemented. Billing, team roles and automated substantive legal approval remain planned.
 
-**Posteingang / Inbox** accepts one or several private files before a case is chosen. Record a subject, sender, manual received date and internal note, then explicitly assign each file to an existing owned case. Pending metadata can be edited with version checks; assignment is transactional and remains bound to that case. The original bytes are retained and available for download. Assigned PDF/DOCX files use the existing transcription-review workflow before their passages can be selected for research. This is a file-upload inbox; email accounts, automatic assignment, OCR and automatic deadlines are not connected.
+**Posteingang / Inbox** accepts one or several private files before a case is chosen. Record a subject, sender, manual received date and internal note, then explicitly assign each file to an existing owned case. Pending metadata can be edited with version checks; assignment is transactional and remains bound to that case. The original bytes are retained and available for download. Assigned PDF/DOCX files use the existing transcription-review workflow before their passages can be selected for research. This is a file-upload inbox; email accounts, automatic assignment and automatic deadlines are not connected. Local OCR is available after case assignment.
 
 The public price overview proposes **Personal €9.90, Business €29.90 and Law firm €49.90 per individual account/month**, with a **7-day free trial at launch**. Prices are proposed final amounts including applicable taxes, not an active checkout. The current pilot stays free: no payment details, charges, subscription or trial expiry are created by registration. Pricing buttons preselect the corresponding account type. See [pricing assumptions and billing boundary](docs/pricing-plan.md).
 
@@ -41,11 +41,11 @@ Use one Linux server in the location selected by the owner. Run four services th
 | Ollama | Run the chosen English/German model locally; disable cloud features |
 | Caddy | HTTPS and routing to the web application |
 
-The implemented application uses React/Vite and Python/FastAPI. Keep the database in SQLite and uploads in private local directories. Run a single API worker: a process lock serialises local generation and SQLite records pending/completed/failed requests. A durable background queue and OCR are future work. No separate database server, Redis, hosted vector database or external AI API is needed.
+The implemented application uses React/Vite and Python/FastAPI. Keep the database in SQLite and uploads in private local directories. Run a single API worker: a process lock serialises local generation and SQLite records pending/completed/failed requests. A durable background queue remains future work. OCR runs in a bounded local worker. No separate database server, Redis, hosted vector database or external AI API is needed.
 
 Only Caddy exposes public web ports. The application and Ollama communicate over an internal Docker network. The browser never calls Ollama directly. Pin dependency and container versions when implementation starts.
 
-Case storage, AI inference and draft preparation happen on this server; OCR is not implemented. Optional off-server backups are operator-managed and must be treated as a separate data flow. GitHub holds source code and documentation; runtime data stays outside Git.
+Case storage, AI inference and draft preparation happen on this server; OCR runs locally after installing its runtime and German/English models. Optional off-server backups are operator-managed and must be treated as a separate data flow. GitHub holds source code and documentation; runtime data stays outside Git.
 
 ## First release
 
@@ -112,7 +112,7 @@ Use Docker on the eventual Linux server, where Caddy, the landing page and the A
 
 This workspace has the official portable Ollama 0.35.1 distribution under ignored `data/ollama-v0.35.1/`, with `qwen2.5:7b` downloaded under `data/models`. These runtime files are not on GitHub. Configure `OLLAMA_MODELS` to that directory when restarting the portable runtime. API defaults: `OLLAMA_BASE_URL=http://127.0.0.1:11434`, `OLLAMA_MODEL=qwen2.5:7b`; no external AI key is required. Model quality must be evaluated for the intended legal work.
 
-The installed native services can be started together with `./start-local.ps1` from the repository root. The launcher reuses running services and existing data; it does not install dependencies. A hidden, independent Windows worker starts the services and the launcher checks the API and web proxy before reporting readiness. It does not register a Windows login task or restart services after a crash/reboot. Research chat calls the real local model and retains case-specific conversation and supplied document/legal-source passages. The native browser tests use separate synthetic preview data. OCR and automated substantive legal approval remain pending. See [API documentation](server/README.md) for extraction/context limits and endpoint details.
+The installed native services can be started together with `./start-local.ps1` from the repository root. The launcher reuses running services and existing data; it does not install dependencies. A hidden, independent Windows worker starts the services and the launcher checks the API and web proxy before reporting readiness. It does not register a Windows login task or restart services after a crash/reboot. Research chat calls the real local model and retains case-specific conversation and supplied document/legal-source passages. The native browser tests use separate synthetic preview data. Automated substantive legal approval remains pending. See [API documentation](server/README.md) for extraction/context limits and endpoint details.
 
 The Adressen module now provides an account-owned central address book: create/edit contacts, assign multiple case files with a role per case, search/filter and copy existing case parties explicitly. The same contacts appear in case Beteiligte tabs and can be selected as draft recipients. Existing case particulars and saved draft addresses remain unchanged after contact edits. Version checks prevent stale contact edits from silently overwriting newer data.
 
@@ -163,3 +163,5 @@ Working invoice arithmetic is available after login: manual net items × quantit
 ### Office modules
 
 Word draft export, reversible case archive, confidential case ZIP packages, calendar reminders, basic 2025 value-fee tables and case-linked procedural working papers are implemented. See [working limits](docs/office-modules.md) and [remaining module build status](docs/module-build-status.md).
+
+Local scan recognition: see [local OCR setup and limits](docs/local-ocr.md).

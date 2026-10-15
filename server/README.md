@@ -27,7 +27,7 @@ Endpoints:
 - `POST /api/cases/{id}/documents` as multipart field `file`
 - `GET /api/cases/{id}/documents/{document_id}/download`
 - `GET /api/cases/{id}/documents/{document_id}/text` returns original extracted units, corrected text and review status.
-- `POST /api/cases/{id}/documents/{document_id}/extract` extracts PDF text layers or DOCX body paragraphs/tables in a local, time-limited worker. Repeated extraction preserves corrections. Scans require OCR; images and legacy DOC are unsupported. Encrypted/invalid files retain their original upload.
+- `POST /api/cases/{id}/documents/{document_id}/extract` extracts PDF text layers or DOCX body paragraphs/tables in a local, time-limited worker. Repeated extraction preserves corrections. Scans and PNG/JPG images can use the separate local OCR endpoint; legacy DOC is unsupported. Encrypted/invalid files retain their original upload.
 - `PUT /api/cases/{id}/documents/{document_id}/text/{unit_no}` with `text` and `reviewed` saves a corrected page/section. Review checks transcription, not factual truth or legal validity. Empty text cannot be marked reviewed.
 - `POST /api/cases/{id}/drafts` with `{ "language", "recipient", "kind", "body", "research_run_id" }`. Kinds: `letter`, `claim`, `application`, `objection`, `response`. Only a basic letter can omit `body`.
 - `PUT /api/cases/{id}/drafts/{draft_id}` with `{ "body", "recipient", "kind", "language", "expected_version" }` stores the edited text and metadata. Optional `use_current_letterhead: true` adopts the currently active briefpaper version; otherwise the saved version is retained.
@@ -45,7 +45,7 @@ All case, document and draft routes require a signed-in account. Every write req
 - `PUT /api/inbox/{id}` accepts metadata and required `expected_version`. Only pending files can be edited; stale edits return 409.
 - `POST /api/inbox/{id}/assign` accepts `case_id` and `expected_version`. Both entry and case must belong to the account. A transaction creates the case document, binds the inbox entry and records case activity; stale or repeated assignments return 409. No new physical copy is made. The document uses the inbox entry's ID.
 
-The additive `inbox_documents` table stores ownership, received metadata, original filename, SHA-256 and assignment references. Original files stay in private `uploads/`; schema initialization preserves existing records. Pending files are outside all case documents and cannot provide research excerpts. Once assigned, use the existing document extraction and explicit transcription-review endpoints. Assignment cannot currently be moved or undone. No email connection, automatic case matching, deadline creation or OCR is implemented.
+The additive `inbox_documents` table stores ownership, received metadata, original filename, SHA-256 and assignment references. Original files stay in private `uploads/`; schema initialization preserves existing records. Pending files are outside all case documents and cannot provide research excerpts. Once assigned, use the existing document extraction and explicit transcription-review endpoints. Assignment cannot currently be moved or undone. No email connection, automatic case matching or deadline creation is implemented. Assigned scans/images can use local OCR.
 
 SQLite is included with Python; no separate database installation is needed. The API opens and initialises the existing database on startup without deleting records. It uses transactions for case references and draft writes.
 
@@ -134,3 +134,5 @@ See [review workflow and boundaries](../docs/draft-review.md). Draft creation op
 - `POST /api/cases/{id}/drafts/{draft_id}/review`: `action` (`begin`, `check`, `approve`, `reopen`), required `expected_version` and `expected_review_revision`. Check includes `check_id`, `checked`, `note` (10+ characters when checked); approve requires `confirmed: true`, `note` (20+ characters), no blockers and all checklist/text blocks reviewed. Conflicts/unresolved checks return 409; invalid notes/confirmation return 422.
 
 Every successful review write increments the review revision. Actual draft edits increment the content version, clear current approval and preserve immutable versions/earlier approval evidence. Unchanged saves do not increment/reset. Saved PDF exports include `X-Draft-Version`, `X-Draft-Review-Status` and version/status filenames, not a signature or legal approval stamp. These remain account-holder reviews; no role-based independent reviewer has been added.
+
+Local OCR endpoints, installation and limits: [local OCR](../docs/local-ocr.md).

@@ -9,7 +9,7 @@ def select_sources(connection, case_id, document_ids, question):
     terms = set(re.findall(r"\w{4,}", question.lower()))
     candidates = []
     for document_id in document_ids:
-        rows = connection.execute("""SELECT d.id, d.original_name, p.unit_no, p.reviewed_text, p.reviewed_at, e.unit_kind
+        rows = connection.execute("""SELECT d.id, d.original_name, p.unit_no, p.reviewed_text, p.reviewed_at, e.unit_kind, p.origin, p.ocr_run_id
             FROM documents d JOIN document_pages p ON p.document_id=d.id
             JOIN document_extractions e ON e.document_id=d.id
             WHERE d.case_id=? AND d.id=? AND p.reviewed_at IS NOT NULL
@@ -25,6 +25,6 @@ def select_sources(connection, case_id, document_ids, question):
         text = row["reviewed_text"][:min(2400, remaining)]
         if not text:
             break
-        sources.append({"document_id": row["id"], "filename": row["original_name"], "unit_no": row["unit_no"], "unit_kind": row["unit_kind"], "text": text, "reviewed_at": row["reviewed_at"], "text_sha256": hashlib.sha256(row["reviewed_text"].encode("utf-8")).hexdigest(), "excerpt_truncated": len(text) < len(row["reviewed_text"])})
+        sources.append({"document_id": row["id"], "filename": row["original_name"], "unit_no": row["unit_no"], "unit_kind": row["unit_kind"], "text": text, "reviewed_at": row["reviewed_at"], "extraction_origin": row['origin'], "ocr_run_id": row['ocr_run_id'], "text_sha256": hashlib.sha256(row["reviewed_text"].encode("utf-8")).hexdigest(), "excerpt_truncated": len(text) < len(row["reviewed_text"])})
         remaining -= len(text)
     return sources

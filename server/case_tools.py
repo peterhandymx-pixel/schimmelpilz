@@ -63,7 +63,7 @@ def router(db,require_user,now,record_activity,row_case,data_dir,upload_dir):
                 records[table]=selected(table)
             documents=selected('documents');drafts=selected('drafts')
             records['documents']=documents;records['drafts']=drafts
-            for table in ['document_pages','document_extractions']:
+            for table in ['document_pages','document_extractions','document_ocr_runs']:
                 records[table]=selected(table,'document_id',[doc['id'] for doc in documents])
             for table in ['draft_versions','draft_review_checks','draft_review_events']:
                 records[table]=selected(table,'draft_id',[draft['id'] for draft in drafts])

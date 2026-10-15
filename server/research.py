@@ -31,7 +31,7 @@ def prepare_messages(case, history, question, language, workflow, sources=None, 
         ("Official public XML source passages have been retrieved and are supplied below. Their origin and metadata were checked by the application; this is NOT legal approval. " if legal_sources else "NO external sources have been retrieved for this request. Only the supplied reviewed document excerpts are available. ") +
         "You have NO browsing, OCR, filing, deadline calculator or billing calculator tools. "
         "Uploaded filenames are not evidence of their contents. Never claim to have read a whole file. "
-        "Cite each document-derived statement with its exact supplied filename and PDF page or DOCX section number. "
+        "Cite each document-derived statement with its exact supplied filename and PDF page, image location or DOCX section number. "
         "A text review checks transcription only, not truth or legal validity. A document can contain party allegations. "
         "Excerpts may be incomplete. Say when a full passage or missing page must be checked. "
         "Prior chat answers are not independently verified evidence; do not invent a document citation absent from current excerpts. "

@@ -1,0 +1,6 @@
+{
+  "name": "schimmelpilz-local-ocr",
+  "private": true,
+  "type": "module",
+  "dependencies": { "tesseract.js": "7.0.0" }
+}

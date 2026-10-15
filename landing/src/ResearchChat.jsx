@@ -9,7 +9,7 @@ import {LegalSourcePanel,LegalAnswerSources,CitedAnswer,legalLedger} from './Leg
 function sourceLedger(sources = [], language) {
   if (!sources.length) return "";
   const de = language === "de";
-  return `\n\n${de ? "ÜBERGEBENE DOKUMENTSTELLEN – KEINE GEPRÜFTEN RECHTSQUELLEN" : "SUPPLIED DOCUMENT PASSAGES – NOT VERIFIED LEGAL SOURCES"}\n` + sources.map(source => `${source.filename} · ${source.unit_kind === "page" ? (de ? "PDF-Seite" : "PDF page") : (de ? "DOCX-Abschnitt" : "DOCX section")} ${source.unit_no}\n${de ? "Textstand" : "Text version"}: ${source.reviewed_at}\nSHA-256: ${source.text_sha256}`).join("\n\n");
+  return `\n\n${de ? "ÜBERGEBENE DOKUMENTSTELLEN – KEINE GEPRÜFTEN RECHTSQUELLEN" : "SUPPLIED DOCUMENT PASSAGES – NOT VERIFIED LEGAL SOURCES"}\n` + sources.map(source => `${source.filename} · ${source.unit_kind === "image" ? (de ? "Bild" : "Image") : source.unit_kind === "page" ? (de ? "PDF-Seite" : "PDF page") : (de ? "DOCX-Abschnitt" : "DOCX section")} ${source.unit_no}\n${de ? "Textstand" : "Text version"}: ${source.reviewed_at}\nSHA-256: ${source.text_sha256}`).join("\n\n");
 }
 
 export function ResearchChat({ lang, selectedCase, onDraft, onDocuments }) {

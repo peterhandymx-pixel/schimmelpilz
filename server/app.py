@@ -36,6 +36,7 @@ from . import case_tools
 from . import calendar_export
 from . import fee_tables
 from . import route_plans
+from . import ocr_routes
 from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
 from .word_export import compose_docx
@@ -418,6 +419,7 @@ def init_db() -> None:
         costs.migrate(connection)
         case_tools.migrate(connection)
         route_plans.migrate(connection)
+        ocr_routes.migrate(connection)
 
 
 def require_user(request: Request) -> dict:
@@ -1160,3 +1162,4 @@ app.include_router(case_tools.router(db, require_user, now, record_activity, row
 app.include_router(calendar_export.router(db, require_user, now))
 app.include_router(fee_tables.router(require_user))
 app.include_router(route_plans.router(db, require_user, now, record_activity))
+app.include_router(ocr_routes.router(db, require_user, now, record_activity, get_case, get_document, document_text, lambda: UPLOAD_DIR, EXTRACTION_LOCK, ROOT))
