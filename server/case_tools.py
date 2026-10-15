@@ -70,6 +70,7 @@ def router(db,require_user,now,record_activity,row_case,data_dir,upload_dir):
             records['cost_review_versions']=selected('cost_review_versions','review_id',[review['id'] for review in records['cost_reviews']])
             records['contacts']=[dict(row) for row in connection.execute('SELECT c.*,cc.role FROM contacts c JOIN contact_cases cc ON cc.contact_id=c.id WHERE cc.case_id=? AND c.user_id=?',(case_id,user['id']))]
             records['inbox_documents']=selected('inbox_documents')
+            records['inbox_corrections']=[dict(row) for row in connection.execute('SELECT * FROM inbox_corrections WHERE case_id=? OR from_case_id=?',(case_id,case_id))]
             heads={draft['letterhead_id'] for draft in drafts if draft['letterhead_id']}
             for version in records['draft_versions']:
                 head=json.loads(version['snapshot']).get('letterhead_id')

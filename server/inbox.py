@@ -36,6 +36,18 @@ class Assignment(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class Correction(Assignment):
+    reason: str = Field(min_length=10, max_length=1000)
+
+    @field_validator('reason')
+    @classmethod
+    def clean_reason(cls, value):
+        value = value.strip()
+        if len(value) < 10 or any(ord(c) < 32 and c not in '\n\r\t' for c in value):
+            raise ValueError('A meaningful correction reason is required')
+        return value
+
+
 def migrate(connection):
     connection.executescript('''
         CREATE TABLE IF NOT EXISTS inbox_documents (
@@ -48,7 +60,17 @@ def migrate(connection):
             assigned_at TEXT
         );
         CREATE INDEX IF NOT EXISTS inbox_owner ON inbox_documents(user_id);
+        CREATE TABLE IF NOT EXISTS inbox_corrections (
+            id TEXT PRIMARY KEY, inbox_id TEXT NOT NULL REFERENCES inbox_documents(id),
+            from_case_id TEXT NOT NULL REFERENCES cases(id), case_id TEXT NOT NULL REFERENCES cases(id),
+            old_document_id TEXT NOT NULL REFERENCES documents(id), document_id TEXT NOT NULL REFERENCES documents(id),
+            reason TEXT NOT NULL, version INTEGER NOT NULL, created_at TEXT NOT NULL
+        );
     ''')
+    columns = {row['name'] for row in connection.execute('PRAGMA table_info(documents)')}
+    for name in ['inbox_reassigned_at', 'inbox_correction_note']:
+        if name not in columns:
+            connection.execute(f'ALTER TABLE documents ADD COLUMN {name} TEXT')
 
 
 def router(db, require_user, now, record_activity, upload_directory, max_bytes, allowed_extensions):
@@ -68,6 +90,10 @@ def router(db, require_user, now, record_activity, upload_directory, max_bytes, 
         extraction = connection.execute('SELECT status FROM document_extractions WHERE document_id=?',(row['document_id'],)).fetchone()
         result['extraction_status'] = extraction['status'] if extraction else None
         result['reviewed_units'] = connection.execute('SELECT COUNT(*) FROM document_pages WHERE document_id=? AND reviewed_at IS NOT NULL',(row['document_id'],)).fetchone()[0]
+        result['corrections'] = [dict(item) for item in connection.execute('''
+            SELECT h.version,h.reason,h.created_at,a.reference AS from_reference,b.reference AS to_reference
+            FROM inbox_corrections h JOIN cases a ON a.id=h.from_case_id JOIN cases b ON b.id=h.case_id
+            WHERE h.inbox_id=? ORDER BY h.version DESC''',(row['id'],))]
         return result
 
     @routes.get('/api/inbox')
@@ -146,6 +172,35 @@ def router(db, require_user, now, record_activity, upload_directory, max_bytes, 
                 VALUES(?,?,?,?,?,?,?)''',(identifier,case_id,row['original_name'],row['stored_name'],row['content_type'],row['size_bytes'],row['created_at']))
             connection.execute('UPDATE inbox_documents SET case_id=?,document_id=?,assigned_at=?,version=version+1 WHERE id=?',(case_id,identifier,now(),identifier))
             record_activity(connection,case_id,'inbox_assigned',row['original_name'])
+            return public(connection,owned(connection,identifier,user['id']))
+
+    @routes.post('/api/inbox/{identifier}/correct')
+    def correct(identifier: str, payload: Correction, user: dict = Depends(require_user)):
+        with db() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            row = owned(connection,identifier,user['id'])
+            case_id = str(payload.case_id)
+            if not connection.execute('SELECT 1 FROM cases WHERE id=? AND user_id=?',(case_id,user['id'])).fetchone():
+                raise HTTPException(404,'Case not found')
+            if not row['case_id'] or row['version'] != payload.expected_version or row['case_id'] == case_id:
+                raise HTTPException(409,'Assignment changed, unassigned, or same target')
+            root=upload_directory().resolve();target=root/row['stored_name']
+            if not target.resolve().is_relative_to(root) or target.is_symlink() or not target.is_file():
+                raise HTTPException(404,'Stored original unavailable')
+            if target.stat().st_size != row['size_bytes'] or hashlib.sha256(target.read_bytes()).hexdigest() != row['sha256']:
+                raise HTTPException(409,'Stored original changed')
+            old=connection.execute('SELECT id FROM documents WHERE id=? AND case_id=?',(row['document_id'],row['case_id'])).fetchone()
+            if not old:
+                raise HTTPException(409,'Previous case document unavailable')
+            # Retain immutable references to old originals/text/research; create a fresh unreviewed association.
+            document_id=str(uuid.uuid4());timestamp=now()
+            connection.execute('''INSERT INTO documents(id,case_id,original_name,stored_name,content_type,size_bytes,created_at)
+                VALUES(?,?,?,?,?,?,?)''',(document_id,case_id,row['original_name'],row['stored_name'],row['content_type'],row['size_bytes'],timestamp))
+            connection.execute('UPDATE documents SET inbox_reassigned_at=?,inbox_correction_note=? WHERE id=?',(timestamp,payload.reason,row['document_id']))
+            connection.execute('INSERT INTO inbox_corrections VALUES(?,?,?,?,?,?,?,?,?)',(str(uuid.uuid4()),identifier,row['case_id'],case_id,row['document_id'],document_id,payload.reason,row['version']+1,timestamp))
+            connection.execute('UPDATE inbox_documents SET case_id=?,document_id=?,assigned_at=?,version=version+1 WHERE id=?',(case_id,document_id,timestamp,identifier))
+            for affected in [row['case_id'],case_id]:
+                record_activity(connection,affected,'inbox_corrected',row['original_name']+' · '+payload.reason)
             return public(connection,owned(connection,identifier,user['id']))
 
     return routes

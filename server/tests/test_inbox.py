@@ -1,6 +1,9 @@
 import hashlib
 import sqlite3
 import unittest
+import uuid
+from unittest.mock import patch
+from server.document_context import select_sources
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -37,6 +40,70 @@ class InboxTests(unittest.TestCase):
         result=client.post('/api/inbox',data={'received_on':'2026-10-07','subject':'Synthetic incoming invoice','sender':'Test Sender','note':'Only a test'},files={'file':('Incoming.pdf',content if content is not None else synthetic_pdf(),'application/pdf')})
         self.assertEqual(result.status_code,201,result.text)
         return result.json()
+
+    def test_correction_preserves_snapshots_blocks_old_sources_and_can_assign_back(self):
+        with TestClient(api.app) as client:
+            self.login(client);first=self.case(client);second=self.case(client);entry=self.upload(client)
+            endpoint=f"/api/inbox/{entry['id']}"
+            client.post(endpoint+'/assign',json={'case_id':first,'expected_version':1})
+            base=f"/api/cases/{first}/documents/{entry['id']}"
+            client.post(base+'/extract');client.put(base+'/text/1',json={'text':'SYNTHETIC REVIEWED INVOICE 480 EUR','reviewed':True})
+            question={'request_id':str(uuid.uuid4()),'question':'What is the invoice total?','document_ids':[entry['id']]}
+            with patch.object(api,'generate_answer',return_value={'answer':'480 EUR','input_tokens':10,'output_tokens':3,'truncated':False}):
+                answer=client.post(f'/api/cases/{first}/research',json=question)
+            self.assertEqual(answer.status_code,201,answer.text)
+            snapshot=answer.json()['sources']
+            result=client.post(endpoint+'/correct',json={'case_id':second,'expected_version':2,'reason':'Synthetic correction of wrong case'})
+            self.assertEqual(result.status_code,200,result.text);corrected=result.json()
+            self.assertEqual(corrected['version'],3);self.assertEqual(corrected['reviewed_units'],0)
+            self.assertNotEqual(corrected['document_id'],entry['id'])
+            self.assertEqual(corrected['corrections'][0]['reason'],'Synthetic correction of wrong case')
+            self.assertEqual(client.get(base+'/download').content,synthetic_pdf())
+            self.assertEqual(client.get(base+'/text').json()['units'][0]['reviewed_text'],'SYNTHETIC REVIEWED INVOICE 480 EUR')
+            self.assertEqual(client.get(f"/api/cases/{second}/documents/{corrected['document_id']}/text").json()['units'],[])
+            with api.db() as connection:
+                self.assertEqual(select_sources(connection,first,[entry['id']],'invoice'),[])
+            repeat=client.post(f'/api/cases/{first}/research',json=question)
+            self.assertEqual(repeat.json()['sources'],snapshot)
+            self.assertEqual(client.post(f'/api/cases/{first}/research',json={**question,'request_id':str(uuid.uuid4())}).status_code,422)
+            self.assertEqual(client.post(f'/api/cases/{first}/drafts',json={'body':'Synthetic adoption','research_run_id':answer.json()['id']}).status_code,422)
+            with patch.object(api,'generate_answer',return_value={'answer':'Fresh synthetic response','input_tokens':10,'output_tokens':3,'truncated':False}) as model:
+                fresh=client.post(f'/api/cases/{first}/research',json={'request_id':str(uuid.uuid4()),'question':'Fresh context without old assignment'})
+            self.assertEqual(fresh.status_code,201,fresh.text)
+            self.assertNotIn('What is the invoice total?',str(model.call_args.args[0]))
+            previous=client.get('/api/cases/'+first).json()['documents'][0]
+            self.assertTrue(previous['inbox_reassigned_at'])
+            back=client.post(endpoint+'/correct',json={'case_id':first,'expected_version':3,'reason':'Synthetic reversal for original case'})
+            self.assertEqual(back.status_code,200,back.text)
+            self.assertEqual(back.json()['version'],4);self.assertEqual(len(back.json()['corrections']),2)
+            self.assertEqual(back.json()['reviewed_units'],0)
+            self.assertEqual(len(list(api.UPLOAD_DIR.iterdir())),1)
+            self.assertEqual(len(client.get('/api/cases/'+first).json()['documents']),2)
+
+    def test_correction_guards_and_atomic_rollback(self):
+        with TestClient(api.app) as owner,TestClient(api.app) as other:
+            self.login(owner);self.login(other,'correction-other@example.invalid')
+            first=self.case(owner);second=self.case(owner);foreign=self.case(other);entry=self.upload(owner)
+            endpoint=f"/api/inbox/{entry['id']}/correct"
+            payload={'case_id':second,'expected_version':2,'reason':'Synthetic wrong case correction'}
+            self.assertEqual(owner.post(endpoint,json=payload).status_code,409)
+            owner.post(f"/api/inbox/{entry['id']}/assign",json={'case_id':first,'expected_version':1})
+            self.assertEqual(other.post(endpoint,json=payload).status_code,404)
+            self.assertEqual(owner.post(endpoint,json={**payload,'case_id':foreign}).status_code,404)
+            self.assertEqual(owner.post(endpoint,json={**payload,'case_id':first}).status_code,409)
+            self.assertEqual(owner.post(endpoint,json={**payload,'expected_version':1}).status_code,409)
+            self.assertEqual(owner.post(endpoint,json={**payload,'reason':'   short  '}).status_code,422)
+            with api.db() as connection:
+                connection.execute("CREATE TRIGGER fail_correction BEFORE INSERT ON activities WHEN NEW.action='inbox_corrected' BEGIN SELECT RAISE(ABORT,'synthetic failure'); END")
+            with self.assertRaises(sqlite3.IntegrityError):owner.post(endpoint,json=payload)
+            self.assertEqual(owner.get('/api/inbox').json()[0]['version'],2)
+            self.assertEqual(owner.get('/api/cases/'+second).json()['documents'],[])
+            self.assertFalse(owner.get('/api/cases/'+first).json()['documents'][0]['inbox_reassigned_at'])
+            with api.db() as connection:
+                connection.execute('DROP TRIGGER fail_correction')
+            stored=next(api.UPLOAD_DIR.iterdir());stored.write_bytes(b'changed bytes')
+            self.assertEqual(owner.post(endpoint,json=payload).status_code,409)
+            self.assertEqual(owner.get('/api/inbox').json()[0]['corrections'],[])
 
     def test_unassigned_persistence_then_exact_file_and_text_review_in_case(self):
         content=synthetic_pdf()

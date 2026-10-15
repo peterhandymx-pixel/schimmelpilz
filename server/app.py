@@ -657,7 +657,7 @@ def export_draft_pdf(case_id: str, draft_id: str, user: dict = Depends(require_u
 
 def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
     documents = connection.execute(
-        """SELECT d.id, d.original_name, d.content_type, d.size_bytes, d.created_at,
+        """SELECT d.id, d.original_name, d.content_type, d.size_bytes, d.created_at, d.inbox_reassigned_at, d.inbox_correction_note,
             e.status AS extraction_status, e.truncated AS extraction_truncated,
             (SELECT COUNT(*) FROM document_pages p WHERE p.document_id=d.id AND p.reviewed_at IS NOT NULL) AS reviewed_units
             FROM documents d LEFT JOIN document_extractions e ON e.document_id=d.id
@@ -864,8 +864,12 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
                     return research_row(existing)
                 raise HTTPException(status_code=409, detail="request_already_recorded")
             history = [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 6", (case_id,))][::-1]
+            retired = {row['id'] for row in connection.execute('SELECT id FROM documents WHERE case_id=? AND inbox_reassigned_at IS NOT NULL',(case_id,))}
+            history = [turn for turn in history if not any(source.get('document_id') in retired for source in json.loads(turn['sources'] or '[]'))]
             for document_id in document_ids:
                 get_document(connection, case_id, document_id)
+                if document_id in retired:
+                    raise HTTPException(status_code=422,detail='document_assignment_corrected')
                 if not connection.execute("SELECT 1 FROM document_pages WHERE document_id=? AND reviewed_at IS NOT NULL LIMIT 1", (document_id,)).fetchone():
                     raise HTTPException(status_code=422, detail="document_not_reviewed")
             sources = select_sources(connection, case_id, document_ids, payload.question)
@@ -1049,6 +1053,9 @@ def create_draft(case_id: str, payload: DraftCreate, user: dict = Depends(requir
             run = connection.execute("SELECT * FROM research_runs WHERE id=? AND case_id=? AND status='completed'",(str(payload.research_run_id),case_id)).fetchone()
             if not run:
                 raise HTTPException(status_code=404,detail='research_not_found')
+            retired = {row['id'] for row in connection.execute('SELECT id FROM documents WHERE case_id=? AND inbox_reassigned_at IS NOT NULL',(case_id,))}
+            if any(source.get('document_id') in retired for source in json.loads(run['sources'] or '[]')):
+                raise HTTPException(status_code=422,detail='research_document_assignment_corrected')
             context = {key:json.loads(run[key]) for key in ('legal_sources','sources','citation_audit','retrieval_report')}
             context.update(run_id=run['id'],question=run['question'],answer=run['answer'],model=run['model'],created_at=run['created_at'])
         connection.execute("INSERT INTO drafts(id, case_id, language, recipient, body, created_at, kind, letterhead_id, letterhead_layout,research_run_id,source_context,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (draft_id, case_id, payload.language, payload.recipient.strip(), body, created, payload.kind, letterhead_id, letterhead_layout,str(payload.research_run_id) if payload.research_run_id else None,json.dumps(context,ensure_ascii=False),created))

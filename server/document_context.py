@@ -12,7 +12,7 @@ def select_sources(connection, case_id, document_ids, question):
         rows = connection.execute("""SELECT d.id, d.original_name, p.unit_no, p.reviewed_text, p.reviewed_at, e.unit_kind, p.origin, p.ocr_run_id
             FROM documents d JOIN document_pages p ON p.document_id=d.id
             JOIN document_extractions e ON e.document_id=d.id
-            WHERE d.case_id=? AND d.id=? AND p.reviewed_at IS NOT NULL
+            WHERE d.case_id=? AND d.id=? AND d.inbox_reassigned_at IS NULL AND p.reviewed_at IS NOT NULL
             ORDER BY p.unit_no""", (case_id, document_id)).fetchall()
         for row in rows:
             text = row["reviewed_text"] or ""
