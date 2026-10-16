@@ -19,6 +19,7 @@ LEGAL_DIR = Path(os.getenv('LEGAL_DATA_DIR', Path(__file__).resolve().parents[1]
 GII = 'https://www.gesetze-im-internet.de'
 RII = 'https://www.rechtsprechung-im-internet.de'
 LAWS = {'bgb':'BGB','bgbeg':'EGBGB','zpo':'ZPO','gvg':'GVG','hgb':'HGB','gmbhg':'GmbHG','inso':'InsO','kschg':'KSchG','burlg':'BUrlG','arbgg':'ArbGG','famfg':'FamFG','vwgo':'VwGO','sgg':'SGG','stgb':'StGB','stpo':'StPO','vwvfg':'VwVfG','rvg':'RVG','gkg_2004':'GKG','famgkg':'FamGKG','gg':'GG','sgb_1':'SGB I','sgb_2':'SGB II','sgb_10':'SGB X'}
+LAWS.update({'uwg_2004':'UWG','uklag':'UKlaG','prodhaftg':'ProdHaftG','bdsg_2018':'BDSG','tzbfg':'TzBfG','milog':'MiLoG','betrvg':'BetrVG','arbzg':'ArbZG','entgfg':'EntgFG','zvg':'ZVG','estg':'EStG','ustg_1980':'UStG','ao_1977':'AO'})
 SYNC_LOCK = threading.Lock()
 FETCH_LOCK = threading.Lock()
 PROGRESS_LOCK = threading.Lock()
@@ -116,7 +117,7 @@ def parse_law(data, path):
         match = re.fullmatch(r'§\s*(\d+[a-z]*)', label)
         article = re.fullmatch(r'Art\s+(\d+[a-z]*)', label)
         page = '__' + match[1] + '.html' if match else 'art_' + article[1] + '.html' if article else 'index.html'
-        rows.append({'key':'law:' + path + ':' + norm.get('doknr',''), 'kind':'law', 'title':f'{label} {abbreviation} · {field(meta,"titel")}', 'url':f'{GII}/{path}/{page}', 'download_url':f'{GII}/{path}/xml.zip', 'metadata':{'law':abbreviation,'law_path':path,'full_title':full_title,'version_note':version,'build_date':root.get('builddate',''),'publication_date':field(first,'ausfertigung-datum'),'jurisdiction':'DE','version_scope':'current_consolidated_not_historical'}, 'text':text, 'units':paragraphs})
+        rows.append({'key':'law:' + path + ':' + norm.get('doknr',''), 'kind':'law', 'title':f'{label} {abbreviation} · {field(meta,"titel")}', 'url':f'{GII}/{path}/{page}', 'download_url':f'{GII}/{path}/xml.zip', 'metadata':{'law':abbreviation,'law_alias':LAWS[path],'law_path':path,'full_title':full_title,'version_note':version,'build_date':root.get('builddate',''),'publication_date':field(first,'ausfertigung-datum'),'jurisdiction':'DE','version_scope':'current_consolidated_not_historical'}, 'text':text, 'units':paragraphs})
     if not rows:
         raise ValueError('empty_statute')
     return rows
@@ -265,22 +266,32 @@ def source(key, refresh=False):
     return result
 
 
-def search(query, kind='all', limit=15):
+def search(query, kind='all', limit=15, court='', date_from='', date_to='', law='', downloaded_only=False):
     init_catalogue()
     tokens = re.findall(r'[^\W_]+',query.lower(),re.UNICODE)[:20]
-    if not tokens:
-        return []
-    quoted = ['"' + word + '"' for word in tokens]
-    results = []
+    conditions=['(?="all" OR e.kind=?)'];parameters=[kind,kind]
+    if court:
+        conditions.append("lower(json_extract(e.metadata,'$.court')) LIKE ? ESCAPE '\\'")
+        parameters.append(court.lower().replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%')
+    if date_from:conditions.append("json_extract(e.metadata,'$.decision_date')>=?");parameters.append(date_from)
+    if date_to:conditions.append("json_extract(e.metadata,'$.decision_date')<=?");parameters.append(date_to)
+    if law:
+        conditions.append("(lower(json_extract(e.metadata,'$.law'))=lower(?) OR lower(json_extract(e.metadata,'$.law_alias'))=lower(?))");parameters.extend([law,law])
+    if downloaded_only:conditions.append('e.fetched_at IS NOT NULL')
+    where=' AND '.join(conditions)
     with database() as db:
-        for operation in [' AND ',' OR ']:
-            rows = db.execute('SELECT e.* FROM entry_search s JOIN entries e ON e.key=s.key WHERE entry_search MATCH ? AND (?="all" OR e.kind=?) ORDER BY bm25(entry_search,0,4,1) LIMIT ?', (operation.join(quoted),kind,kind,limit)).fetchall()
-            results = [entry(row) for row in rows]
-            if results:
-                break
-    # Prefer an exact provision/reference when numeric legal identifiers occur in the query.
-    normalized = re.sub(r'\W+','',query.lower())
-    results.sort(key=lambda item: 0 if re.sub(r'\W+','',item['title'].split(' · ')[0].lower()) in normalized else 1)
+        if not tokens:
+            if not (court or law):return []
+            rows=db.execute('SELECT e.* FROM entries e WHERE '+where+" ORDER BY json_extract(e.metadata,'$.decision_date') DESC,e.title LIMIT ?",[*parameters,limit]).fetchall()
+            results=[entry(row) for row in rows]
+        else:
+            results=[];quoted=['"'+word+'"' for word in tokens]
+            for operation in [' AND ',' OR ']:
+                rows=db.execute('SELECT e.* FROM entry_search s JOIN entries e ON e.key=s.key WHERE entry_search MATCH ? AND '+where+' ORDER BY bm25(entry_search,0,4,1) LIMIT ?',[operation.join(quoted),*parameters,limit]).fetchall()
+                results=[entry(row) for row in rows]
+                if results:break
+    normalized=re.sub(r'\W+','',query.lower())
+    results.sort(key=lambda item:0 if re.sub(r'\W+','',item['title'].split(' · ')[0].lower()) in normalized else 1)
     return results
 
 
@@ -295,7 +306,12 @@ def catalogue_status():
         progress = {**PROGRESS,'errors':list(PROGRESS['errors'])}
         if not progress['running'] and saved_progress:
             progress = json.loads(saved_progress['value'])
-    return {'counts':counts,'downloaded_decisions':downloaded,'collections':updates,'progress':progress,'laws':list(LAWS.values()),'jurisdictions':['DE'],'privacy':'local_search_public_downloads_only'}
+    freshness=[]
+    for item in updates:
+        try:age=max(0,(datetime.now(UTC)-datetime.fromisoformat(item['updated_at'])).days)
+        except (ValueError,TypeError):age=None
+        freshness.append({**item,'age_days':age,'retrieval_old':age is None or age>14,'failed':bool(item['error'])})
+    return {'missing_collections':['law:'+key for key in LAWS if 'law:'+key not in {item['key'] for item in updates}],'freshness':freshness,'retrieval_age_warning_days':14,'counts':counts,'downloaded_decisions':downloaded,'collections':updates,'progress':progress,'laws':list(LAWS.values()),'jurisdictions':['DE'],'privacy':'local_search_public_downloads_only'}
 
 
 def sync_catalogue(decisions_per_court=8):

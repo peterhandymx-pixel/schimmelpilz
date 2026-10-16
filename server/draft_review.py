@@ -22,7 +22,7 @@ def snapshot_version(connection, row, actor=None):
     snapshot = content(row)
     encoded = json.dumps(snapshot,ensure_ascii=False,sort_keys=True)
     connection.execute('INSERT OR IGNORE INTO draft_versions(draft_id,version,snapshot,sha256,created_at,actor_id,actor_name) VALUES(?,?,?,?,?,?,?)',
-        (row['id'],row['version'],encoded,hashlib.sha256(encoded.encode()).hexdigest(),row['updated_at'] or row['created_at'],actor['id'] if actor else None,actor['full_name'] if actor else ''))
+        (row['id'],row['version'],encoded,hashlib.sha256(encoded.encode()).hexdigest(),row['updated_at'] or row['created_at'],actor.get('actor_id',actor['id']) if actor else None,actor['full_name'] if actor else ''))
 
 
 def migrate(connection):
@@ -91,4 +91,4 @@ def response(connection, row):
 
 def event(connection, row, actor, action, note='', evidence=None):
     connection.execute('INSERT INTO draft_review_events(id,draft_id,version,action,actor_id,actor_name,created_at,note,evidence) VALUES(?,?,?,?,?,?,?,?,?)',
-        (str(uuid.uuid4()),row['id'],row['version'],action,actor['id'],actor['full_name'],timestamp(),note,json.dumps(evidence or {},ensure_ascii=False)))
+        (str(uuid.uuid4()),row['id'],row['version'],action,actor.get('actor_id',actor['id']),actor['full_name'],timestamp(),note,json.dumps(evidence or {},ensure_ascii=False)))

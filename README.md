@@ -2,7 +2,7 @@
 
 Implementation plan for an English/German legal assistant on one self-managed server.
 
-Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page with planned pricing/trial offers, tailored registration/sign-in, account-owned case files, structured intake, persistent documents with reviewed PDF/DOCX text extraction, versioned drafts with manual review and account-holder approval, private letter-paper PDF exports, manual tasks/activity and a local Ollama research bot with a German federal-law catalogue. Local OCR, invoice arithmetic, bounded fee-table lookup, procedural working papers, Word/ZIP/calendar exports are also implemented. Billing, team roles and automated substantive legal approval remain planned.
+Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page with planned pricing/trial offers, tailored registration/sign-in, account-owned case files, structured intake, persistent documents with reviewed PDF/DOCX text extraction, versioned drafts with manual review and account-holder approval, private letter-paper PDF exports, manual tasks/activity and a local Ollama research bot with a German federal-law catalogue. Local OCR, invoice arithmetic, bounded fee-table lookup, procedural working papers, Word/ZIP/calendar exports are also implemented. Team roles, case grants, system administration and an explicit seven-day trial are implemented. Stripe checkout/portal/webhooks require operator credentials and a real sandbox test; automated substantive legal approval remains unimplemented.
 
 **Posteingang / Inbox** accepts one or several private files before a case is chosen. Record a subject, sender, manual received date and internal note, then explicitly assign each file to an existing owned case. Pending metadata can be edited with version checks; assignment is transactional; corrections retain earlier document records and an explicit audit trail. The original bytes are retained and available for download. Assigned PDF/DOCX files use the existing transcription-review workflow before their passages can be selected for research. This is a file-upload inbox; email accounts, automatic assignment and automatic deadlines are not connected. Local OCR is available after case assignment.
 
@@ -167,3 +167,5 @@ Word draft export, reversible case archive, confidential case ZIP packages, cale
 Local scan recognition: see [local OCR setup and limits](docs/local-ocr.md).
 
 [Correct an incoming-file assignment](docs/inbox-correction.md) while retaining originals and historical citations.
+
+[Administration, teams and subscriptions](docs/admin-team-billing.md) · [Extended local research](docs/advanced-research.md).

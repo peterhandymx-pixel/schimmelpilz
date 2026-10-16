@@ -86,11 +86,12 @@ def token_hash(token: str) -> str:
 
 
 def public_user(row) -> dict:
-    return {**{key: row[key] for key in ("id", "email", "audience", "full_name", "organisation", "street", "postal_code", "city", "country", "phone", "created_at")}, "profile": json.loads(row["profile"]), "letterhead_id": row["letterhead_id"]}
+    return {**{key: row[key] for key in ("id", "email", "audience", "full_name", "organisation", "street", "postal_code", "city", "country", "phone", "created_at")}, "profile": json.loads(row["profile"]), "letterhead_id": row["letterhead_id"], "is_admin": bool(row["is_admin"]) if "is_admin" in row.keys() else False}
 
 
 def set_session(connection, user_id: str, request: Request, response: Response) -> None:
     timestamp = datetime.now(UTC)
+    response.delete_cookie("schimmelpilz_workspace",path="/")
     connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (timestamp.isoformat(),))
     # Replacing a cookie also revokes its former session.
     old = request.cookies.get(COOKIE_NAME)

@@ -59,6 +59,26 @@ class LegalResearchTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 catalogue.parse_decision(altered,expected)
 
+    def test_advanced_search_filters_index_originals_and_retrieval_age(self):
+        self.assertEqual(len(catalogue.search('',court='BGH')),1)
+        self.assertEqual(catalogue.search('',court='BAG'),[])
+        self.assertEqual(catalogue.search('',court='BGH',date_from='2026-10-02'),[])
+        self.assertEqual(len(catalogue.search('',court='BGH',date_from='2026-10-01',date_to='2026-10-01')),1)
+        self.assertEqual(catalogue.search('',court='BGH',downloaded_only=True),[])
+        self.assertEqual(len(catalogue.search('',law='BGB',downloaded_only=True)),1)
+        self.assertEqual(catalogue.search('',law='OTHER'),[])
+        self.assertEqual(catalogue.search('',court='BGH%'),[])
+        with catalogue.database() as connection:
+            connection.execute("UPDATE collections SET updated_at='2000-01-01T00:00:00+00:00',error='synthetic outage' WHERE key='law:bgb'")
+        status=catalogue.catalogue_status()
+        law=next(item for item in status['freshness'] if item['key']=='law:bgb')
+        self.assertTrue(law['retrieval_old']);self.assertTrue(law['failed'])
+        with TestClient(api.app) as client:
+            self.register(client)
+            self.assertEqual(client.get('/api/legal/search?court=BGH&date_from=2026-10-01&date_to=2026-09-01').status_code,422)
+            result=client.get('/api/legal/search?court=BGH&downloaded_only=true')
+            self.assertEqual(result.status_code,200,result.text);self.assertEqual(result.json()['results'],[])
+
     def test_local_search_updates_without_duplicate_or_removed_provisions(self):
         self.assertEqual(len(catalogue.search('535 BGB','law')),1)
         catalogue.store_rows(catalogue.parse_law(LAW_XML.replace(b'ONE',b'REVISED'),'bgb'),'law:bgb')

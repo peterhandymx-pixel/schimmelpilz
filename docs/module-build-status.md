@@ -16,13 +16,16 @@ Updated 2026-10-15. User requests automatic implementation of all missing module
 | Statutory fee calculator | Implemented basic 2025 value-fee tables and validated | Dated sourced fee table, explicit applicability, bounded fee events and credits, independently checked examples |
 | OCR | Implemented and validated | Local page text generation, resource bounds, transcription review against original before research use |
 | Inbox correction | Implemented and validated | Versioned reversible correction without losing original bytes or silently invalidating document/research snapshots |
-| Research quality and broader coverage | Queued | Public-source freshness, retrieval examples, missing/unknown citation handling, clearly stated jurisdiction coverage |
-| Shared firm workspace | Queued | Membership, staff/case permissions and revocation; account profile alone is not membership |
+| Research quality and broader coverage | Implemented bounded extension | Public-source freshness, retrieval examples, missing/unknown citation handling, clearly stated jurisdiction coverage |
+| Shared firm workspace | Implemented and browser/API validated | Membership, staff/case permissions and revocation; account profile alone is not membership |
+| System administration | Implemented; local dedicated admin access | Explicit operator role, user/session controls, settings, workspace selection and audit |
 | Account recovery and supervised operation | Deferred earlier / queued | Verified email, expiring recovery, session revocation, startup/restart; email credentials required for delivery |
 | Public-server deployment | Operator setup required | Host/domain/HTTPS, private runtime networks, measured capacity; no production host configured |
-| Subscriptions and seven-day trial | Queued; provider setup required | Persistent plan/trial, explicit checkout, tested callbacks/cancellation; existing pilot stays free until consent |
+| Subscriptions and seven-day trial | Trial/entitlements and Stripe adapter implemented; real provider setup and sandbox purchase required | Persistent plan/trial, explicit checkout, tested callbacks/cancellation; existing pilot stays free until consent |
 | Email and electronic filing | Provider/authority integration required | Authenticated provider, permitted channel, preview/review and explicitly authorized sending; ordinary email is not automatically formal filing |
 
 External source links are working links, not third-party account integrations. No provider credentials, paid databases or production host are fabricated. Keep local synthetic preview data separate from real accounts and the public Git repository.
 
 Implementation details and tested limits: [office modules](office-modules.md).
+
+Details: [administration, teams and subscriptions](admin-team-billing.md), [extended research](advanced-research.md).

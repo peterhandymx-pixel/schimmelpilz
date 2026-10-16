@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse, Response as BinaryResponse
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+from . import control, billing, document_ocr
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ollama_status, prepare_messages, generate_answer, OLLAMA_MODEL
 from .document_context import select_sources
@@ -45,6 +46,8 @@ from tempfile import TemporaryDirectory
 from urllib.error import URLError
 
 ROOT = Path(__file__).resolve().parents[1]
+from .operator_config import load as load_operator_config
+load_operator_config(ROOT / '.env')
 DATA_DIR = Path(os.getenv("DATA_DIR", ROOT / "data"))
 UPLOAD_DIR = DATA_DIR / "uploads"
 DB_PATH = DATA_DIR / "app.db"
@@ -73,10 +76,13 @@ app.add_middleware(
 @app.middleware("http")
 async def guard_cookie_requests(request: Request, call_next):
     # Custom header plus JSON/multipart handling prevents cross-site form writes.
-    if request.method in {"POST", "PUT", "DELETE"} and request.headers.get("x-schimmelpilz-request") != "1":
+    if request.method in {"POST", "PUT", "DELETE"} and request.url.path != "/api/billing/webhook" and request.headers.get("x-schimmelpilz-request") != "1":
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": "Missing request header"}, status_code=403)
     response = await call_next(request)
+    if request.method in {'POST','PUT','DELETE'} and response.status_code < 400 and getattr(request.state,'actor_id',None):
+        with db() as connection:
+            control.audit(connection,request.state.actor_id,getattr(request.state,'workspace_id',None),request.method,request.url.path)
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
@@ -420,28 +426,39 @@ def init_db() -> None:
         case_tools.migrate(connection)
         route_plans.migrate(connection)
         ocr_routes.migrate(connection)
+        control.migrate(connection)
+        billing.migrate(connection)
 
 
-def require_user(request: Request) -> dict:
+async def require_user(request: Request) -> dict:
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Sign in required")
     with db() as connection:
         user = connection.execute("SELECT users.* FROM users JOIN sessions ON sessions.user_id = users.id WHERE sessions.token_hash = ? AND sessions.expires_at > ?", (token_hash(token), now())).fetchone()
-    if not user:
+    if not user or user['disabled']:
         raise HTTPException(status_code=401, detail="Session expired")
-    return public_user(user)
+    if request.method in {'POST','PUT'} and request.headers.get('content-type','').startswith('application/json'):
+        try:request.state.payload_case_id=(await request.json()).get('case_id')
+        except (ValueError,AttributeError):pass
+    with db() as connection:
+        principal=control.principal(connection,public_user(user),request)
+        billing.enforce(connection,principal,request)
+        if request.method=='POST' and request.url.path.startswith('/api/cases/') and request.url.path.endswith('/research') and not connection.execute('SELECT ai_enabled FROM operator_settings WHERE id=1').fetchone()[0]:raise HTTPException(503,'ai_paused_by_operator')
+        return principal
 
 
 @app.post("/api/auth/register", status_code=201)
 def register(payload: RegisterInput, request: Request, response: Response) -> dict:
+    with db() as connection:
+        if not connection.execute('SELECT registrations_enabled FROM operator_settings WHERE id=1').fetchone()[0]:raise HTTPException(403,'registrations_paused_by_operator')
     user_id, salt = str(uuid.uuid4()), secrets.token_hex(16)
     hashed = password_hash(payload.password, salt)
     with db() as connection:
         connection.execute("BEGIN IMMEDIATE")
         if connection.execute("SELECT 1 FROM users WHERE email = ?", (payload.email,)).fetchone():
             raise HTTPException(status_code=409, detail="Email already registered")
-        first_account = not connection.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+        first_account = not connection.execute("SELECT 1 FROM users WHERE is_admin=0 LIMIT 1").fetchone()
         connection.execute("INSERT INTO users(id, email, password_hash, salt, audience, full_name, organisation, street, postal_code, city, country, phone, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (user_id, payload.email, hashed, salt, payload.audience, payload.full_name, payload.organisation, payload.street, payload.postal_code, payload.city, payload.country, payload.phone, now()))
         connection.execute("UPDATE users SET profile=? WHERE id=?", (json.dumps(payload.profile.model_dump(), ensure_ascii=False), user_id))
         if first_account:
@@ -458,7 +475,7 @@ def login(payload: LoginInput, request: Request, response: Response) -> dict:
         user = connection.execute("SELECT * FROM users WHERE email = ?", (payload.email.strip().lower(),)).fetchone()
         # Equal-cost comparison also for unknown addresses.
         valid = verify_password(payload.password, user["salt"] if user else "00" * 16, user["password_hash"] if user else "00" * 64)
-        if not user or not valid:
+        if not user or not valid or user['disabled']:
             failed_logins.setdefault(key, []).append(datetime.now(UTC))
             raise HTTPException(status_code=401, detail="Email or password incorrect")
         failed_logins.pop(key, None)
@@ -475,6 +492,7 @@ def current_user(user: dict = Depends(require_user)) -> dict:
 def logout(request: Request, response: Response):
     with db() as connection:
         connection.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash(request.cookies.get(COOKIE_NAME, "")),))
+    response.delete_cookie(control.WORKSPACE_COOKIE,path='/')
     response.delete_cookie(COOKIE_NAME, path="/", httponly=True, samesite="strict")
 
 
@@ -700,7 +718,7 @@ def health() -> dict:
 @app.get("/api/cases")
 def list_cases(user: dict = Depends(require_user)) -> list[dict]:
     with db() as connection:
-        return [row_case(row, connection) for row in connection.execute("SELECT * FROM cases WHERE user_id = ? ORDER BY created_at DESC", (user["id"],))]
+        return [row_case(row, connection) for row in connection.execute("SELECT * FROM cases WHERE user_id = ? ORDER BY created_at DESC", (user["id"],)) if user.get("allowed_cases") is None or row["id"] in user["allowed_cases"]]
 
 
 @app.post("/api/cases", status_code=201)
@@ -767,7 +785,8 @@ def update_task(case_id: str, task_id: str, payload: TaskUpdate, user: dict = De
 
 @app.get("/api/research/status")
 def research_status(user: dict = Depends(require_user)) -> dict:
-    return ollama_status()
+    with db() as connection:enabled=bool(connection.execute('SELECT ai_enabled FROM operator_settings WHERE id=1').fetchone()[0])
+    return {**ollama_status(),'enabled':enabled}
 
 
 @app.get('/api/legal/status')
@@ -781,10 +800,10 @@ def legal_refresh(user: dict = Depends(require_user)):
 
 
 @app.get('/api/legal/search')
-def legal_search(q: str, kind: Literal['all','law','decision']='all', user: dict = Depends(require_user)):
-    if not 2 <= len(q.strip()) <= 200:
+def legal_search(q: str='', kind: Literal['all','law','decision']='all', court:str='', date_from:date|None=None, date_to:date|None=None, law:str='', downloaded_only:bool=False, user: dict = Depends(require_user)):
+    if (q.strip() and not 2 <= len(q.strip()) <= 200) or (not q.strip() and not (court or law)) or len(court)>80 or len(law)>40 or (date_from and date_to and date_from>date_to):
         raise HTTPException(status_code=422,detail='query_length')
-    results = legal_catalogue.search(q,kind)
+    results = legal_catalogue.search(q,kind,50,court,date_from.isoformat() if date_from else '',date_to.isoformat() if date_to else '',law,downloaded_only)
     return {'results':[{key:value for key,value in item.items() if key not in {'text','units'}} for item in results],'coverage':legal_catalogue.catalogue_status()}
 
 
@@ -1139,7 +1158,7 @@ def draft_review_action(case_id: str, draft_id: str, payload: DraftReviewInput, 
                 raise HTTPException(status_code=409,detail='review_transition')
             if payload.check_id not in {item['id'] for item in state['checks']} or (payload.checked and len(note)<10):
                 raise HTTPException(status_code=422,detail='review_check_note_required')
-            connection.execute('INSERT INTO draft_review_checks(draft_id,version,check_id,checked,note,actor_id,actor_name,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(draft_id,version,check_id) DO UPDATE SET checked=excluded.checked,note=excluded.note,actor_id=excluded.actor_id,actor_name=excluded.actor_name,updated_at=excluded.updated_at',(draft_id,row['version'],payload.check_id,int(payload.checked),note,user['id'],user['full_name'],now()))
+            connection.execute('INSERT INTO draft_review_checks(draft_id,version,check_id,checked,note,actor_id,actor_name,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(draft_id,version,check_id) DO UPDATE SET checked=excluded.checked,note=excluded.note,actor_id=excluded.actor_id,actor_name=excluded.actor_name,updated_at=excluded.updated_at',(draft_id,row['version'],payload.check_id,int(payload.checked),note,user.get('actor_id',user['id']),user['full_name'],now()))
             status = 'in_review'
             evidence = {'check_id':payload.check_id,'checked':payload.checked}
         elif payload.action == 'approve':
@@ -1153,7 +1172,7 @@ def draft_review_action(case_id: str, draft_id: str, payload: DraftReviewInput, 
             if row['review_status'] != 'approved':
                 raise HTTPException(status_code=409,detail='review_transition')
             status = 'in_review'
-        connection.execute('UPDATE drafts SET review_status=?,review_revision=review_revision+1,approved_by=?,approved_name=?,approved_at=? WHERE id=?',(status,user['id'] if status=='approved' else None,user['full_name'] if status=='approved' else None,now() if status=='approved' else None,draft_id))
+        connection.execute('UPDATE drafts SET review_status=?,review_revision=review_revision+1,approved_by=?,approved_name=?,approved_at=? WHERE id=?',(status,user.get('actor_id',user['id']) if status=='approved' else None,user['full_name'] if status=='approved' else None,now() if status=='approved' else None,draft_id))
         row = owned_draft(connection,case_id,draft_id)
         draft_review.event(connection,row,user,payload.action,note,evidence)
         activity = record_activity(connection,case_id,'draft_review_'+payload.action,f'v{row["version"]}')
@@ -1170,3 +1189,7 @@ app.include_router(calendar_export.router(db, require_user, now))
 app.include_router(fee_tables.router(require_user))
 app.include_router(route_plans.router(db, require_user, now, record_activity))
 app.include_router(ocr_routes.router(db, require_user, now, record_activity, get_case, get_document, document_text, lambda: UPLOAD_DIR, EXTRACTION_LOCK, ROOT))
+
+app.include_router(control.router(db,require_user,now,lambda:{'ai':ollama_status(),'ocr_available':document_ocr.available(),'catalogue':legal_catalogue.catalogue_status()}))
+
+app.include_router(billing.router(db,require_user,now))
