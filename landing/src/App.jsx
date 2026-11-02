@@ -1,6 +1,5 @@
 // @refresh reset
 import { useEffect, useId, useRef, useState } from "react";
-import { CaseWorkspace } from "./CaseWorkspace.jsx";
 import { CaseIntake, intakeCopy } from "./CaseIntake.jsx";
 import { FeatureOverview } from "./FeatureOverview.jsx";
 import { PricingOverview } from './PricingOverview.jsx';
@@ -23,10 +22,10 @@ import {
 
 const copy = {
   de: {
-    navHow: "So funktioniert’s", navFeatures: "Funktionen", navPricing: "Preise", navFaq: "FAQ", signIn: "Anmelden",
+    navHow: "So funktioniert’s", navFeatures: "Funktionen", navPricing: "Preise", navFaq: "FAQ", signIn: "Anmelden", register: "Registrieren",
     eyebrow: "IHR FALL. KLAR STRUKTURIERT.",
     testedIn: "Getestet und verbessert in Verfahren beim",
-    title: <>Klarheit und die Wahrheit – damit Sie keine Angst mehr vor Großkanzleien haben müssen.</>,
+    title: <>Findet Klarheit und die Wahrheit</>,
     intro: "Ordnen Sie Ihre Unterlagen, verstehen Sie rechtliche Zusammenhänge und erstellen Sie Dokumententwürfe – auf Deutsch oder Englisch.",
     start: "Fall anlegen", demo: "Demo ansehen", meta: "Deutsch & Englisch  ·  Aktenzeichen  ·  Dokumententwürfe",
     badge: "Beispielfall", overview: "Übersicht", documents: "Dokumente", assistant: "Assistent", drafts: "Entwürfe",
@@ -42,7 +41,7 @@ const copy = {
     loginTitle: "Anmelden", loginText: "Die Anmeldung wird in der Produktionsversion mit Ihrer eigenen Authentifizierung verbunden.", preview: "Vorschau öffnen", saved: "Fall angelegt – Vorschau aktualisiert.", uploadSaved: "Datei auf dem Server gespeichert.", error: "Der Fall konnte nicht gespeichert werden. Läuft das Backend auf Port 8001?", uploadError: "Die Datei konnte nicht gespeichert werden.", noCase: "Legen Sie zuerst einen Fall an.", limit: "Demo: keine Rechtsberatung, keine echte Dokumentenspeicherung.",
   },
   en: {
-    navHow: "How it works", navFeatures: "Features", navPricing: "Pricing", navFaq: "FAQ", signIn: "Sign in", eyebrow: "YOUR CASE. CLEARLY STRUCTURED.", testedIn: "Tested and refined in proceedings at",
+    navHow: "How it works", navFeatures: "Features", navPricing: "Pricing", navFaq: "FAQ", signIn: "Sign in", register: "Register", eyebrow: "YOUR CASE. CLEARLY STRUCTURED.", testedIn: "Tested and refined in proceedings at",
     title: <>Clarity for your case.<br />Structure for the<br />next step.</>, intro: "Organise your documents, understand the legal context and prepare document drafts – in German or English.", start: "Start a case", demo: "View demo", meta: "German & English  ·  Case reference  ·  Document drafts",
     badge: "Example case", overview: "Overview", documents: "Documents", assistant: "Assistant", drafts: "Drafts", caseTitle: "Tenancy matter – Berlin flat", inProgress: "In progress", files: "Documents", add: "Add documents", draft: "Prepare a letter", draftLabel: "Draft", missing: "Which documents are still missing?", ask: "Ask about your case …", stepsTitle: "Three steps to your next step.",
     steps: [["Describe your case", "Briefly share your concern and the key facts."], ["Add documents", "Upload relevant documents securely and clearly."], ["Prepare a draft", "Receive understandable analysis and prepare document drafts."]], faqTitle: "Clarity before you start.", faq: [["Does the assistant replace legal advice?", "No. Suggestions are for orientation and do not replace individual advice from a qualified lawyer."], ["Where are my documents processed?", "Cases, drafts and files are stored on our server. For AI research, your question, the case particulars and the document excerpts you select are sent to Google (Gemini API). See the privacy notice for details."], ["Can I work in German and English?", "Yes. Switch language above; your reference, documents and drafts stay together in one case."]], modalStart: "Start a new case", modalIntro: "Share the key facts. This preview keeps your input in the browser only.", subject: "Subject", description: "Short description", create: "Create case", cancel: "Cancel", close: "Close", loginTitle: "Sign in", loginText: "Production will connect sign-in to your own authentication system.", preview: "Open preview", saved: "Case created – preview updated.", uploadSaved: "File saved on the server.", error: "The case could not be saved. Is the API running on port 8001?", uploadError: "The file could not be saved.", noCase: "Create a case first.", limit: "Demo: no legal advice and no real document storage.",
@@ -63,7 +62,7 @@ const storageCopy = {
   },
   en: {
     savedCases: "Saved cases", savedCase: "Saved", localStorage: "Stored locally",
-    title: <>Clarity and the truth – so you no longer have to fear large law firms.</>,
+    title: <>Find clarity and the truth</>,
     loadingCases: "Loading cases …", loadError: "Saved cases could not be loaded.", retry: "Try again",
     noDocuments: "No documents yet. Up to 10 MB per file.", noDrafts: "No drafts saved yet.",
     uploading: "Uploading …", newDraft: "New draft", editDraft: "Edit draft", save: "Save",
@@ -141,7 +140,6 @@ export function App() {
   const [authNotice, setAuthNotice] = useState("");
   const [legalPage, setLegalPage] = useState(() => legalPageFromHash());
   const fileRef = useRef(null);
-  const previewRef = useRef(null);
   const toastTimer = useRef(null);
   const generatedDraft = useRef(null);
   const dc = draftCopy[lang];
@@ -205,7 +203,6 @@ export function App() {
       const created = editingCase ? await storage.updateCase(editingCase.id, payload) : await storage.createCase(payload);
       setModal(null); setView("case"); setUploadNotice(""); setActiveTab("overview"); setQuestion(""); setAnswer("");
       showToast((editingCase ? (lang === "de" ? "Akte aktualisiert." : "Case file updated.") : t.saved) + " " + created.reference);
-      previewRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return true;
     } catch (error) { setCaseError(error.status === 409 ? intakeCopy[lang].duplicate : error.status === 422 ? intakeCopy[lang].invalid : t.error); return false; } finally { setSavingCase(false); }
   };
@@ -268,10 +265,16 @@ export function App() {
     document.body.appendChild(link); link.click(); link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+<<<<<<< ours
   const askAssistant = () => { if (!question.trim()) return; setAnswer(lang === "de" ? "Melden Sie sich an und öffnen Sie Recherche. Dort steht der KI-Assistent für Ihre ausgewählte Akte bereit." : "Sign in and open Research to use the AI assistant for your selected case."); };
   if (legalPage) return <LegalPage page={legalPage} lang={lang} setLang={setLang} />;
   return <div className={auth.user ? "app-site" : "site"}>{auth.loading ? <div className="startup-screen" role="status">{lang === "de" ? "Arbeitsbereich wird geladen …" : "Loading workspace …"}</div> : auth.user ? <Dashboard key={auth.user.id} contacts={contacts} lang={lang} setLang={setLang} t={t} user={auth.user} storage={storage} view={view} setView={setView} onNewCase={openCase} onLogout={signOut} onUserUpdated={auth.setUser} onAccountDeleted={() => { auth.setUser(null); setView("overview"); showToast(lang === "de" ? "Konto und alle Daten wurden gelöscht." : "Account and all data were deleted."); }} workspaceProps={{ activeTab, setActiveTab, onFile, onDraft: openDraft, onSelectCase: selectCase, onEdit: editCase, uploadNotice, question, setQuestion, answer, askAssistant }} /> : <>{auth.error && <div className="connection-notice" role="status">{lang === "de" ? "Anmeldung derzeit nicht erreichbar." : "Sign-in is currently unavailable."} <button onClick={auth.retry}>{t.retry}</button></div>}<a className="skip-link" href="#main">Zum Inhalt springen</a><header className="site-header"><nav className={menu ? "open" : ""}><a href="#how" onClick={() => setMenu(false)}>{t.navHow}</a><a href="#features" onClick={() => setMenu(false)}>{t.navFeatures}</a><a href="#pricing" onClick={() => setMenu(false)}>{t.navPricing}</a><a href="#faq" onClick={() => setMenu(false)}>{t.navFaq}</a><span className="nav-divider" /><button className={lang === "de" ? "language active" : "language"} onClick={() => setLang("de")}>DE</button><span className="language-sep">|</span><button className={lang === "en" ? "language active" : "language"} onClick={() => setLang("en")}>EN</button><button className="header-login" onClick={() => { setAuthMode("login"); setModal("auth"); }}>{t.signIn}</button></nav><button className="menu-toggle" aria-label="Menü" onClick={() => setMenu(!menu)}>{menu ? <X /> : <Menu />}</button></header>
     <main id="main"><section className="hero-brand" id="top"><BrandLogo className="brand-logo hero-logo" /><div className="tested-in"><p>{t.testedIn}</p><ul>{COURTS.map(court => <li key={court}>{court}</li>)}</ul></div></section><section className="hero"><div className="hero-copy"><p className="eyebrow">{t.eyebrow}</p><h1>{t.title}</h1><p className="hero-intro">{t.intro}</p><div className="hero-actions"><button className="primary-button" onClick={openCase}>{t.start} <ArrowRight size={20} /></button><button className="secondary-button" onClick={() => previewRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>{t.demo}</button></div><p className="hero-meta">{t.meta}</p></div><div className="hero-visual"><div className="visual-wash" /><div ref={previewRef}><CaseWorkspace lang={lang} t={t} activeTab={activeTab} setActiveTab={setActiveTab} onFile={onFile} onDraft={openDraft} storage={storage} onSelectCase={selectCase} uploadNotice={uploadNotice} question={question} setQuestion={setQuestion} answer={answer} askAssistant={askAssistant} /></div><span className="visual-caption">{lang === "de" ? "Designkonzept · Vorschau" : "Design concept · Preview"}</span></div></section>
+=======
+  const askAssistant = () => { if (!question.trim()) return; setAnswer(lang === "de" ? "Melden Sie sich an und öffnen Sie Recherche. Dort steht der lokale KI-Bot für Ihre ausgewählte Akte bereit." : "Sign in and open Research to use the local AI bot for your selected case."); };
+  return <div className={auth.user ? "app-site" : "site"}>{auth.loading ? <div className="startup-screen" role="status">{lang === "de" ? "Arbeitsbereich wird geladen …" : "Loading workspace …"}</div> : auth.user ? <Dashboard key={auth.user.id} contacts={contacts} lang={lang} setLang={setLang} t={t} user={auth.user} storage={storage} view={view} setView={setView} onNewCase={openCase} onLogout={signOut} onUserUpdated={auth.setUser} onAccountDeleted={() => { auth.setUser(null); setView("overview"); showToast(lang === "de" ? "Konto und alle Daten wurden gelöscht." : "Account and all data were deleted."); }} workspaceProps={{ activeTab, setActiveTab, onFile, onDraft: openDraft, onSelectCase: selectCase, onEdit: editCase, uploadNotice, question, setQuestion, answer, askAssistant }} /> : <>{auth.error && <div className="connection-notice" role="status">{lang === "de" ? "Anmeldung derzeit nicht erreichbar." : "Sign-in is currently unavailable."} <button onClick={auth.retry}>{t.retry}</button></div>}<a className="skip-link" href="#main">Zum Inhalt springen</a><header className="site-header"><nav className={menu ? "open" : ""}><a href="#how" onClick={() => setMenu(false)}>{t.navHow}</a><a href="#features" onClick={() => setMenu(false)}>{t.navFeatures}</a><a href="#pricing" onClick={() => setMenu(false)}>{t.navPricing}</a><a href="#faq" onClick={() => setMenu(false)}>{t.navFaq}</a><span className="nav-divider" /><button className={lang === "de" ? "language active" : "language"} onClick={() => setLang("de")}>DE</button><span className="language-sep">|</span><button className={lang === "en" ? "language active" : "language"} onClick={() => setLang("en")}>EN</button><button className="header-login" onClick={() => { setAuthMode("login"); setModal("auth"); }}>{t.signIn}</button><button className="header-register" onClick={() => { setMenu(false); setAuthMode("register"); setModal("auth"); }}>{t.register}</button></nav><button className="menu-toggle" aria-label="Menü" onClick={() => setMenu(!menu)}>{menu ? <X /> : <Menu />}</button></header>
+    <main id="main"><section className="hero-brand" id="top"><BrandLogo className="brand-logo hero-logo" /><div className="tested-in"><p>{t.testedIn}</p><ul>{COURTS.map(court => <li key={court}>{court}</li>)}</ul></div></section>
+>>>>>>> theirs
       <section className="steps-section" id="how"><p className="section-kicker">{lang === "de" ? "SO FUNKTIONIERT’S" : "HOW IT WORKS"}</p><h2>{t.stepsTitle}</h2><div className="steps-grid">{t.steps.map(([title, text], i) => <div className="step" key={title}><div className="step-number">0{i + 1}</div><div className="step-icon">{i === 0 ? <FileText /> : i === 1 ? <Upload /> : <PenLine />}</div><div><h3>{title}</h3><p>{text}</p></div></div>)}</div></section>
       <FeatureOverview lang={lang} onDraft={() => openDraft()} />
       <PricingOverview lang={lang} onSelect={audience => {setRegistrationAudience(audience);setAuthMode('register');setModal('auth');}} />

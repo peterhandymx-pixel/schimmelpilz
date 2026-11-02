@@ -77,8 +77,8 @@ fun AnimatedSplash(waiting: Boolean, onFinished: () -> Unit) {
         onFinished()
     }
     val claimText = brandClaim()
-    val sloganText = tr("Klarheit und die Wahrheit – damit Sie keine Angst mehr vor Großkanzleien haben müssen.",
-        "Clarity and the truth – so you no longer have to fear big law firms.")
+    val sloganText = tr("Findet Klarheit und die Wahrheit",
+        "Find clarity and the truth")
     Box(Modifier.fillMaxSize().background(Cream).semantics { contentDescription = "$BRAND – $claimText. $sloganText" }, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 32.dp)) {
             Image(
