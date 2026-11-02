@@ -23,11 +23,24 @@ services:
       LEGAL_DATA_DIR: /data/legal-sources
       COOKIE_SECURE: "true"
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_PRICE_PERSONAL: ${STRIPE_PRICE_PERSONAL:-}
-      STRIPE_PRICE_BUSINESS: ${STRIPE_PRICE_BUSINESS:-}
-      STRIPE_PRICE_FIRM: ${STRIPE_PRICE_FIRM:-}
+      PRICE_CURRENCY: ${PRICE_CURRENCY:-}
+      PRICE_PERSONAL: ${PRICE_PERSONAL:-}
+      PRICE_BUSINESS: ${PRICE_BUSINESS:-}
+      PRICE_FIRM: ${PRICE_FIRM:-}
+      CLIP_LINK_PERSONAL: ${CLIP_LINK_PERSONAL:-}
+      CLIP_LINK_BUSINESS: ${CLIP_LINK_BUSINESS:-}
+      CLIP_LINK_FIRM: ${CLIP_LINK_FIRM:-}
+      OPERATOR_NAME: ${OPERATOR_NAME:-}
+      OPERATOR_LEGAL_FORM: ${OPERATOR_LEGAL_FORM:-}
+      OPERATOR_REPRESENTATIVE: ${OPERATOR_REPRESENTATIVE:-}
+      OPERATOR_ADDRESS: ${OPERATOR_ADDRESS:-}
+      OPERATOR_EMAIL: ${OPERATOR_EMAIL:-}
+      OPERATOR_PHONE: ${OPERATOR_PHONE:-}
+      OPERATOR_REGISTER: ${OPERATOR_REGISTER:-}
+      OPERATOR_TAX_ID: ${OPERATOR_TAX_ID:-}
+      OPERATOR_CONTENT_RESPONSIBLE: ${OPERATOR_CONTENT_RESPONSIBLE:-}
+      OPERATOR_HOSTING: ${OPERATOR_HOSTING:-}
+      OPERATOR_MAIL_PROVIDER: ${OPERATOR_MAIL_PROVIDER:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
       SMTP_USER: ${SMTP_USER:-}
@@ -35,8 +48,9 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
       ADMIN_MFA_REQUIRED: ${ADMIN_MFA_REQUIRED:-true}
-      OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      AI_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
     volumes:
       - app_data:/data
     expose:
@@ -47,38 +61,6 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
-    depends_on:
-      # The office functions must start even if the AI model is down; research reports it as unavailable.
-      ollama:
-        condition: service_started
-
-  ollama:
-    image: ollama/ollama:0.35.1
-    restart: unless-stopped
-    environment:
-      OLLAMA_NO_CLOUD: "1"
-      OLLAMA_NUM_PARALLEL: "1"
-    volumes:
-      - ollama_models:/root/.ollama
-    expose:
-      - "11434"
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 30s
-      timeout: 10s
-      start_period: 20s
-      retries: 3
-
-  # One-off: downloads the chat model into the ollama_models volume (skipped when already present).
-  ollama-model:
-    image: ollama/ollama:0.35.1
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-qwen2.5:7b}"]
-    restart: "no"
-    depends_on:
-      ollama:
-        condition: service_healthy
 
   # Daily encrypted backup with verification. Copy /backups and the key volume off this server.
   backup:
@@ -121,5 +103,4 @@ volumes:
   app_data:
   caddy_data:
   caddy_config:
-  ollama_models:
   backup_keys:

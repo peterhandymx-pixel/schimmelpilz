@@ -1,14 +1,43 @@
-"""Local model transport with bounded case, document and official-source context."""
+"""Model transport (Gemini API or local Ollama) with bounded case, document and official-source context."""
 import json
 import os
+import time
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
+from .operator_config import load as load_operator_config
 
+# app.py imports this module before it loads .env, so load it here for the settings below.
+load_operator_config(Path(__file__).resolve().parents[1] / ".env")
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").strip().lower()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest").strip()
+# Google answers 503 "high demand" (and 429/500) in short spikes; retry those twice before reporting failure.
+GEMINI_RETRY_DELAYS = (2, 6)
+GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+AI_MODEL = OLLAMA_MODEL if AI_PROVIDER == "ollama" else GEMINI_MODEL
 SKILL_DIR = Path(__file__).resolve().parents[1] / ".agents" / "skills" / "schimmelpilz-german-law"
 WORKFLOWS = {"intake": "case-intake.md", "research": "research.md", "jurisdiction": "jurisdiction.md", "costs": "cost-review.md", "drafting": "drafting.md", "deadlines": "deadlines.md"}
+
+
+def ai_status():
+    return ollama_status() if AI_PROVIDER == "ollama" else gemini_status()
+
+
+def gemini_status():
+    # The key never goes into a URL, so it cannot end up in proxy or access logs.
+    if not GEMINI_API_KEY:
+        return {"ready": False, "model": GEMINI_MODEL, "reason": "unavailable"}
+    request = Request(GEMINI_BASE_URL + "/models/" + quote(GEMINI_MODEL), headers={"x-goog-api-key": GEMINI_API_KEY}, method="GET")
+    try:
+        with urlopen(request, timeout=5) as response:
+            json.loads(response.read(256 * 1024))
+        return {"ready": True, "model": GEMINI_MODEL, "reason": "ready"}
+    except (URLError, TimeoutError, OSError, ValueError):
+        return {"ready": False, "model": GEMINI_MODEL, "reason": "unavailable"}
 
 
 def ollama_status():
@@ -83,6 +112,45 @@ def prepare_messages(case, history, question, language, workflow, sources=None, 
 
 
 def generate_answer(messages):
+    return generate_ollama_answer(messages) if AI_PROVIDER == "ollama" else generate_gemini_answer(messages)
+
+
+def generate_gemini_answer(messages):
+    if not GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY is not configured")
+    system = "\n".join(message["content"] for message in messages if message["role"] == "system")
+    contents = [{"role": "model" if message["role"] == "assistant" else "user", "parts": [{"text": message["content"]}]} for message in messages if message["role"] != "system"]
+    # The output budget also covers the model's internal reasoning; answer length is bounded by the prompt.
+    payload = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents, "generationConfig": {"temperature": 0.15, "maxOutputTokens": 8192, "candidateCount": 1}}
+    request = Request(GEMINI_BASE_URL + "/models/" + quote(GEMINI_MODEL) + ":generateContent", data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}, method="POST")
+    for delay in (*GEMINI_RETRY_DELAYS, None):
+        try:
+            with urlopen(request, timeout=180) as response:
+                raw = response.read(2 * 1024 * 1024 + 1)
+            break
+        except HTTPError as error:
+            if delay is None or error.code not in (429, 500, 503):
+                raise
+            time.sleep(delay)
+    if len(raw) > 2 * 1024 * 1024:
+        raise ValueError("Oversized model response")
+    result = json.loads(raw)
+    candidates = result.get("candidates") if isinstance(result, dict) else None
+    if not candidates or not isinstance(candidates[0], dict):
+        raise ValueError("Blocked or empty model response")
+    candidate = candidates[0]
+    finish = candidate.get("finishReason")
+    if finish not in ("STOP", "MAX_TOKENS"):
+        raise ValueError("Incomplete model response")
+    parts = (candidate.get("content") or {}).get("parts") or []
+    answer = "".join(part["text"] for part in parts if isinstance(part, dict) and isinstance(part.get("text"), str) and not part.get("thought")).strip()
+    if not answer:
+        raise ValueError("Incomplete model response")
+    usage = result.get("usageMetadata") or {}
+    return {"answer": answer, "input_tokens": usage.get("promptTokenCount"), "output_tokens": usage.get("candidatesTokenCount"), "truncated": finish == "MAX_TOKENS"}
+
+
+def generate_ollama_answer(messages):
     payload = {"model": OLLAMA_MODEL, "messages": messages, "stream": False, "think": False, "keep_alive": "5m", "options": {"temperature": 0.15, "num_ctx": 16384, "num_predict": 1100}}
     request = Request(OLLAMA_BASE_URL + "/api/chat", data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
     with urlopen(request, timeout=180) as response:

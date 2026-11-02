@@ -14,8 +14,15 @@ export function localToday(value = new Date()) {
 
 export function dateLabel(value, lang, includeTime = false) {
   if (!value) return "—";
-  const date = new Date(value.length === 10 ? `${value}T12:00:00` : value);
-  return includeTime ? date.toLocaleString(lang === "de" ? "de-DE" : "en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : date.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const date = new Date(value.length === 10 ? `${value}T12:00:00Z` : value);
+  const options = {
+    timeZone: "Europe/Berlin",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    ...(includeTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+  };
+  return includeTime ? date.toLocaleString(lang === "de" ? "de-DE" : "en-GB", options) : date.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", options);
 }
 
 // Typed dates: German TT.MM.JJJJ (English UI DD/MM/YYYY); the API keeps ISO YYYY-MM-DD.

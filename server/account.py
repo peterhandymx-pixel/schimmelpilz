@@ -276,9 +276,6 @@ def router(db, require_user, upload_dir, data_dir):
                 raise HTTPException(403, 'mfa_code_required')
             if row['is_admin'] and not connection.execute('SELECT 1 FROM users WHERE is_admin=1 AND disabled=0 AND id<>? LIMIT 1', (row['id'],)).fetchone():
                 raise HTTPException(409, 'last_administrator')
-            subscription = connection.execute('SELECT * FROM subscriptions WHERE user_id=?', (row['id'],)).fetchone()
-            if subscription and subscription['subscription_id'] and subscription['status'] in {'active', 'past_due', 'unpaid'} and not subscription['cancel_at_period_end']:
-                raise HTTPException(409, 'cancel_subscription_first')
             uploads, letterheads = delete_account_data(connection, row['id'])
         remove_files(upload_dir(), uploads)
         remove_files(data_dir() / 'letterheads', letterheads)

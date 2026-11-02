@@ -15,8 +15,9 @@ import { useContacts } from './useContacts.js';
 import { ContactRecipient } from './ContactBook.jsx';
 import { useAuth, authRequest } from "./useAuth.js";
 import { BrandLogo } from "./BrandLogo.jsx";
+import { LegalLinks, LegalPage, legalPageFromHash } from "./LegalPages.jsx";
 import {
-  IconArrowRight as ArrowRight, IconCheck as Check, IconChevronDown as ChevronDown, IconChevronRight as ChevronRight, IconFileText as FileText,
+  IconArrowRight as ArrowRight, IconCheck as Check, IconChevronDown as ChevronDown, IconFileText as FileText,
   IconMenu2 as Menu, IconEdit as PenLine, IconUpload as Upload, IconX as X,
 } from "@tabler/icons-react";
 
@@ -36,7 +37,7 @@ const copy = {
       ["Unterlagen hinzufügen", "Laden Sie relevante Dokumente sicher und übersichtlich hoch."],
       ["Entwurf vorbereiten", "Erhalten Sie verständliche Analysen und erstellen Sie Dokumententwürfe."],
     ],
-    faqTitle: "Klarheit, bevor Sie starten.", faq: [["Ersetzt die Assistenz eine Rechtsberatung?", "Nein. Die Vorschläge dienen der Orientierung und ersetzen keine individuelle Beratung durch eine zugelassene Rechtsanwältin oder einen Rechtsanwalt."], ["Wo werden meine Unterlagen verarbeitet?", "Fälle, Entwürfe und Dateien werden auf diesem Rechner gespeichert. Browser-Neuladen und Backend-Neustart erhalten die gespeicherten Daten."], ["Kann ich auf Deutsch und Englisch arbeiten?", "Ja. Wechseln Sie die Sprache oben rechts; Aktenzeichen, Dokumente und Entwürfe bleiben dabei im selben Fall zusammen." ]],
+    faqTitle: "Klarheit, bevor Sie starten.", faq: [["Ersetzt die Assistenz eine Rechtsberatung?", "Nein. Die Vorschläge dienen der Orientierung und ersetzen keine individuelle Beratung durch eine zugelassene Rechtsanwältin oder einen Rechtsanwalt."], ["Wo werden meine Unterlagen verarbeitet?", "Akten, Entwürfe und Dateien werden auf unserem Server gespeichert. Für eine KI-Recherche werden Ihre Frage, die Aktenangaben und die von Ihnen ausgewählten Dokumentauszüge an Google (Gemini API) übermittelt. Einzelheiten stehen in der Datenschutzerklärung."], ["Kann ich auf Deutsch und Englisch arbeiten?", "Ja. Wechseln Sie die Sprache oben rechts; Aktenzeichen, Dokumente und Entwürfe bleiben dabei im selben Fall zusammen." ]],
     modalStart: "Neuen Fall anlegen", modalIntro: "Geben Sie die wichtigsten Eckdaten ein. Diese Vorschau speichert Ihre Eingaben nur im Browser.", subject: "Betreff", description: "Kurzbeschreibung", create: "Fall erstellen", cancel: "Abbrechen", close: "Schließen",
     loginTitle: "Anmelden", loginText: "Die Anmeldung wird in der Produktionsversion mit Ihrer eigenen Authentifizierung verbunden.", preview: "Vorschau öffnen", saved: "Fall angelegt – Vorschau aktualisiert.", uploadSaved: "Datei auf dem Server gespeichert.", error: "Der Fall konnte nicht gespeichert werden. Läuft das Backend auf Port 8001?", uploadError: "Die Datei konnte nicht gespeichert werden.", noCase: "Legen Sie zuerst einen Fall an.", limit: "Demo: keine Rechtsberatung, keine echte Dokumentenspeicherung.",
   },
@@ -44,7 +45,7 @@ const copy = {
     navHow: "How it works", navFeatures: "Features", navPricing: "Pricing", navFaq: "FAQ", signIn: "Sign in", eyebrow: "YOUR CASE. CLEARLY STRUCTURED.", testedIn: "Tested and refined in proceedings at",
     title: <>Clarity for your case.<br />Structure for the<br />next step.</>, intro: "Organise your documents, understand the legal context and prepare document drafts – in German or English.", start: "Start a case", demo: "View demo", meta: "German & English  ·  Case reference  ·  Document drafts",
     badge: "Example case", overview: "Overview", documents: "Documents", assistant: "Assistant", drafts: "Drafts", caseTitle: "Tenancy matter – Berlin flat", inProgress: "In progress", files: "Documents", add: "Add documents", draft: "Prepare a letter", draftLabel: "Draft", missing: "Which documents are still missing?", ask: "Ask about your case …", stepsTitle: "Three steps to your next step.",
-    steps: [["Describe your case", "Briefly share your concern and the key facts."], ["Add documents", "Upload relevant documents securely and clearly."], ["Prepare a draft", "Receive understandable analysis and prepare document drafts."]], faqTitle: "Clarity before you start.", faq: [["Does the assistant replace legal advice?", "No. Suggestions are for orientation and do not replace individual advice from a qualified lawyer."], ["Where are my documents processed?", "Cases, drafts and files are stored on this computer and survive browser reloads and backend restarts."], ["Can I work in German and English?", "Yes. Switch language above; your reference, documents and drafts stay together in one case."]], modalStart: "Start a new case", modalIntro: "Share the key facts. This preview keeps your input in the browser only.", subject: "Subject", description: "Short description", create: "Create case", cancel: "Cancel", close: "Close", loginTitle: "Sign in", loginText: "Production will connect sign-in to your own authentication system.", preview: "Open preview", saved: "Case created – preview updated.", uploadSaved: "File saved on the server.", error: "The case could not be saved. Is the API running on port 8001?", uploadError: "The file could not be saved.", noCase: "Create a case first.", limit: "Demo: no legal advice and no real document storage.",
+    steps: [["Describe your case", "Briefly share your concern and the key facts."], ["Add documents", "Upload relevant documents securely and clearly."], ["Prepare a draft", "Receive understandable analysis and prepare document drafts."]], faqTitle: "Clarity before you start.", faq: [["Does the assistant replace legal advice?", "No. Suggestions are for orientation and do not replace individual advice from a qualified lawyer."], ["Where are my documents processed?", "Cases, drafts and files are stored on our server. For AI research, your question, the case particulars and the document excerpts you select are sent to Google (Gemini API). See the privacy notice for details."], ["Can I work in German and English?", "Yes. Switch language above; your reference, documents and drafts stay together in one case."]], modalStart: "Start a new case", modalIntro: "Share the key facts. This preview keeps your input in the browser only.", subject: "Subject", description: "Short description", create: "Create case", cancel: "Cancel", close: "Close", loginTitle: "Sign in", loginText: "Production will connect sign-in to your own authentication system.", preview: "Open preview", saved: "Case created – preview updated.", uploadSaved: "File saved on the server.", error: "The case could not be saved. Is the API running on port 8001?", uploadError: "The file could not be saved.", noCase: "Create a case first.", limit: "Demo: no legal advice and no real document storage.",
   },
 };
 
@@ -56,8 +57,8 @@ const storageCopy = {
     uploading: "Wird hochgeladen …", newDraft: "Neuer Entwurf", editDraft: "Entwurf bearbeiten", save: "Speichern",
     draftSaved: "Entwurf gespeichert.", draftError: "Entwurf konnte nicht gespeichert werden. Ihr Text bleibt im Editor.",
     uploadSaved: "Datei(en) gespeichert.", uploadError: "Upload fehlgeschlagen", error: "Speichern fehlgeschlagen. Bitte versuchen Sie es erneut.",
-    modalIntro: "Fälle und Unterlagen werden dauerhaft auf diesem Rechner gespeichert.",
-    saved: "Fall gespeichert.", limit: "Lokaler Prototyp · Keine verbindliche Rechtsberatung.",
+    modalIntro: "Akten und Unterlagen werden dauerhaft auf dem Server gespeichert.",
+    saved: "Fall gespeichert.", limit: "Keine Rechtsberatung · Ergebnisse vor Verwendung prüfen.",
     downloadDraft: "Als Text herunterladen", draftBody: "Text des Entwurfs", oversized: "Datei überschreitet 10 MB", unsupported: "Dateityp nicht unterstützt",
   },
   en: {
@@ -68,8 +69,8 @@ const storageCopy = {
     uploading: "Uploading …", newDraft: "New draft", editDraft: "Edit draft", save: "Save",
     draftSaved: "Draft saved.", draftError: "Could not save the draft. Your text stays in the editor.",
     uploadSaved: "file(s) saved.", uploadError: "Upload failed", error: "Could not save. Please try again.",
-    modalIntro: "Cases and documents are stored persistently on this computer.",
-    saved: "Case saved.", limit: "Local prototype · No binding legal advice.",
+    modalIntro: "Cases and documents are stored persistently on the server.",
+    saved: "Case saved.", limit: "No legal advice · Review results before use.",
     downloadDraft: "Download as text", draftBody: "Draft text", oversized: "File exceeds 10 MB", unsupported: "File type not supported",
   },
 };
@@ -138,6 +139,7 @@ export function App() {
   const [uploadNotice, setUploadNotice] = useState("");
   const [resetToken, setResetToken] = useState("");
   const [authNotice, setAuthNotice] = useState("");
+  const [legalPage, setLegalPage] = useState(() => legalPageFromHash());
   const fileRef = useRef(null);
   const previewRef = useRef(null);
   const toastTimer = useRef(null);
@@ -149,6 +151,12 @@ export function App() {
     writePreference("schimmelpilz.language", lang);
   }, [lang]);
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+  useEffect(() => {
+    // Impressum, privacy notice and terms are reachable as #impressum, #datenschutz and #agb, signed in or not.
+    const follow = () => setLegalPage(legalPageFromHash());
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
   useEffect(() => {
     if (!auth.user) { setModal(null); setDraftBody(""); setDraftId(null); setQuestion(""); setAnswer(""); }
   }, [auth.user?.id]);
@@ -260,14 +268,15 @@ export function App() {
     document.body.appendChild(link); link.click(); link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const askAssistant = () => { if (!question.trim()) return; setAnswer(lang === "de" ? "Melden Sie sich an und öffnen Sie Recherche. Dort steht der lokale KI-Bot für Ihre ausgewählte Akte bereit." : "Sign in and open Research to use the local AI bot for your selected case."); };
+  const askAssistant = () => { if (!question.trim()) return; setAnswer(lang === "de" ? "Melden Sie sich an und öffnen Sie Recherche. Dort steht der KI-Assistent für Ihre ausgewählte Akte bereit." : "Sign in and open Research to use the AI assistant for your selected case."); };
+  if (legalPage) return <LegalPage page={legalPage} lang={lang} setLang={setLang} />;
   return <div className={auth.user ? "app-site" : "site"}>{auth.loading ? <div className="startup-screen" role="status">{lang === "de" ? "Arbeitsbereich wird geladen …" : "Loading workspace …"}</div> : auth.user ? <Dashboard key={auth.user.id} contacts={contacts} lang={lang} setLang={setLang} t={t} user={auth.user} storage={storage} view={view} setView={setView} onNewCase={openCase} onLogout={signOut} onUserUpdated={auth.setUser} onAccountDeleted={() => { auth.setUser(null); setView("overview"); showToast(lang === "de" ? "Konto und alle Daten wurden gelöscht." : "Account and all data were deleted."); }} workspaceProps={{ activeTab, setActiveTab, onFile, onDraft: openDraft, onSelectCase: selectCase, onEdit: editCase, uploadNotice, question, setQuestion, answer, askAssistant }} /> : <>{auth.error && <div className="connection-notice" role="status">{lang === "de" ? "Anmeldung derzeit nicht erreichbar." : "Sign-in is currently unavailable."} <button onClick={auth.retry}>{t.retry}</button></div>}<a className="skip-link" href="#main">Zum Inhalt springen</a><header className="site-header"><nav className={menu ? "open" : ""}><a href="#how" onClick={() => setMenu(false)}>{t.navHow}</a><a href="#features" onClick={() => setMenu(false)}>{t.navFeatures}</a><a href="#pricing" onClick={() => setMenu(false)}>{t.navPricing}</a><a href="#faq" onClick={() => setMenu(false)}>{t.navFaq}</a><span className="nav-divider" /><button className={lang === "de" ? "language active" : "language"} onClick={() => setLang("de")}>DE</button><span className="language-sep">|</span><button className={lang === "en" ? "language active" : "language"} onClick={() => setLang("en")}>EN</button><button className="header-login" onClick={() => { setAuthMode("login"); setModal("auth"); }}>{t.signIn}</button></nav><button className="menu-toggle" aria-label="Menü" onClick={() => setMenu(!menu)}>{menu ? <X /> : <Menu />}</button></header>
     <main id="main"><section className="hero-brand" id="top"><BrandLogo className="brand-logo hero-logo" /><div className="tested-in"><p>{t.testedIn}</p><ul>{COURTS.map(court => <li key={court}>{court}</li>)}</ul></div></section><section className="hero"><div className="hero-copy"><p className="eyebrow">{t.eyebrow}</p><h1>{t.title}</h1><p className="hero-intro">{t.intro}</p><div className="hero-actions"><button className="primary-button" onClick={openCase}>{t.start} <ArrowRight size={20} /></button><button className="secondary-button" onClick={() => previewRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>{t.demo}</button></div><p className="hero-meta">{t.meta}</p></div><div className="hero-visual"><div className="visual-wash" /><div ref={previewRef}><CaseWorkspace lang={lang} t={t} activeTab={activeTab} setActiveTab={setActiveTab} onFile={onFile} onDraft={openDraft} storage={storage} onSelectCase={selectCase} uploadNotice={uploadNotice} question={question} setQuestion={setQuestion} answer={answer} askAssistant={askAssistant} /></div><span className="visual-caption">{lang === "de" ? "Designkonzept · Vorschau" : "Design concept · Preview"}</span></div></section>
       <section className="steps-section" id="how"><p className="section-kicker">{lang === "de" ? "SO FUNKTIONIERT’S" : "HOW IT WORKS"}</p><h2>{t.stepsTitle}</h2><div className="steps-grid">{t.steps.map(([title, text], i) => <div className="step" key={title}><div className="step-number">0{i + 1}</div><div className="step-icon">{i === 0 ? <FileText /> : i === 1 ? <Upload /> : <PenLine />}</div><div><h3>{title}</h3><p>{text}</p></div></div>)}</div></section>
       <FeatureOverview lang={lang} onDraft={() => openDraft()} />
       <PricingOverview lang={lang} onSelect={audience => {setRegistrationAudience(audience);setAuthMode('register');setModal('auth');}} />
       <section className="faq-section" id="faq"><div className="section-heading"><p className="section-kicker">FAQ</p><h2>{t.faqTitle}</h2></div><div className="faq-list">{t.faq.map(([q, a]) => <details key={q}><summary>{q}<ChevronDown size={19} /></summary><p>{a}</p></details>)}</div></section>
-    </main><footer className="site-footer"><Brand /><span>{t.limit}</span><a href="#faq">Datenschutz & Hinweise <ChevronRight size={15} /></a></footer></>}
+    </main><footer className="site-footer"><Brand /><span>{t.limit}</span><LegalLinks lang={lang} /></footer></>}
     <input ref={fileRef} className="visually-hidden" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip" onChange={onFiles} />
     <Dialog open={modal === "case"} onClose={() => { if (!savingCase) setModal(null); }} title={editingCase ? (lang === "de" ? "Aktenstammdaten bearbeiten" : "Edit case particulars") : t.modalStart} className="intake-dialog" busy={savingCase}><CaseIntake key={intakeSession} initialCase={editingCase} user={auth.user} lang={lang} t={t} saving={savingCase} error={caseError} onSubmit={startCase} onCancel={() => setModal(null)} /></Dialog>
     <Dialog open={modal === "auth"} onClose={() => { setModal(null); auth.retry(); }} title={authCopy[lang][authMode]} className="auth-dialog">{modal === "auth" && <AuthForm key={`${authMode}:${registrationAudience}`} initialAudience={registrationAudience} lang={lang} mode={authMode} setMode={mode => { setAuthNotice(""); setAuthMode(mode); }} onAuthenticated={onAuthenticated} resetToken={resetToken} notice={authNotice} onResetDone={() => { setResetToken(""); setTimeout(() => setAuthNotice(authCopy[lang].resetDone)); }} />}</Dialog>

@@ -149,7 +149,7 @@ class AccountTests(test_inbox.InboxTests):
             client.headers['X-Schimmelpilz-Request'] = '1'
             self.assertEqual(client.post('/api/auth/login', json={'email': 'inbox-test@example.invalid', 'password': PASSWORD}).status_code, 401)
 
-    def test_last_admin_and_active_subscription_block_deletion(self):
+    def test_last_admin_blocks_deletion_and_payment_evidence_is_retained(self):
         with TestClient(api.app) as client:
             self.login(client)
             me = client.get('/api/auth/me').json()
@@ -158,5 +158,7 @@ class AccountTests(test_inbox.InboxTests):
             self.assertEqual(client.post('/api/auth/account/delete', json={'password': PASSWORD, 'confirm': 'DELETE'}).json()['detail'], 'last_administrator')
             with api.db() as connection:
                 connection.execute('UPDATE users SET is_admin=0 WHERE id=?', (me['id'],))
-                connection.execute("INSERT OR REPLACE INTO subscriptions(user_id,status,subscription_id,updated_at) VALUES(?,'active','sub_synthetic','2026-01-01')", (me['id'],))
-            self.assertEqual(client.post('/api/auth/account/delete', json={'password': PASSWORD, 'confirm': 'DELETE'}).json()['detail'], 'cancel_subscription_first')
+                connection.execute("INSERT INTO billing_payments(id,user_id,email,plan,months,amount_minor,currency,provider,reference,paid_on,period_start,period_end,recorded_by,created_at) VALUES('pay-1',?,?,'personal',1,990,'EUR','clip','clip-synthetic','2026-01-01','2026-01-01','2026-02-01','operator','2026-01-01')", (me['id'], me['email']))
+            self.assertEqual(client.post('/api/auth/account/delete', json={'password': PASSWORD, 'confirm': 'DELETE'}).status_code, 204)
+            with api.db() as connection:
+                self.assertEqual(connection.execute("SELECT email FROM billing_payments WHERE id='pay-1'").fetchone()[0], me['email'])

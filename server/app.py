@@ -26,7 +26,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from . import control, billing, document_ocr
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
-from .research import ollama_status, prepare_messages, generate_answer, OLLAMA_MODEL
+from .research import ai_status, prepare_messages, generate_answer, AI_MODEL
 from .document_context import select_sources
 from . import legal_catalogue
 from . import draft_review
@@ -37,6 +37,7 @@ from . import case_tools
 from . import calendar_export
 from . import fee_tables
 from . import route_plans
+from . import legal_notice
 from . import exports
 from . import auto_text
 from .dates import display_date
@@ -83,7 +84,7 @@ app.add_middleware(
 @app.middleware("http")
 async def guard_cookie_requests(request: Request, call_next):
     # Custom header plus JSON/multipart handling prevents cross-site form writes.
-    if request.method in {"POST", "PUT", "DELETE"} and request.url.path != "/api/billing/webhook" and request.headers.get("x-schimmelpilz-request") != "1":
+    if request.method in {"POST", "PUT", "DELETE"} and request.headers.get("x-schimmelpilz-request") != "1":
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": "Missing request header"}, status_code=403)
     response = await call_next(request)
@@ -877,7 +878,7 @@ def update_task(case_id: str, task_id: str, payload: TaskUpdate, user: dict = De
 @app.get("/api/research/status")
 def research_status(user: dict = Depends(require_user)) -> dict:
     with db() as connection:enabled=bool(connection.execute('SELECT ai_enabled FROM operator_settings WHERE id=1').fetchone()[0])
-    return {**ollama_status(),'enabled':enabled}
+    return {**ai_status(),'enabled':enabled}
 
 
 @app.get('/api/legal/status')
@@ -1053,7 +1054,7 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
                 legal_passages = supplied_legal_passages(legal_rows,payload.question)
             except ValueError:
                 raise HTTPException(status_code=422,detail='source_excluded') from None
-            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, OLLAMA_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False)))
+            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, AI_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False)))
         try:
             result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages))
         except (URLError, OSError, TimeoutError, ValueError) as error:
@@ -1341,9 +1342,10 @@ app.include_router(route_plans.router(db, require_user, now, record_activity))
 app.include_router(exports.router(db, require_user, now))
 app.include_router(ocr_routes.router(db, require_user, now, record_activity, get_case, get_document, document_text, lambda: UPLOAD_DIR, EXTRACTION_LOCK, ROOT))
 
-app.include_router(control.router(db,require_user,now,lambda:{'ai':ollama_status(),'ocr_available':document_ocr.available(),'catalogue':legal_catalogue.catalogue_status()}))
+app.include_router(control.router(db,require_user,now,lambda:{'ai':ai_status(),'ocr_available':document_ocr.available(),'catalogue':legal_catalogue.catalogue_status()}))
 
 app.include_router(billing.router(db,require_user,now))
+app.include_router(legal_notice.router())
 app.include_router(account.router(db, require_user, lambda: UPLOAD_DIR, lambda: DATA_DIR))
 app.include_router(deadlines.router(require_user))
 app.include_router(deletion.router(db, require_user, record_activity, lambda: UPLOAD_DIR, lambda: DATA_DIR))

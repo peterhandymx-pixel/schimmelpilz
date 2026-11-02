@@ -22,7 +22,7 @@ const copy = {
     mfaDisable: "Zwei-Faktor-Anmeldung deaktivieren", mfaDisableCode: "Code oder Wiederherstellungscode *", mfaInvalid: "Der Code ist ungültig oder wurde bereits verwendet.", mfaKeep: "Administratoren können die Zwei-Faktor-Anmeldung nicht deaktivieren.",
     deleteTitle: "Konto löschen", deleteText: "Löscht Ihr Konto endgültig: alle Akten, Dokumente, Entwürfe, Fristen, Adressen, Posteingang, Briefpapier und Teamzugänge. Das kann nicht rückgängig gemacht werden. Laden Sie benötigte Akten vorher als ZIP herunter.",
     deleteWord: "LÖSCHEN", deleteType: "Zur Bestätigung LÖSCHEN eingeben *", deleteCheck: "Ich verstehe, dass alle Daten endgültig gelöscht werden.", deleteButton: "Konto endgültig löschen",
-    lastAdmin: "Das letzte aktive Administratorkonto kann nicht gelöscht werden.", cancelSubscription: "Bitte kündigen Sie zuerst Ihr laufendes Abonnement unter Abonnement.", mfaNeeded: "Bitte den Code aus Ihrer Authenticator-App angeben.",
+    lastAdmin: "Das letzte aktive Administratorkonto kann nicht gelöscht werden.", mfaNeeded: "Bitte den Code aus Ihrer Authenticator-App angeben.",
   },
   en: {
     edit: "Edit profile", save: "Save", cancel: "Cancel", saved: "Saved.", failed: "Could not save. Check the fields.",
@@ -38,7 +38,7 @@ const copy = {
     mfaDisable: "Disable two-factor sign-in", mfaDisableCode: "Code or recovery code *", mfaInvalid: "The code is invalid or was already used.", mfaKeep: "Administrators cannot disable two-factor sign-in.",
     deleteTitle: "Delete account", deleteText: "Permanently deletes your account: all cases, documents, drafts, deadlines, addresses, inbox, letter paper and team access. This cannot be undone. Download any cases you need as ZIP first.",
     deleteWord: "DELETE", deleteType: "Type DELETE to confirm *", deleteCheck: "I understand that all data will be permanently deleted.", deleteButton: "Permanently delete account",
-    lastAdmin: "The last active administrator account cannot be deleted.", cancelSubscription: "Please cancel your running subscription under Subscription first.", mfaNeeded: "Please enter the code from your authenticator app.",
+    lastAdmin: "The last active administrator account cannot be deleted.", mfaNeeded: "Please enter the code from your authenticator app.",
   },
 };
 
@@ -145,7 +145,7 @@ function DeleteAccount({ user, onAccountDeleted, c }) {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     action.run(async () => { await request("/auth/account/delete", json("POST", { password: values.password, confirm: values.confirm.trim().toUpperCase(), ...(values.mfa_code ? { mfa_code: values.mfa_code } : {}) })); onAccountDeleted(); },
-      failure => failure.status === 403 ? (failure.detail === "mfa_code_required" ? c.mfaNeeded : c.wrongPassword) : failure.detail === "last_administrator" ? c.lastAdmin : failure.detail === "cancel_subscription_first" ? c.cancelSubscription : c.failed);
+      failure => failure.status === 403 ? (failure.detail === "mfa_code_required" ? c.mfaNeeded : c.wrongPassword) : failure.detail === "last_administrator" ? c.lastAdmin : c.failed);
   };
   return <details className="account-danger"><summary>{c.deleteTitle}</summary><p>{c.deleteText}</p><form className="account-form" onSubmit={submit}><fieldset disabled={action.busy}><div className="intake-grid">
     <label>{c.currentPassword}<input name="password" type="password" required maxLength={128} autoComplete="current-password" /></label>

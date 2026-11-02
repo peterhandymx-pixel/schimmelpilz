@@ -107,7 +107,7 @@ Stand des Codes in diesem Repository. Vor dem Absenden mit dem tatsächlichen Se
 | Persönliche Angaben | Name, E-Mail-Adresse; bei Registrierung im Web zusätzlich Anschrift und Telefon (optional). Zweck: Kontoverwaltung, App-Funktionen. |
 | Dateien und Dokumente | Hochgeladene und gescannte Dokumente. Zweck: App-Funktionen. |
 | Nachrichten / sonstige Inhalte | Rechtsfragen und Antworten, Fristen, Aufgaben, Kontakte. Zweck: App-Funktionen. |
-| Finanzdaten | Nicht in der App. Abos laufen in der Web-App über Stripe. |
+| Finanzdaten | Nicht in der App. Bezahlt wird in der Web-App über Clip-Zahlungslinks. |
 | Standort, Kontakte des Geräts, Fotos-Mediathek | Nein. Der Dokumentenscanner (Google Play Services) gibt nur das fertige PDF an die App. |
 | App-Aktivität, Absturzberichte, Werbe-ID | Keine eigenen Analyse-, Absturz- oder Werbe-SDKs. Der ML-Kit-Dokumentenscanner von Google kann Diagnosedaten an Google senden – vor dem Absenden mit Googles Angaben „ML Kit – Data disclosure“ abgleichen. |
 
