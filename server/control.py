@@ -169,7 +169,7 @@ def router(db,require_user,now,system_status=None):
         with db() as c:
             member=membership(c,selected,user['id'],operator_active(user))
             choices=[{'owner_id':user['id'],'name':user['organisation'] or user['full_name'],'role':'owner'}]
-            choices += [dict(row) for row in c.execute('SELECT m.owner_id,u.organisation AS name,m.role FROM team_members m JOIN users u ON u.id=m.owner_id WHERE m.user_id=? AND m.enabled=1 AND u.disabled=0',(user['id'],))]
+            choices += [dict(row) for row in c.execute("SELECT m.owner_id,COALESCE(NULLIF(u.organisation,''),u.full_name) AS name,m.role FROM team_members m JOIN users u ON u.id=m.owner_id WHERE m.user_id=? AND m.enabled=1 AND u.disabled=0",(user['id'],))]
             if operator_active(user):
                 choices=[{'owner_id':row['id'],'name':row['email'],'role':'operator' if row['id']!=user['id'] else 'owner'} for row in c.execute('SELECT id,email FROM users ORDER BY email')]
             members=[];invites=[]

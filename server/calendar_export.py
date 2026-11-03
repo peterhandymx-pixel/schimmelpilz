@@ -39,7 +39,8 @@ def router(db,require_user,now):
     routes=APIRouter()
 
     @routes.get('/api/tasks/calendar.ics')
-    def export(case_id:uuid.UUID|None=None,alarm_days:int=Query(default=1,ge=0,le=30),user:dict=Depends(require_user)):
+    def export(case_id:uuid.UUID|None=None,alarm_days:int=Query(default=1,ge=0,le=30),lang:str=Query(default='de',pattern='^(de|en)$'),user:dict=Depends(require_user)):
+        manual='Manuell erfasster Termin; keine automatische Fristberechnung.' if lang=='de' else 'Manually recorded date; no automatic legal deadline calculation.'
         with db() as connection:
             if case_id and not connection.execute('SELECT 1 FROM cases WHERE id=? AND user_id=?',(str(case_id),user['id'])).fetchone():
                 raise HTTPException(404,'Case not found')
@@ -48,10 +49,10 @@ def router(db,require_user,now):
             events=[]
             for case in cases:
                 for task in connection.execute('SELECT * FROM tasks WHERE case_id=? AND completed=0 AND due_on IS NOT NULL',(case['id'],)):
-                    events.append({'uid':'task-'+task['id'],'due_on':task['due_on'],'title':case['reference']+' · '+task['title'],'note':'Manually recorded date; no automatic legal deadline calculation.\n'+case['title']+'\n'+task['note']})
+                    events.append({'uid':'task-'+task['id'],'due_on':task['due_on'],'title':case['reference']+' · '+task['title'],'note':manual+'\n'+case['title']+'\n'+task['note']})
                 details=json.loads(case['details'])
                 if details.get('deadline') and details.get('status')!='closed':
-                    events.append({'uid':'case-deadline-'+case['id'],'due_on':details['deadline'],'title':case['reference']+' · '+(details.get('deadline_note') or 'Erfasste Aktenfrist / Recorded case deadline'),'note':'Manually recorded date; no automatic legal deadline calculation.\n'+case['title']})
+                    events.append({'uid':'case-deadline-'+case['id'],'due_on':details['deadline'],'title':case['reference']+' · '+(details.get('deadline_note') or ('Erfasste Aktenfrist' if lang=='de' else 'Recorded case deadline')),'note':manual+'\n'+case['title']})
         events.sort(key=lambda item:(item['due_on'],item['uid']))
         if len(events)>10000:
             raise HTTPException(413,'Too many calendar entries; export a single case')

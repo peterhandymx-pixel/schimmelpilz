@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 from urllib.parse import quote, urlsplit
 
+import segno
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
 
@@ -358,7 +359,9 @@ def router(db, require_user, upload_dir, data_dir):
             secret = new_secret()
             connection.execute('UPDATE users SET mfa_pending_secret=? WHERE id=?', (secret, row['id']))
         label = quote(f'{ISSUER}:{row["email"]}')
-        return {'secret': secret, 'otpauth_uri': f'otpauth://totp/{label}?secret={secret}&issuer={ISSUER}&algorithm=SHA1&digits=6&period={TOTP_STEP}'}
+        uri = f'otpauth://totp/{label}?secret={secret}&issuer={ISSUER}&algorithm=SHA1&digits=6&period={TOTP_STEP}'
+        # The QR code lets a phone authenticator app scan the setup instead of typing the key.
+        return {'secret': secret, 'otpauth_uri': uri, 'qr_svg': segno.make(uri, error='m').svg_data_uri(scale=5, border=2)}
 
     @routes.post('/api/auth/mfa/enable')
     def mfa_enable(payload: CodeInput, user: dict = Depends(require_user)):

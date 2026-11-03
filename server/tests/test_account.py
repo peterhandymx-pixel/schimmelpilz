@@ -101,7 +101,9 @@ class AccountTests(test_inbox.InboxTests):
         with TestClient(api.app) as client:
             self.login(client)
             self.assertEqual(client.post('/api/auth/mfa/setup', json={'password': 'wrong'}).status_code, 403)
-            secret = client.post('/api/auth/mfa/setup', json={'password': PASSWORD}).json()['secret']
+            setup = client.post('/api/auth/mfa/setup', json={'password': PASSWORD}).json()
+            secret = setup['secret']
+            self.assertTrue(setup['qr_svg'].startswith('data:image/svg+xml'))
             self.assertEqual(client.post('/api/auth/mfa/enable', json={'code': '000000'}).status_code, 422)
             step = int(time.time() // 30)
             enabled = client.post('/api/auth/mfa/enable', json={'code': account.totp(secret, step)}).json()
