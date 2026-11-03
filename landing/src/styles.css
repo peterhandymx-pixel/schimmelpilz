@@ -167,3 +167,23 @@
 /* Signing in from the landing page: only the form, over the court photo */
 .site.auth-only{min-height:100vh;background:#021f19 url(/start/assets/photo/vorplatz-gericht.webp) center 40%/cover no-repeat}
 .site.auth-only>.site-header,.site.auth-only>main,.site.auth-only>footer,.site.auth-only>.site-footer{visibility:hidden}
+/* Sign-in and registration in the landing page's look: dark emerald card, gold accents */
+.auth-only .auth-dialog,.auth-only .auth-dialog .dialog-card{background:#03221b;color:#f1eadc}
+.auth-only .auth-dialog{border:1px solid #d9b27a;box-shadow:0 40px 90px -30px #000}
+.auth-only .auth-dialog::backdrop{background:#02140fb3;backdrop-filter:blur(2px)}
+.auth-only .auth-dialog h2{font-family:"Libre Caslon Display",var(--serif);color:#f1eadc}
+.auth-only .auth-dialog .dialog-kicker,.auth-only .auth-dialog .registration-section h3,.auth-only .auth-dialog a,.auth-only .auth-dialog .text-link{color:#d9b27a}
+.auth-only .auth-dialog .dialog-intro,.auth-only .auth-dialog .field-help{color:#b9c5bd}
+.auth-only .auth-dialog .dialog-close{color:#d9b27a}
+.auth-only .auth-dialog label{color:#f1eadc}
+.auth-only .auth-dialog input:not([type=radio]):not([type=checkbox]),.auth-only .auth-dialog select,.auth-only .auth-dialog textarea{background:#0b2f26;border-color:#d9b27a66;color:#f1eadc;outline-color:#d9b27a}
+.auth-only .auth-dialog .choice-card{border-color:#d9b27a55;background:#ffffff08;color:#f1eadc}
+.auth-only .auth-dialog .choice-card:has(input:checked){border-color:#d9b27a;background:#d9b27a1f}
+.auth-only .auth-dialog input[type=radio],.auth-only .auth-dialog input[type=checkbox]{accent-color:#d9b27a}
+.auth-only .auth-dialog .primary-button{background:linear-gradient(135deg,#e8c48f,#b98a4f);color:#10231d;border:0}
+.auth-only .auth-dialog .secondary-button{background:transparent;border:1px solid #d9b27a;color:#f1eadc}
+.auth-only .auth-dialog .storage-error{color:#ffb4a8}
+.auth-only .auth-dialog .registration-audiences label{background:#ffffff08;border-color:#d9b27a55;color:#f1eadc}
+.auth-only .auth-dialog .registration-audiences label.selected{background:#d9b27a1f;border-color:#d9b27a}
+.auth-only .auth-dialog .registration-audiences small{color:#b9c5bd}
+.auth-only .auth-dialog .registration-audiences input{accent-color:#d9b27a}
