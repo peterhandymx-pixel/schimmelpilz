@@ -133,12 +133,30 @@ class ControlTests(test_inbox.InboxTests):
             self.assertEqual(client.put('/api/admin/billing/'+me['id'],json={'pilot':False,'reason':'Synthetic end access test','expected_version':row['version']}).status_code,200)
             self.assertEqual(client.get('/api/billing').json()['effective_status'],'expired')
 
+    def test_demo_payment_only_in_test_mode_and_books_one_month(self):
+        with TestClient(api.app) as client:
+            self.login(client);case=self.case(client);me=client.get('/api/auth/me').json()
+            with patch.dict(os.environ,{'PAYMENT_MODE':''}):
+                self.assertEqual(client.get('/api/billing').json()['payment_mode'],'clip')
+                self.assertEqual(client.post('/api/billing/demo-payment',json={'plan':'personal','consent':True}).status_code,404)
+            with patch.dict(os.environ,{'PAYMENT_MODE':'demo'}):
+                status=client.get('/api/billing').json()
+                self.assertEqual((status['payment_mode'],status['links_ready']),('demo',{'personal':True,'business':True,'firm':True}))
+                self.assertEqual(client.post('/api/billing/demo-payment',json={'plan':'business','consent':False}).status_code,422)
+                with api.db() as c:c.execute("UPDATE subscriptions SET trial_end='2000-01-01T00:00:00+00:00' WHERE user_id=?",(me['id'],))
+                self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Blocked before payment'}).status_code,402)
+                paid=client.post('/api/billing/demo-payment',json={'plan':'business','consent':True})
+                self.assertEqual(paid.status_code,201,paid.text);self.assertTrue(paid.json()['reference'].startswith('TEST-'))
+                status=client.get('/api/billing').json()
+                self.assertEqual((status['effective_status'],status['plan'],status['payments'][0]['provider'],status['payments'][0]['amount_minor']),('active','business','demo',2990))
+                self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Allowed after test payment'}).status_code,201)
+
     def admin(self,client,email='billing-admin@example.invalid'):
         self.login(client,email);me=client.get('/api/auth/me').json()
         with api.db() as c:c.execute("UPDATE users SET is_admin=1,mfa_enabled_at='2026-01-01',mfa_secret='JBSWY3DPEHPK3PXP' WHERE id=?",(me['id'],))
 
     def test_clip_link_checkout_and_operator_recorded_prepaid_months(self):
-        config={'CLIP_LINK_PERSONAL':'https://pago.clip.mx/synthetic-personal','CLIP_LINK_BUSINESS':'','CLIP_LINK_FIRM':'http://insecure.invalid/link','PRICE_CURRENCY':'MXN','PRICE_PERSONAL':'199.00','PRICE_BUSINESS':'599','PRICE_FIRM':'999.50'}
+        config={'PAYMENT_MODE':'','CLIP_LINK_PERSONAL':'https://pago.clip.mx/synthetic-personal','CLIP_LINK_BUSINESS':'','CLIP_LINK_FIRM':'http://insecure.invalid/link','PRICE_CURRENCY':'MXN','PRICE_PERSONAL':'199.00','PRICE_BUSINESS':'599','PRICE_FIRM':'999.50'}
         with patch.dict(os.environ,config),TestClient(api.app) as client,TestClient(api.app) as operator:
             self.login(client);case=self.case(client);me=client.get('/api/auth/me').json();self.admin(operator)
             self.assertEqual(client.get('/api/public/pricing').json(),{'currency':'MXN','plans':{'personal':19900,'business':59900,'firm':99950},'trial_days':7})

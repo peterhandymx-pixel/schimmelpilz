@@ -23,5 +23,5 @@ def router():
     @r.get('/api/public/operator')
     def operator():
         values=particulars()
-        return {**values,'complete':all(values[key] for key in REQUIRED),'ai_provider':AI_PROVIDER,'payments':'clip' if any(billing.links_ready().values()) else None}
+        return {**values,'complete':all(values[key] for key in REQUIRED),'ai_provider':AI_PROVIDER,'payments':None if billing.demo_mode() else 'clip' if any(billing.links_ready().values()) else None}
     return r

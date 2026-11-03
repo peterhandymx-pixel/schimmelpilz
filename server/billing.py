@@ -85,8 +85,13 @@ def payment_link(plan):
     return value if parts.scheme=='https' and parts.hostname else None
 
 
+def demo_mode():
+    # PAYMENT_MODE=demo: purchases are simulated in the app; no provider, no card data, nothing is charged.
+    return os.getenv('PAYMENT_MODE','').strip().lower()=='demo'
+
+
 def links_ready():
-    return {plan:bool(payment_link(plan)) for plan in PLAN_IDS}
+    return {plan:demo_mode() or bool(payment_link(plan)) for plan in PLAN_IDS}
 
 
 def add_months(moment,months):
@@ -141,7 +146,7 @@ class PaymentRecord(Plan):
 
 
 def payment_view(row):
-    return {key:row[key] for key in ('id','plan','months','amount_minor','currency','reference','paid_on','period_start','period_end','created_at')}
+    return {key:row[key] for key in ('id','plan','months','amount_minor','currency','provider','reference','paid_on','period_start','period_end','created_at')}
 
 
 def router(db,require_user,now):
@@ -159,7 +164,7 @@ def router(db,require_user,now):
             pending=c.execute('SELECT plan,created_at FROM billing_orders WHERE user_id=? AND completed_at IS NULL ORDER BY created_at DESC LIMIT 1',(user['id'],)).fetchone()
         ready=links_ready()
         return {**{k:v for k,v in row.items() if k not in {'customer_id','subscription_id'}},'effective_status':effective(row),'checkout_ready':any(ready.values()),'links_ready':ready,
-                'plans':plans(),'currency':currency(),'trial_days':TRIAL_DAYS,'payments':payments,'pending_payment':dict(pending) if pending else None,'renewal_due':renewal_due(row),'payment_reference':user['email']}
+                'plans':plans(),'currency':currency(),'trial_days':TRIAL_DAYS,'payments':payments,'pending_payment':dict(pending) if pending else None,'renewal_due':renewal_due(row),'payment_reference':user['email'],'payment_mode':'demo' if demo_mode() else 'clip'}
 
     @r.post('/api/billing/trial')
     def trial(payload:Plan,user:dict=Depends(require_user)):
@@ -184,6 +189,21 @@ def router(db,require_user,now):
             if not pending:c.execute('INSERT INTO billing_orders(id,user_id,plan,created_at) VALUES(?,?,?,?)',(identifier,user['id'],payload.plan,now()))
             audit(c,user['id'],user['id'],'payment_link_opened',payload.plan)
         return {'url':url,'reference':user['email']}
+
+    @r.post('/api/billing/demo-payment',status_code=201)
+    def demo_payment(payload:Checkout,user:dict=Depends(require_user)):
+        # Books one month exactly like a confirmed payment, but marked as a test; only available in test mode.
+        if not demo_mode():raise HTTPException(404,'Not found')
+        reference='TEST-'+uuid.uuid4().hex[:10].upper()
+        with db() as c:
+            c.execute('BEGIN IMMEDIATE');row=ensure(c,user['id'])
+            start=paid_from(row);end=add_months(start,1)
+            c.execute("UPDATE subscriptions SET plan=?,status='active',period_end=?,cancel_at_period_end=0,updated_at=?,version=version+1 WHERE user_id=?",(payload.plan,end.isoformat(),now(),user['id']))
+            c.execute("INSERT INTO billing_payments(id,user_id,email,plan,months,amount_minor,currency,provider,reference,paid_on,period_start,period_end,note,recorded_by,created_at) VALUES(?,?,?,?,1,?,?,'demo',?,?,?,?,?,?,?)",
+                      (str(uuid.uuid4()),user['id'],user['email'],payload.plan,plans()[payload.plan],currency(),reference,datetime.now(UTC).date().isoformat(),start.isoformat(),end.isoformat(),'Testzahlung, nichts abgebucht',user['id'],now()))
+            c.execute('UPDATE billing_orders SET completed_at=? WHERE user_id=? AND completed_at IS NULL',(now(),user['id']))
+            audit(c,user['id'],user['id'],'demo_payment',f'{payload.plan} · {reference}')
+        return {'period_end':end.isoformat(),'reference':reference}
 
     @r.get('/api/admin/billing')
     def admin_billing(user:dict=Depends(require_user)):
