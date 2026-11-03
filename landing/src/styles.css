@@ -187,3 +187,12 @@
 .auth-only .auth-dialog .registration-audiences label.selected{background:#d9b27a1f;border-color:#d9b27a}
 .auth-only .auth-dialog .registration-audiences small{color:#b9c5bd}
 .auth-only .auth-dialog .registration-audiences input{accent-color:#d9b27a}
+
+/* Date range filter above deadlines and tasks, in the same form as the address book filter */
+.cost-actions.task-filter{margin:0;padding:16px 22px;border-bottom:1px solid #e3e7e5}
+.task-filter label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#4f5f5a}
+.task-filter select{padding:9px 10px;border:1px solid #cbd3cf;border-radius:2px;background:#fff;color:#263e39;min-width:180px;max-width:100%;font:inherit}
+.task-filter select:focus-visible{outline:2px solid #4c8876;outline-offset:2px}
+.cost-actions.task-filter{align-items:flex-end}
+.task-filter~.desk-checkbox{margin:12px 22px 4px}
+.task-filter~.field-help{margin:0;padding:6px 22px 14px}
