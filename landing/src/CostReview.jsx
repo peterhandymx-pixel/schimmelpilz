@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconReceipt, IconPlus, IconTrash } from '@tabler/icons-react';
-import { request, API_BASE } from './useCaseStorage.js';
+import { request } from './useCaseStorage.js';
+import { DocumentLinks, SpreadsheetLinks } from './ExportLinks.jsx';
 import { dateLabel, matches } from './workbench.js';
 import './cost-review.css';
 import { FeeLookup } from './FeeLookup.jsx';
 
+import { DateInput } from "./DateInput";
 const newLine = () => ({description:'',quantity:'1',unit_net:'',tax_rate:'0',billed_net:'',evidence:''});
 const blank = () => ({title:'',kind:'invoice',issuer:'',invoice_number:'',invoice_date:'',document_id:'',basis:'',notes:'',currency:'EUR',credit_gross:'0',billed_total:'',lines:[newLine()]});
 const kinds = {de:{invoice:'Verbraucher- / Geschäftsrechnung',lawyer:'Anwaltsrechnung',court:'Gerichtskosten',operating:'Betriebskosten'},en:{invoice:'Consumer / business invoice',lawyer:'Lawyer invoice',court:'Court costs',operating:'Operating costs'}};
@@ -75,7 +77,7 @@ export function CostReview({ lang, cases, caseId='', query='', open, onChanged, 
         <label>{de?'Rechnungsart':'Invoice type'}<select value={form.kind} onChange={e=>set('kind',e.target.value)}>{Object.entries(kinds[lang]).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
         <label>{de?'Aussteller':'Issuer'}<input maxLength={160} value={form.issuer} onChange={e=>set('issuer',e.target.value)}/></label>
         <label>{de?'Rechnungsnummer':'Invoice number'}<input maxLength={100} value={form.invoice_number} onChange={e=>set('invoice_number',e.target.value)}/></label>
-        <label>{de?'Rechnungsdatum':'Invoice date'}<input type="date" value={form.invoice_date} onChange={e=>set('invoice_date',e.target.value)}/></label>
+        <label>{de?'Rechnungsdatum':'Invoice date'}<DateInput value={form.invoice_date} onChange={e=>set('invoice_date',e.target.value)}/></label>
         <label>{de?'Beleg aus der E-Akte':'Document from electronic file'}<select value={form.document_id} onChange={e=>set('document_id',e.target.value)}><option value="">{de?'Kein Dokument verknüpft':'No document linked'}</option>{(selected?.documents||[]).map(doc=><option key={doc.id} value={doc.id}>{doc.name||doc.original_name}</option>)}</select></label>
         <label>{de?'Währung':'Currency'}<select value={form.currency} onChange={e=>set('currency',e.target.value)}>{['EUR','USD','MXN'].map(value=><option key={value}>{value}</option>)}</select></label>
       </div>
@@ -89,12 +91,12 @@ export function CostReview({ lang, cases, caseId='', query='', open, onChanged, 
       <div className="cost-actions"><button className="desk-button" value="calculate">{de?'Nachrechnen':'Calculate'}</button><button className="desk-button solid" value="save" disabled={!target}>{de?'Prüfung zur Akte speichern':'Save review to case'}</button><button type="button" className="desk-button" onClick={reset}>{de?'Neue Prüfung':'New review'}</button></div></fieldset></form>
       {error&&<p role="alert" className="storage-error">{error}</p>}{notice&&<p role="status" className="storage-notice">{notice}</p>}
       {result&&<Result result={result} form={form} lang={lang}/>}
-      {saved&&<div className="cost-actions"><a className="desk-button" href={`${API_BASE}/api/cost-reviews/${saved.id}/report.pdf?lang=${lang}&version=${saved.version}`} target="_blank" rel="noreferrer">{de?'Prüfbericht als PDF':'Review report as PDF'} · v{saved.version}</a>{onDraft&&<button className="desk-button" onClick={letter}>{de?'Klärungsanschreiben entwerfen':'Draft clarification letter'}</button>}</div>}
-      {versions.length>0&&<details><summary>{de?'Gespeicherte Fassungen':'Saved versions'} ({versions.length})</summary>{versions.map(row=><div className="cost-version" key={row.version}>v{row.version} · {dateLabel(row.saved_at,lang,true)} · {row.result.payable} {row.invoice.currency}<a href={`${API_BASE}/api/cost-reviews/${editing.id}/report.pdf?lang=${lang}&version=${row.version}`} target="_blank" rel="noreferrer">PDF</a></div>)}</details>}
+      {saved&&<div className="cost-actions"><DocumentLinks path={`/api/cost-reviews/${saved.id}/report`} query={`?version=${saved.version}`} lang={lang} label={`${de?'Prüfbericht':'Review report'} v${saved.version}`} /><SpreadsheetLinks path={`/api/cost-reviews/${saved.id}/lines`} query={`?version=${saved.version}`} lang={lang} label={de?'Positionen':'Lines'} />{onDraft&&<button className="desk-button" onClick={letter}>{de?'Klärungsanschreiben entwerfen':'Draft clarification letter'}</button>}</div>}
+      {versions.length>0&&<details><summary>{de?'Gespeicherte Fassungen':'Saved versions'} ({versions.length})</summary>{versions.map(row=><div className="cost-version" key={row.version}>v{row.version} · {dateLabel(row.saved_at,lang,true)} · {row.result.payable} {row.invoice.currency}<DocumentLinks path={`/api/cost-reviews/${editing.id}/report`} query={`?version=${row.version}`} lang={lang} /></div>)}</details>}
     </section>
     <section className="desk-panel"><div className="desk-panel-heading"><h2>{de?'Gespeicherte Kostenprüfungen':'Saved cost reviews'}</h2><button className="desk-link" disabled={busy} onClick={()=>reload()}>{de?'Aktualisieren':'Refresh'}</button></div>
       {loading&&<p role="status">{de?'Prüfungen werden geladen …':'Loading reviews …'}</p>}{loadError&&<p role="alert" className="storage-error">{de?'Prüfungen nicht erreichbar. Erneut aktualisieren.':'Reviews unavailable. Refresh to retry.'}</p>}
-      <div className="cost-register">{items.filter(item=>matches(query,item.invoice.title,item.invoice.issuer,item.invoice.invoice_number,item.case_reference,item.case_title)).map(item=><article key={item.id}><div><strong>{item.invoice.title}</strong><small>{item.case_reference} · {item.invoice.issuer} · v{item.version}</small><span>{item.result.has_difference?(de?'Abweichung':'Difference'):(de?'Rechnerisch stimmig':'Arithmetic matches')}: {item.result.difference} {item.invoice.currency}</span></div><div className="cost-actions"><button className="desk-button" disabled={busy} onClick={()=>loadItem(item)}>{de?'Prüfung öffnen':'Open review'}</button>{open&&<button className="desk-link" disabled={busy} onClick={()=>open(item.case_id,'costs')}>{de?'Akte öffnen':'Open case'}</button>}</div></article>)}{!loading&&!loadError&&!items.length&&<p>{de?'Noch keine Kostenprüfung gespeichert.':'No cost reviews saved yet.'}</p>}</div>
+      <div className="cost-register">{items.filter(item=>matches(query,item.invoice.title,item.invoice.issuer,item.invoice.invoice_number,item.case_reference,item.case_title)).map(item=><article key={item.id}><div><strong>{item.invoice.title}</strong><small>{[item.case_reference,item.invoice.issuer,`v${item.version}`].filter(Boolean).join(' · ')}</small><span>{item.result.has_difference?(de?'Abweichung':'Difference'):(de?'Rechnerisch stimmig':'Arithmetic matches')}: {Number(item.result.difference).toLocaleString(de?'de-DE':'en-GB',{minimumFractionDigits:2,maximumFractionDigits:2})} {item.invoice.currency}</span></div><div className="cost-actions"><button className="desk-button" disabled={busy} onClick={()=>loadItem(item)}>{de?'Prüfung öffnen':'Open review'}</button>{open&&<button className="desk-link" disabled={busy} onClick={()=>open(item.case_id,'costs')}>{de?'Akte öffnen':'Open case'}</button>}</div></article>)}{!loading&&!loadError&&!items.length&&<p>{de?'Noch keine Kostenprüfung gespeichert.':'No cost reviews saved yet.'}</p>}</div>
     </section>
   </div>;
 }

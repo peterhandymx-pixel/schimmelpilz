@@ -17,10 +17,11 @@ export async function request(path, options = {}) {
   if (!response.ok) {
     const error = new Error(`Request failed: ${response.status}`);
     error.status = response.status;
+    try { error.detail = (await response.clone().json()).detail; } catch { /* Non-JSON error body. */ }
     if (response.status === 401) window.dispatchEvent(new Event("schimmelpilz-session-expired"));
     throw error;
   }
-  return response.json();
+  return response.status === 204 ? null : response.json();
 }
 
 const jsonOptions = (method, body) => ({

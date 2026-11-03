@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status bar icon for reminders: the four-pointed spark of the brand, single colour as Android requires. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="88"
+    android:viewportHeight="88">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M44,4 C47,30 58,41 84,44 C58,47 47,58 44,84 C41,58 30,47 4,44 C30,41 41,30 44,4 Z" />
+</vector>

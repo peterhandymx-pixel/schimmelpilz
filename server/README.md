@@ -21,17 +21,23 @@ Endpoints:
 - `GET /api/cases/{id}`
 - `PUT /api/cases/{id}` edits title, description, language and details; internal reference is immutable.
 - `POST /api/cases/{id}/tasks`, `PUT /api/cases/{id}/tasks/{task_id}` persist manual tasks (title, note, optional due date, priority, completion). Case responses include tasks and activity.
-- `GET /api/research/status` checks local model availability.
+- `GET /api/research/status` checks whether the configured AI model (Gemini by default) is reachable.
 - `GET /api/cases/{id}/research` returns the account-owned conversation.
 - `POST /api/cases/{id}/research` with UUID `request_id`, `question` (3–4000 characters), `language`, `workflow` (`intake`, `research`, `jurisdiction`, `costs`, `drafting`, `deadlines`) and optional `document_ids` (up to 8 account-owned files from this case). Selected files need reviewed text or return 422. Responses contain the exact supplied document excerpts and their provenance. Completed requests are idempotent; conflicting reuse returns 409. Busy returns 429; unavailable model 503; timeout 504.
 - `POST /api/cases/{id}/documents` as multipart field `file`
 - `GET /api/cases/{id}/documents/{document_id}/download`
 - `GET /api/cases/{id}/documents/{document_id}/text` returns original extracted units, corrected text and review status.
 - `POST /api/cases/{id}/documents/{document_id}/extract` extracts PDF text layers or DOCX body paragraphs/tables in a local, time-limited worker. Repeated extraction preserves corrections. Scans and PNG/JPG images can use the separate local OCR endpoint; legacy DOC is unsupported. Encrypted/invalid files retain their original upload.
+- Every new case document (upload, scan from the app, inbox assignment) is read automatically right after the upload is answered: the PDF/DOCX text layer first, then local OCR (German + English) for photos and for PDF pages without a usable text layer (fewer than 25 characters; up to 24 pages in batches of 4). Progress is `auto_text_status` on each document (`queued`, `running`, `done`, `no_text`, `ocr_unavailable`, `failed`, `interrupted`). The result is unreviewed machine text like the manual buttons produce; reviewed or entered text is never replaced, and research still uses reviewed text only.
 - `PUT /api/cases/{id}/documents/{document_id}/text/{unit_no}` with `text` and `reviewed` saves a corrected page/section. Review checks transcription, not factual truth or legal validity. Empty text cannot be marked reviewed.
 - `POST /api/cases/{id}/drafts` with `{ "language", "recipient", "kind", "body", "research_run_id" }`. Kinds: `letter`, `claim`, `application`, `objection`, `response`. Only a basic letter can omit `body`.
 - `PUT /api/cases/{id}/drafts/{draft_id}` with `{ "body", "recipient", "kind", "language", "expected_version" }` stores the edited text and metadata. Optional `use_current_letterhead: true` adopts the currently active briefpaper version; otherwise the saved version is retained.
 - `POST /api/cases/{id}/drafts/preview-pdf` with `body`, optional `draft_id` and `use_current_letterhead` exports current editor text without saving it. `GET /api/cases/{id}/drafts/{draft_id}/pdf` exports the saved version.
+- `GET /api/cases/{id}/drafts/{draft_id}/docx` exports the saved version as an editable Word file (`X-Draft-Review-Status: editable-export`).
+- `GET /api/exports/{cases|tasks|contacts|inbox}.{csv|xlsx}?lang=de|en` exports a list. German CSV uses semicolons, a UTF-8 byte-order mark, decimal commas and TT.MM.JJJJ; Excel stores real dates and numbers. Text that starts with `=`, `+`, `-` or `@` is never turned into a formula. Case-scoped team members can export only `cases` and `tasks`, limited to their granted cases.
+- `GET /api/cost-reviews/{id}/report.{pdf|docx}` and `GET /api/cost-reviews/{id}/lines.{csv|xlsx}` (optional `version`, `lang`) export a cost review report or its lines and totals.
+- `GET /api/cases/{id}/route-plan/report.{pdf|docx}` (optional `version`) exports the procedural working paper.
+- `GET /api/cases/{id}/research/{run_id}/answer.{pdf|docx}` exports a completed research answer with its question, legal sources and supplied document passages.
 
 All case, document and draft routes require a signed-in account. Every write request, including login/register/logout, must include `X-Schimmelpilz-Request: 1`. The frontend includes the header and session cookie automatically.
 
@@ -85,13 +91,15 @@ Passwords use salted scrypt hashes. Opaque sessions expire after seven days, are
 
 The first registered account takes ownership of local prototype cases created before accounts existed. Later accounts start with separate files. On an existing installation, register the owner's account locally before opening registration to the public. Startup preserves legacy case, document and draft IDs and adds the new fields. References are unique per account, not shared passwords.
 
-The current workflow supports consumers, businesses and law firms. Shared memberships, invitation administration, operator roles and session revocation are implemented. Email verification, password recovery and MFA are not implemented. Encrypted operator backups and safe isolated restore are implemented, with native Windows daily/sign-in scheduling; external storage and automatic retention deletion are not configured. See [backup/restore](../docs/backup-restore.md). Public German federal sources can be imported and searched locally. Substantive legal approval, fee/jurisdiction calculation and electronic filing remain planned. Local AI answers and editable drafts are not reviewed legal opinions.
+The current workflow supports consumers, businesses and law firms. Shared memberships, invitation administration, operator roles and session revocation are implemented. Email verification, password recovery and two-factor sign-in are implemented (see [account and mail](../docs/account-and-mail.md)). Encrypted operator backups and safe isolated restore are implemented, with native Windows daily/sign-in scheduling; external storage and automatic retention deletion are not configured. See [backup/restore](../docs/backup-restore.md). Public German federal sources can be imported and searched locally. Substantive legal approval, fee/jurisdiction calculation and electronic filing remain planned. AI answers and editable drafts are not reviewed legal opinions.
 
-## Local research AI
+## Research AI
+
+By default the API calls the Gemini API (`AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL`, optional `GEMINI_BASE_URL`); the key travels in a header, never in the URL. Each research question sends the selected particulars, bounded conversation, reviewed document passages and legal passages to Google; the UI and privacy notice say so. Set `AI_PROVIDER=ollama` to use a local model instead:
 
 Run official Ollama bound to `127.0.0.1:11434` with cloud features disabled (`OLLAMA_NO_CLOUD=1`), then pull `qwen2.5:7b`. Configure the API through `OLLAMA_BASE_URL` and `OLLAMA_MODEL` if needed. Docker uses the private `ollama` service and persistent model volume; run `docker compose exec ollama ollama pull qwen2.5:7b` once. Do not publish the model port.
 
-The API supplies selected account-owned particulars, workflow instructions, bounded completed conversation, reviewed document passages and selected or locally found legal passages to the actual Ollama chat endpoint. Only public provider XML is fetched externally; questions and case documents stay on this server. Output is plain text with linked citation IDs and is clearly labelled unverified. A generation is recorded before inference; failures remain visible without a fabricated answer. Requests time out after 180 seconds and a single-worker process lock prevents simultaneous inference. A request left pending after a server crash can be asked again with a new ID. API tests use a mock model; the native preview is additionally tested against the installed runtime with synthetic cases.
+The API supplies selected account-owned particulars, workflow instructions, bounded completed conversation, reviewed document passages and selected or locally found legal passages to the configured model. Public legal sources are fetched as provider XML; with Gemini, the question and supplied context leave the server for Google, with Ollama they stay on it. Output is plain text with linked citation IDs and is clearly labelled unverified. A generation is recorded before inference; failures remain visible without a fabricated answer. Requests time out after 180 seconds and a single-worker process lock prevents simultaneous inference. A request left pending after a server crash can be asked again with a new ID. API tests use a mock model; the native preview is additionally tested against the installed runtime with synthetic cases.
 
 ## Public legal source catalogue
 
@@ -139,4 +147,4 @@ Local OCR endpoints, installation and limits: [local OCR](../docs/local-ocr.md).
 
 Versioned assignment correction: [workflow, API and retained records](../docs/inbox-correction.md).
 
-[Operator administration, team permissions, subscription APIs and Stripe setup](../docs/admin-team-billing.md). [Advanced source filtering and coverage](../docs/advanced-research.md).
+[Operator administration, team permissions, subscription APIs and Clip payment setup](../docs/admin-team-billing.md). [Advanced source filtering and coverage](../docs/advanced-research.md).

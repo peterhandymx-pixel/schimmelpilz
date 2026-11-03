@@ -8,6 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 from .letterheads import compose_pdf
+from .word_export import compose_docx
+from .exports import DOCX
+from .dates import display_date
 
 CHECKED='2026-10-13'
 RULES={
@@ -109,7 +112,7 @@ def body(plan,reference):
     if data['chosen_body']:parts.append(('Von Ihnen eingetragene Stelle, nicht verifiziert: ' if de else 'Body entered by you, not verified: ')+data['chosen_body'])
     parts.extend(result['missing'])
     for route in result['routes']:parts.extend([route['title'],route['goal'],route['next']])
-    parts.extend([('Belege' if de else 'Evidence'),data['evidence'],('Eigener Prüfvermerk' if de else 'Own review note'),data['review_note'],result['filing_notice'],('Quellenstand ' if de else 'Sources checked ')+result['source_checked_on']])
+    parts.extend([('Belege' if de else 'Evidence'),data['evidence'],('Eigener Prüfvermerk' if de else 'Own review note'),data['review_note'],result['filing_notice'],('Quellenstand ' if de else 'Sources checked ')+display_date(result['source_checked_on'],de)])
     parts.extend(source['label']+' · '+source['url'] for source in result['sources'])
     parts.append(result['court_directory'])
     return '\n\n'.join(parts)
@@ -152,11 +155,13 @@ def router(db,require_user,now,record_activity):
     def versions(case_id:str,user:dict=Depends(require_user)):
         with db() as connection:
             owned(connection,case_id,user['id']);return [public(row) for row in connection.execute('SELECT * FROM route_plan_versions WHERE case_id=? ORDER BY version DESC',(case_id,))]
-    @routes.get('/api/cases/{case_id}/route-plan/report.pdf')
-    def report(case_id:str,version:int|None=None,user:dict=Depends(require_user)):
+    @routes.get('/api/cases/{case_id}/route-plan/report.{fmt}')
+    def report(case_id:str,fmt:Literal['pdf','docx'],version:int|None=None,user:dict=Depends(require_user)):
         with db() as connection:
             case=owned(connection,case_id,user['id'])
             row=connection.execute('SELECT * FROM route_plan_versions WHERE case_id=? AND version=?',(case_id,version)).fetchone() if version is not None else connection.execute('SELECT * FROM route_plans WHERE case_id=?',(case_id,)).fetchone()
             if not row:raise HTTPException(404,'Plan not found')
-        return Response(compose_pdf(body(public(row),case['reference']),None,{'left_mm':25,'right_mm':25,'top_mm':25,'bottom_mm':25,'font_size':11}),media_type='application/pdf',headers={'Content-Disposition':f'attachment; filename="Schimmelpilz-Verfahrensplan-v{row["version"]}.pdf"'})
+        layout={'left_mm':25,'right_mm':25,'top_mm':25,'bottom_mm':25,'font_size':11};text=body(public(row),case['reference'])
+        if fmt=='pdf':return Response(compose_pdf(text,None,layout),media_type='application/pdf',headers={'Content-Disposition':f'attachment; filename="Schimmelpilz-Verfahrensplan-v{row["version"]}.pdf"'})
+        return Response(compose_docx(text,None,layout,case['reference'],row['version']),media_type=DOCX,headers={'Content-Disposition':f'attachment; filename="Schimmelpilz-Verfahrensplan-v{row["version"]}.docx"'})
     return routes

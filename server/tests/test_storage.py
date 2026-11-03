@@ -204,7 +204,7 @@ class PersistentStorageTests(unittest.TestCase):
             self.assertEqual(loaded["reference"], case["reference"])
             self.assertEqual(loaded["tasks"][0]["title"], "Geänderte Aufgabe")
             self.assertTrue(loaded["tasks"][0]["completed"])
-            self.assertEqual([row["action"] for row in reversed(loaded["activities"])], ["case_created", "case_updated", "task_created", "task_completed", "document_uploaded", "draft_created", "draft_updated"])
+            self.assertEqual([row["action"] for row in reversed(loaded["activities"])], ["case_created", "case_updated", "task_created", "task_completed", "document_uploaded", "document_extracted", "draft_created", "draft_updated"])
             reopened = client.put(route + f"/tasks/{task['id']}", json={**task_payload, "completed": False}).json()
             self.assertIsNone(reopened["tasks"][0]["completed_at"])
             self.assertEqual(reopened["activities"][0]["action"], "task_reopened")

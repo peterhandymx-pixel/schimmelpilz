@@ -1,5 +1,9 @@
 import { useState } from 'react';
+import { dateLabel } from './workbench.js';
 import { request } from './useCaseStorage.js';
+
+// Amounts arrive as decimal strings; show them in the interface language's number format.
+const euro=(value,lang)=>new Intl.NumberFormat(lang==='de'?'de-DE':'en-GB',{style:'currency',currency:'EUR'}).format(Number(value));
 
 export function FeeLookup({ lang, enabled, onAdd }) {
   const de=lang==='de';
@@ -20,6 +24,6 @@ export function FeeLookup({ lang, enabled, onAdd }) {
     <label className="desk-checkbox"><input type="checkbox" required checked={confirmed} onChange={e=>{setConfirmed(e.target.checked);invalidate();}}/>{de?'Ich habe die Anwendbarkeit der ausgewählten Tabelle einschließlich Übergangsrecht für diese Akte geprüft. Eigener Prüfvermerk, keine unabhängige Freigabe.':'I reviewed the selected table and transition rules for this case. My own declaration, not independent approval.'}</label>
     <button className="desk-button" disabled={!confirmed}>{de?'1,0-Wertgebühr berechnen':'Calculate 1.0 value fee'}</button></fieldset></form>
     {error&&<p role="alert" className="storage-error">{error}</p>}
-    {result&&<div className="cost-result"><h3>{result.statute.toUpperCase()} · 1,0: {result.base_fee} EUR</h3><p>{de?'Wertstufe bis':'Value bracket up to'} {result.bracket} EUR · {result.version} · {de?'Quellen geprüft am':'Sources checked on'} {result.source_checked_on}</p><p>{result.source.citation}</p><p><a href={result.source.table} target="_blank" rel="noreferrer">{de?'Originaltabelle':'Original table'}</a> · <a href={result.source.transition} target="_blank" rel="noreferrer">{de?'Übergangsregel':'Transition rule'}</a></p><button type="button" className="desk-button" disabled={!enabled} onClick={()=>onAdd(result,{statute,version:'2025-bgbl-109',value:value.trim().replace(',','.'),applicability_confirmed:true,applicability_note:note})}>{de?'Als Rechnungsposition übernehmen':'Use as invoice item'}</button><p className="field-help">{de?'Menge / Satz, VV- / KV-Nummer, Anrechnung und Steuer anschließend ausdrücklich ergänzen. Mindestgebühren, Sonderregeln und Berechtigung bleiben gesondert zu prüfen.':'Explicitly complete multiplier, fee code, credits and tax afterwards. Review minimum fees, special rules and entitlement separately.'}</p></div>}
+    {result&&<div className="cost-result"><h3>{result.statute.toUpperCase()} · 1,0: {euro(result.base_fee,lang)}</h3><p>{de?'Wertstufe bis':'Value bracket up to'} {euro(result.bracket,lang)} · {result.version} · {de?'Quellen geprüft am':'Sources checked on'} {dateLabel(result.source_checked_on,lang)}</p><p>{result.source.citation}</p><p><a href={result.source.table} target="_blank" rel="noreferrer">{de?'Originaltabelle':'Original table'}</a> · <a href={result.source.transition} target="_blank" rel="noreferrer">{de?'Übergangsregel':'Transition rule'}</a></p><button type="button" className="desk-button" disabled={!enabled} onClick={()=>onAdd(result,{statute,version:'2025-bgbl-109',value:value.trim().replace(',','.'),applicability_confirmed:true,applicability_note:note})}>{de?'Als Rechnungsposition übernehmen':'Use as invoice item'}</button><p className="field-help">{de?'Menge / Satz, VV- / KV-Nummer, Anrechnung und Steuer anschließend ausdrücklich ergänzen. Mindestgebühren, Sonderregeln und Berechtigung bleiben gesondert zu prüfen.':'Explicitly complete multiplier, fee code, credits and tax afterwards. Review minimum fees, special rules and entitlement separately.'}</p></div>}
   </details>;
 }

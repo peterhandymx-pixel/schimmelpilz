@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { IconArrowRight, IconBriefcase, IconBuildingBank, IconUser } from "@tabler/icons-react";
 
+import { DateInput } from "./DateInput";
 export const intakeCopy = {
   de: {
     intro: "Legen Sie eine strukturierte Akte an. Pflichtfelder sind mit * markiert; weitere Angaben können Sie zunächst offenlassen.",
@@ -100,7 +101,7 @@ export function CaseIntake({ lang, t, saving, error, onSubmit, onCancel, user, i
     </div></fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.procedureHeading}</legend><div className="intake-grid">
       <label>{c.court}<input name="court" maxLength={160} defaultValue={d.court || ""} /></label><label>{c.courtReference}<input name="court_reference" maxLength={100} defaultValue={d.court_reference || ""} /></label>
-      <label>{c.receivedOn}<input name="received_on" type="date" defaultValue={d.received_on || ""} /></label><label>{c.deadline}<input name="deadline" type="date" defaultValue={d.deadline || ""} /></label>
+      <label>{c.receivedOn}<DateInput name="received_on" defaultValue={d.received_on || ""} /></label><label>{c.deadline}<DateInput name="deadline" defaultValue={d.deadline || ""} /></label>
       <label className="span-two">{c.deadlineNote}<input name="deadline_note" maxLength={300} defaultValue={d.deadline_note || ""} /></label>
     </div><p className="field-help">{c.deadlineHint}</p></fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.costsHeading}</legend><div className="intake-grid">

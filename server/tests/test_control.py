@@ -1,8 +1,4 @@
-import hashlib
-import hmac
-import json
 import os
-import time
 import unittest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
@@ -65,6 +61,9 @@ class ControlTests(test_inbox.InboxTests):
             actor=admin.get('/api/auth/me').json();target=other.get('/api/auth/me').json();case=self.case(other)
             self.assertEqual(admin.get('/api/admin').status_code,403)
             with api.db() as c:c.execute('UPDATE users SET is_admin=1 WHERE id=?',(actor['id'],))
+            # Operator powers stay locked until the administrator uses a second factor.
+            self.assertEqual(admin.get('/api/admin').json()['detail'],'admin_mfa_required')
+            with api.db() as c:c.execute("UPDATE users SET mfa_enabled_at='2026-01-01',mfa_secret='JBSWY3DPEHPK3PXP' WHERE id=?",(actor['id'],))
             self.assertEqual(admin.get('/api/admin').status_code,200)
             self.assertEqual(admin.post('/api/team/switch',json={'owner_id':target['id']}).status_code,200)
             self.assertEqual(admin.get('/api/cases/'+case).status_code,200)
@@ -80,7 +79,7 @@ class ControlTests(test_inbox.InboxTests):
         with TestClient(api.app) as client:
             self.login(client);me=client.get('/api/auth/me').json();case=self.case(client)
             self.assertEqual(client.put('/api/admin/system',json={'ai_enabled':False,'registrations_enabled':False,'expected_version':0,'reason':'Synthetic operator controls'}).status_code,403)
-            with api.db() as c:c.execute('UPDATE users SET is_admin=1 WHERE id=?',(me['id'],))
+            with api.db() as c:c.execute("UPDATE users SET is_admin=1,mfa_enabled_at='2026-01-01',mfa_secret='JBSWY3DPEHPK3PXP' WHERE id=?",(me['id'],))
             settings={'ai_enabled':False,'registrations_enabled':False,'expected_version':0,'reason':'Synthetic operator controls'}
             self.assertEqual(client.put('/api/admin/system',json=settings).status_code,200)
             self.assertEqual(client.put('/api/admin/system',json=settings).status_code,409)
@@ -92,53 +91,131 @@ class ControlTests(test_inbox.InboxTests):
             self.assertEqual(blocked.status_code,403)
             self.assertEqual(client.put('/api/admin/system',json={**settings,'ai_enabled':True,'registrations_enabled':True,'expected_version':1}).status_code,200)
 
-    def test_trial_is_once_expiry_keeps_reads_and_operator_can_restore_pilot(self):
+    def test_starting_plan_follows_account_type(self):
+        with TestClient(api.app) as client:
+            client.headers['X-Schimmelpilz-Request']='1'
+            for audience,plan in [('consumer','personal'),('business','business'),('law_firm','firm')]:
+                payload={'email':f'plan-{audience}@example.invalid','password':'Synthetic-plan-password-2026!','audience':audience,'organisation':'Example only','full_name':'Synthetic Person','street':'Testweg 1','postal_code':'10115','city':'Berlin','country':'Deutschland'}
+                self.assertEqual(client.post('/api/auth/register',json=payload).status_code,201)
+                self.assertEqual(client.get('/api/billing').json()['plan'],plan)
+                # The seven-day trial starts with the account.
+                status=client.get('/api/billing').json()
+                self.assertEqual(status['effective_status'],'trial')
+                left=billing.datetime.fromisoformat(status['trial_end'])-billing.datetime.now(billing.UTC)
+                self.assertTrue(billing.timedelta(days=6,hours=23)<left<=billing.timedelta(days=7))
+            # Accounts left on the old free pilot access move to the same trial, counted from the migration.
+            with api.db() as c:
+                c.execute("UPDATE subscriptions SET status='pilot',plan='personal',trial_started=NULL,trial_end=NULL WHERE user_id=(SELECT id FROM users WHERE email='plan-law_firm@example.invalid')")
+                billing.migrate(c)
+                row=dict(c.execute("SELECT s.* FROM subscriptions s JOIN users u ON u.id=s.user_id WHERE u.email='plan-law_firm@example.invalid'").fetchone())
+                self.assertEqual(c.execute("SELECT COUNT(*) FROM subscriptions WHERE status='pilot'").fetchone()[0],0)
+            self.assertEqual((row['status'],row['plan']),('trial','firm'))
+            self.assertTrue(row['trial_end'] and billing.effective(row)=='trial')
+
+    def test_trial_starts_at_registration_expiry_keeps_reads_and_operator_can_end_access(self):
         with TestClient(api.app) as client:
             self.login(client);case=self.case(client);me=client.get('/api/auth/me').json()
-            self.assertEqual(client.get('/api/billing').json()['effective_status'],'pilot')
-            trial=client.post('/api/billing/trial',json={'plan':'firm'})
-            self.assertEqual(trial.status_code,200,trial.text)
             self.assertEqual(client.get('/api/billing').json()['effective_status'],'trial')
+            # The trial already runs, so it cannot be started a second time.
             self.assertEqual(client.post('/api/billing/trial',json={'plan':'firm'}).status_code,409)
+            self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Allowed during the trial'}).status_code,201)
             with api.db() as c:c.execute("UPDATE subscriptions SET trial_end='2000-01-01T00:00:00+00:00' WHERE user_id=?",(me['id'],))
             self.assertEqual(client.get('/api/billing').json()['effective_status'],'expired')
             self.assertEqual(client.get('/api/cases/'+case).status_code,200)
             self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Must be read only'}).status_code,402)
             self.assertEqual(client.get('/api/cases/'+case+'/export.zip').status_code,200)
             self.assertEqual(client.post('/api/billing/checkout',json={'plan':'personal','consent':False}).status_code,422)
-            with patch.dict(os.environ,{'STRIPE_SECRET_KEY':''}):self.assertEqual(client.post('/api/billing/checkout',json={'plan':'personal','consent':True}).status_code,503)
-            with api.db() as c:c.execute('UPDATE users SET is_admin=1 WHERE id=?',(me['id'],))
+            with patch.dict(os.environ,{'CLIP_LINK_PERSONAL':''}):self.assertEqual(client.post('/api/billing/checkout',json={'plan':'personal','consent':True}).status_code,503)
+            with api.db() as c:c.execute("UPDATE users SET is_admin=1,mfa_enabled_at='2026-01-01',mfa_secret='JBSWY3DPEHPK3PXP' WHERE id=?",(me['id'],))
             row=client.get('/api/billing').json()
-            self.assertEqual(client.put('/api/admin/billing/'+me['id'],json={'pilot':True,'reason':'Synthetic pilot restore test','expected_version':row['version']}).status_code,200)
-            self.assertEqual(client.get('/api/billing').json()['effective_status'],'pilot')
+            # Free access without a time limit no longer exists; the operator can only end access.
+            self.assertEqual(client.put('/api/admin/billing/'+me['id'],json={'pilot':True,'reason':'Synthetic free access test','expected_version':row['version']}).status_code,422)
+            self.assertEqual(client.put('/api/admin/billing/'+me['id'],json={'pilot':False,'reason':'Synthetic end access test','expected_version':row['version']}).status_code,200)
+            self.assertEqual(client.get('/api/billing').json()['effective_status'],'expired')
 
-    def test_hosted_checkout_signed_webhooks_replay_and_cancellation_state(self):
-        config={'STRIPE_SECRET_KEY':'sk_test_synthetic','STRIPE_WEBHOOK_SECRET':'whsec_synthetic','PUBLIC_APP_URL':'https://example.invalid','STRIPE_PRICE_PERSONAL':'price_personal','STRIPE_PRICE_BUSINESS':'price_business','STRIPE_PRICE_FIRM':'price_firm'}
-        with patch.dict(os.environ,config),TestClient(api.app) as client:
-            self.login(client);me=client.get('/api/auth/me').json()
-            with patch.object(billing,'stripe',side_effect=[{'unit_amount':990,'currency':'eur','recurring':{'interval':'month','interval_count':1},'tax_behavior':'inclusive'},{'id':'cs_test_1','url':'https://checkout.stripe.com/synthetic'}]) as provider:
-                checkout=client.post('/api/billing/checkout',json={'plan':'personal','consent':True})
-                self.assertEqual(checkout.status_code,200,checkout.text)
-                self.assertEqual(provider.call_args.args[1]['line_items[0][price]'],'price_personal')
-                order=provider.call_args.args[1]['subscription_data[metadata][order_id]']
-            obj={'id':'sub_synthetic','customer':'cus_synthetic','status':'active','metadata':{'user_id':me['id'],'order_id':order},'items':{'data':[{'price':{'id':'price_personal'},'quantity':1,'current_period_end':int(time.time())+86400}]},'cancel_at_period_end':True}
-            body=json.dumps({'id':'evt_synthetic','type':'customer.subscription.updated','data':{'object':{'id':'sub_synthetic'}}}).encode();stamp=str(int(time.time()));sig=hmac.new(config['STRIPE_WEBHOOK_SECRET'].encode(),stamp.encode()+b'.'+body,hashlib.sha256).hexdigest()
-            headers={'stripe-signature':f't={stamp},v1={sig}','Content-Type':'application/json'}
-            client.headers.pop('X-Schimmelpilz-Request',None)
-            with patch.object(billing,'stripe',return_value=obj) as provider:
-                self.assertEqual(client.post('/api/billing/webhook',content=body,headers={'stripe-signature':'invalid'}).status_code,400)
-                result=client.post('/api/billing/webhook',content=body,headers=headers);self.assertEqual(result.status_code,200,result.text)
-                self.assertEqual(client.post('/api/billing/webhook',content=body,headers=headers).status_code,200)
-                self.assertEqual(provider.call_count,1)
-            status=client.get('/api/billing').json();self.assertEqual(status['effective_status'],'active');self.assertTrue(status['cancel_at_period_end'])
-            self.assertFalse(billing.signature(body,f't=1,v1={sig}',config['STRIPE_WEBHOOK_SECRET']))
-            canceled={**obj,'status':'canceled','cancel_at_period_end':False}
-            late=json.dumps({'id':'evt_late','type':'customer.subscription.updated','data':{'object':{'id':'sub_synthetic','status':'active'}}}).encode()
-            signature=hmac.new(config['STRIPE_WEBHOOK_SECRET'].encode(),stamp.encode()+b'.'+late,hashlib.sha256).hexdigest()
-            with patch.object(billing,'stripe',return_value=canceled):
-                self.assertEqual(client.post('/api/billing/webhook',content=late,headers={'stripe-signature':f't={stamp},v1={signature}'}).status_code,200)
-            self.assertEqual(client.get('/api/billing').json()['effective_status'],'canceled')
+    def test_demo_payment_only_in_test_mode_and_books_one_month(self):
+        with TestClient(api.app) as client:
+            self.login(client);case=self.case(client);me=client.get('/api/auth/me').json()
+            with patch.dict(os.environ,{'PAYMENT_MODE':''}):
+                self.assertEqual(client.get('/api/billing').json()['payment_mode'],'clip')
+                self.assertEqual(client.post('/api/billing/demo-payment',json={'plan':'personal','consent':True}).status_code,404)
+            with patch.dict(os.environ,{'PAYMENT_MODE':'demo'}):
+                status=client.get('/api/billing').json()
+                self.assertEqual((status['payment_mode'],status['links_ready']),('demo',{'personal':True,'business':True,'firm':True}))
+                self.assertEqual(client.post('/api/billing/demo-payment',json={'plan':'business','consent':False}).status_code,422)
+                with api.db() as c:c.execute("UPDATE subscriptions SET trial_end='2000-01-01T00:00:00+00:00' WHERE user_id=?",(me['id'],))
+                self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Blocked before payment'}).status_code,402)
+                paid=client.post('/api/billing/demo-payment',json={'plan':'business','consent':True})
+                self.assertEqual(paid.status_code,201,paid.text);self.assertTrue(paid.json()['reference'].startswith('TEST-'))
+                status=client.get('/api/billing').json()
+                self.assertEqual((status['effective_status'],status['plan'],status['payments'][0]['provider'],status['payments'][0]['amount_minor']),('active','business','demo',2990))
+                self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Allowed after test payment'}).status_code,201)
 
+    def admin(self,client,email='billing-admin@example.invalid'):
+        self.login(client,email);me=client.get('/api/auth/me').json()
+        with api.db() as c:c.execute("UPDATE users SET is_admin=1,mfa_enabled_at='2026-01-01',mfa_secret='JBSWY3DPEHPK3PXP' WHERE id=?",(me['id'],))
+
+    def test_clip_link_checkout_and_operator_recorded_prepaid_months(self):
+        config={'PAYMENT_MODE':'','CLIP_LINK_PERSONAL':'https://pago.clip.mx/synthetic-personal','CLIP_LINK_BUSINESS':'','CLIP_LINK_FIRM':'http://insecure.invalid/link','PRICE_CURRENCY':'MXN','PRICE_PERSONAL':'199.00','PRICE_BUSINESS':'599','PRICE_FIRM':'999.50'}
+        with patch.dict(os.environ,config),TestClient(api.app) as client,TestClient(api.app) as operator:
+            self.login(client);case=self.case(client);me=client.get('/api/auth/me').json();self.admin(operator)
+            self.assertEqual(client.get('/api/public/pricing').json(),{'currency':'MXN','plans':{'personal':19900,'business':59900,'firm':99950},'trial_days':7})
+            # Paying ahead during the trial is possible; the paid month starts when the trial ends.
+            self.assertEqual(client.post('/api/billing/checkout',json={'plan':'personal','consent':True}).status_code,200)
+            with api.db() as c:c.execute("UPDATE subscriptions SET status='expired' WHERE user_id=?",(me['id'],))
+            status=client.get('/api/billing').json()
+            self.assertEqual(status['links_ready'],{'personal':True,'business':False,'firm':False})
+            self.assertEqual(client.post('/api/billing/checkout',json={'plan':'firm','consent':True}).status_code,503)
+            opened=client.post('/api/billing/checkout',json={'plan':'personal','consent':True})
+            self.assertEqual(opened.json(),{'url':config['CLIP_LINK_PERSONAL'],'reference':me['email']})
+            self.assertEqual(client.post('/api/billing/checkout',json={'plan':'personal','consent':True}).status_code,200)
+            with api.db() as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM billing_orders WHERE user_id=? AND completed_at IS NULL',(me['id'],)).fetchone()[0],1)
+            # Opening the link grants nothing; writes stay blocked until the operator records the payment.
+            self.assertEqual(client.get('/api/billing').json()['effective_status'],'expired')
+            self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Blocked before payment'}).status_code,402)
+            today=billing.datetime.now(billing.UTC).date().isoformat()
+            self.assertEqual(client.post(f'/api/admin/billing/{me["id"]}/payments',json={'plan':'personal','months':1,'amount':'199','reference':'clip-1','paid_on':today,'expected_version':0}).status_code,403)
+            row=next(item for item in operator.get('/api/admin/billing').json()['subscriptions'] if item['user_id']==me['id'])
+            self.assertEqual(row['pending_payment']['plan'],'personal')
+            pay=lambda **values:operator.post(f'/api/admin/billing/{me["id"]}/payments',json={'plan':'personal','months':1,'amount':'199','reference':'clip-1','paid_on':today,'expected_version':row['version'],**values})
+            self.assertEqual(pay(amount='100').json()['detail'],'amount_does_not_match_plan_price')
+            self.assertEqual(pay(expected_version=row['version']+5).status_code,409)
+            self.assertEqual(pay(paid_on='2001-01-01').status_code,422)
+            first=pay();self.assertEqual(first.status_code,201,first.text)
+            status=client.get('/api/billing').json()
+            self.assertEqual((status['effective_status'],status['plan'],status['pending_payment'],len(status['payments'])),('active','personal',None,1))
+            self.assertFalse(status['renewal_due'])
+            self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Allowed after payment'}).status_code,201)
+            self.assertEqual(pay(expected_version=status['version']).json()['detail'],'payment_already_recorded')
+            # Paying early adds months after the running period instead of overlapping it.
+            second=pay(months=2,amount='398,00',reference='clip-2',expected_version=status['version'])
+            self.assertEqual(second.status_code,201,second.text)
+            self.assertEqual(second.json()['period_end'],billing.add_months(billing.datetime.fromisoformat(first.json()['period_end']),2).isoformat())
+            self.assertEqual(client.post('/api/billing/trial',json={'plan':'personal'}).status_code,409)
+            with api.db() as c:c.execute("UPDATE subscriptions SET period_end=? WHERE user_id=?",((billing.datetime.now(billing.UTC)+billing.timedelta(days=3)).isoformat(),me['id']))
+            self.assertTrue(client.get('/api/billing').json()['renewal_due'])
+            with api.db() as c:c.execute("UPDATE subscriptions SET period_end='2000-01-01T00:00:00+00:00' WHERE user_id=?",(me['id'],))
+            self.assertEqual(client.get('/api/billing').json()['effective_status'],'expired')
+            self.assertEqual(client.post(f'/api/cases/{case}/drafts',json={'body':'Blocked after expiry'}).status_code,402)
+            self.assertEqual(client.get('/api/cases/'+case).status_code,200)
+
+    def test_calendar_months_and_paid_time_start(self):
+        moment=billing.datetime(2027,1,31,10,tzinfo=billing.UTC)
+        self.assertEqual(billing.add_months(moment,1),billing.datetime(2027,2,28,10,tzinfo=billing.UTC))
+        self.assertEqual(billing.add_months(moment,13),billing.datetime(2028,2,29,10,tzinfo=billing.UTC))
+        later=(billing.datetime.now(billing.UTC)+billing.timedelta(days=4)).isoformat()
+        self.assertEqual(billing.paid_from({'status':'trial','trial_end':later,'period_end':None}).isoformat(),later)
+        self.assertLess(billing.paid_from({'status':'expired','trial_end':later,'period_end':later}),billing.datetime.fromisoformat(later))
+        with patch.dict(os.environ,{'PRICE_PERSONAL':'abc','PRICE_BUSINESS':'-3','PRICE_FIRM':'1.234','PRICE_CURRENCY':'pesos'}):
+            self.assertEqual((billing.plans(),billing.currency()),({'personal':990,'business':2990,'firm':4990},'EUR'))
+
+    def test_public_operator_particulars_come_only_from_configuration(self):
+        with TestClient(api.app) as client:
+            with patch.dict(os.environ,{'OPERATOR_NAME':'','OPERATOR_ADDRESS':'','OPERATOR_EMAIL':''}):
+                self.assertFalse(client.get('/api/public/operator').json()['complete'])
+            with patch.dict(os.environ,{'OPERATOR_NAME':'Synthetic Operator','OPERATOR_ADDRESS':'Testweg 1; 10115 Berlin','OPERATOR_EMAIL':'operator@example.invalid'}):
+                result=client.get('/api/public/operator').json()
+            self.assertTrue(result['complete']);self.assertEqual(result['address'],['Testweg 1','10115 Berlin'])
 
 
 if __name__=='__main__':unittest.main()

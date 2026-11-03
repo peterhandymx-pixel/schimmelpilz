@@ -14,4 +14,6 @@ ENV LEGAL_DATA_DIR=/data/legal-sources
 ENV OCR_MODEL_DIR=/app/ocr-models
 VOLUME ["/data"]
 EXPOSE 8000
-CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# The API is only reachable on the internal Compose network, behind Caddy, which replaces
+# X-Forwarded-For with the real client address. Trusting it keeps login rate limits per visitor.
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

@@ -51,7 +51,9 @@ class OcrApiTests(test_case_tools.CaseToolsTests):
     def test_review_gate_provenance_original_bytes_and_no_overwrite(self):
         with TestClient(api.app) as client:
             self.login(client);case=self.case(client);original=scan()
-            doc=client.post(f'/api/cases/{case["id"]}/documents',files={'file':('scan.png',original,'image/png')}).json()
+            # These tests drive the manual OCR button, so the automatic reading after upload is switched off here.
+            with patch.object(api.AUTO_TEXT,'process'):
+                doc=client.post(f'/api/cases/{case["id"]}/documents',files={'file':('scan.png',original,'image/png')}).json()
             base=f'/api/cases/{case["id"]}/documents/{doc["id"]}'
             result={'units':[{'unit_no':1,'text':'OCR machine text','confidence':90}],'truncated':False,'unit_kind':'image','total_pages':1,'engine':'tesseract.js-7.0.0','language':'eng','models':{'eng':ocr.MODELS['eng']}}
             with patch('server.document_ocr.available',return_value=True),patch('server.ocr_routes.subprocess.run',return_value=SimpleNamespace(stdout=json.dumps(result).encode())):
@@ -76,7 +78,8 @@ class OcrApiTests(test_case_tools.CaseToolsTests):
     def test_account_and_format_bounds_unavailable_and_failure_leave_text(self):
         with TestClient(api.app) as owner,TestClient(api.app) as other:
             self.login(owner);self.login(other,'ocr-foreign@example.invalid');case=self.case(owner)
-            doc=owner.post(f'/api/cases/{case["id"]}/documents',files={'file':('scan.png',scan(),'image/png')}).json()
+            with patch.object(api.AUTO_TEXT,'process'):
+                doc=owner.post(f'/api/cases/{case["id"]}/documents',files={'file':('scan.png',scan(),'image/png')}).json()
             base=f'/api/cases/{case["id"]}/documents/{doc["id"]}'
             self.assertEqual(other.post(base+'/ocr',json={}).status_code,404)
             self.assertEqual(other.get(base+'/ocr/status').status_code,404)

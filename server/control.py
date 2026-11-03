@@ -12,6 +12,20 @@ from pydantic import BaseModel, Field, field_validator
 WORKSPACE_COOKIE='schimmelpilz_workspace'
 
 
+def admin_mfa_required():
+    return __import__('os').getenv('ADMIN_MFA_REQUIRED','true').lower()!='false'
+
+
+def operator_active(user):
+    """Operator powers need an administrator who signed in with a second factor (unless disabled for development)."""
+    return bool(user.get('is_admin')) and (bool(user.get('mfa_enabled')) or not admin_mfa_required())
+
+
+def require_operator(user):
+    if not user.get('is_admin'):raise HTTPException(403,'administrator_required')
+    if not operator_active(user):raise HTTPException(403,'admin_mfa_required')
+
+
 def migrate(c):
     columns={r['name'] for r in c.execute('PRAGMA table_info(users)')}
     for name,definition in [('is_admin','INTEGER NOT NULL DEFAULT 0'),('disabled','INTEGER NOT NULL DEFAULT 0'),('control_version','INTEGER NOT NULL DEFAULT 0')]:
@@ -26,7 +40,8 @@ def migrate(c):
 
 
 def audit(c,actor,workspace,action,target):
-    c.execute('INSERT INTO operator_audit VALUES(?,?,?,?,?,?)',(str(uuid.uuid4()),actor,workspace,action,target,datetime.now(UTC).isoformat()))
+    # An account that just deleted itself leaves no actor to attribute; skip rather than fail the request.
+    c.execute('INSERT INTO operator_audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=?)',(str(uuid.uuid4()),actor,workspace,action,target,datetime.now(UTC).isoformat(),actor))
 
 
 def membership(c,owner,actor,operator=False):
@@ -45,7 +60,7 @@ def principal(c,user,request):
     # Identity, membership management, subscriptions and operator actions always use the real account.
     path=request.url.path
     if path.startswith(('/api/auth/','/api/team','/api/admin','/api/billing')):return user
-    member=membership(c,owner,actor,user.get('is_admin',False))
+    member=membership(c,owner,actor,operator_active(user))
     if owner==actor:return {**user,'actor_id':actor,'workspace_role':'owner','allowed_cases':None}
     if member['role']=='viewer' and request.method not in {'GET','HEAD'}:raise HTTPException(403,'workspace_read_only')
     allowed=member['case_ids']
@@ -56,9 +71,10 @@ def principal(c,user,request):
         if case_id:
             if case_id not in allowed:raise HTTPException(404,'Case not found')
         elif path=='/api/cases' and request.method=='GET':pass
-        elif path in {'/api/research/status','/api/cost-reviews/calculate','/api/fee-tables/calculate'}:pass
+        elif path in {'/api/research/status','/api/cost-reviews/calculate','/api/fee-tables/calculate','/api/deadlines/calculate','/api/deadlines/holidays'}:pass
         elif path.startswith('/api/legal/') and request.method=='GET':pass
         elif path=='/api/tasks/calendar.ics' and request.query_params.get('case_id') in allowed:pass
+        elif path in {'/api/exports/cases.csv','/api/exports/cases.xlsx','/api/exports/tasks.csv','/api/exports/tasks.xlsx'} and request.method=='GET':pass
         elif path.startswith('/api/cost-reviews'):
             target=request.query_params.get('case_id') or getattr(request.state,'payload_case_id',None)
             if len(parts)>3:
@@ -66,7 +82,7 @@ def principal(c,user,request):
                 if review:target=review['case_id']
             if target not in allowed:raise HTTPException(403,'case_not_granted')
         else:raise HTTPException(403,'case_scoped_member_use_case_workspace')
-    elif not path.startswith(('/api/cases','/api/contacts','/api/inbox','/api/tasks/','/api/cost-reviews','/api/fee-tables','/api/legal/','/api/research/status')):
+    elif not path.startswith(('/api/cases','/api/contacts','/api/inbox','/api/tasks/','/api/cost-reviews','/api/fee-tables','/api/deadlines/','/api/legal/','/api/research/status','/api/exports/')):
         raise HTTPException(403,'personal_account_endpoint')
     owner_row=c.execute('SELECT letterhead_id FROM users WHERE id=?',(owner,)).fetchone()
     return {**user,'id':owner,'actor_id':actor,'workspace_role':member['role'],'allowed_cases':allowed,'letterhead_id':owner_row['letterhead_id']}
@@ -119,10 +135,10 @@ class SystemControl(BaseModel):
 def router(db,require_user,now,system_status=None):
     r=APIRouter()
     def operator(user):
-        if not user.get('is_admin'):raise HTTPException(403,'administrator_required')
+        require_operator(user)
     def owner(request,user):
         selected=request.cookies.get(WORKSPACE_COOKIE) or user['id']
-        if selected!=user['id'] and not user.get('is_admin'):raise HTTPException(403,'workspace_owner_required')
+        if selected!=user['id'] and not operator_active(user):raise HTTPException(403,'workspace_owner_required')
         return selected
     def scope(c,owner_id,values):
         if values is None:return None
@@ -151,10 +167,10 @@ def router(db,require_user,now,system_status=None):
     def team(request:Request,user:dict=Depends(require_user)):
         selected=request.cookies.get(WORKSPACE_COOKIE) or user['id']
         with db() as c:
-            member=membership(c,selected,user['id'],user.get('is_admin',False))
+            member=membership(c,selected,user['id'],operator_active(user))
             choices=[{'owner_id':user['id'],'name':user['organisation'] or user['full_name'],'role':'owner'}]
-            choices += [dict(row) for row in c.execute('SELECT m.owner_id,u.organisation AS name,m.role FROM team_members m JOIN users u ON u.id=m.owner_id WHERE m.user_id=? AND m.enabled=1 AND u.disabled=0',(user['id'],))]
-            if user.get('is_admin'):
+            choices += [dict(row) for row in c.execute("SELECT m.owner_id,COALESCE(NULLIF(u.organisation,''),u.full_name) AS name,m.role FROM team_members m JOIN users u ON u.id=m.owner_id WHERE m.user_id=? AND m.enabled=1 AND u.disabled=0",(user['id'],))]
+            if operator_active(user):
                 choices=[{'owner_id':row['id'],'name':row['email'],'role':'operator' if row['id']!=user['id'] else 'owner'} for row in c.execute('SELECT id,email FROM users ORDER BY email')]
             members=[];invites=[]
             if member['role'] in {'owner','operator'}:
@@ -166,7 +182,7 @@ def router(db,require_user,now,system_status=None):
     def switch(payload:Switch,response:Response,request:Request,user:dict=Depends(require_user)):
         selected=str(payload.owner_id) if payload.owner_id else user['id']
         with db() as c:
-            membership(c,selected,user['id'],user.get('is_admin',False))
+            membership(c,selected,user['id'],operator_active(user))
             audit(c,user['id'],selected,'workspace_selected',selected)
         response.set_cookie(WORKSPACE_COOKIE,selected,httponly=True,samesite='strict',secure=request.url.scheme=='https' or __import__('os').getenv('COOKIE_SECURE','').lower()=='true',path='/',max_age=604800)
         return {'selected':selected}

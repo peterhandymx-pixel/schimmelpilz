@@ -7,7 +7,11 @@ export async function authRequest(path, payload) {
     headers: payload ? { "Content-Type": "application/json", "X-Schimmelpilz-Request": "1" } : {},
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });
-  if (!response.ok) { const error = new Error("Authentication failed"); error.status = response.status; throw error; }
+  if (!response.ok) {
+    const error = new Error("Authentication failed"); error.status = response.status;
+    try { error.detail = (await response.json()).detail; } catch { /* Non-JSON error body. */ }
+    throw error;
+  }
   return response.status === 204 ? null : response.json();
 }
 
@@ -28,5 +32,6 @@ export function useAuth() {
     return () => { active = false; };
   }, [attempt]);
   const logout = async () => { await authRequest("logout", {}); setUser(null); };
-  return { user, setUser, loading, error, logout, retry: () => setAttempt(value => value + 1) };
+  const refresh = async () => { const result = await authRequest("me"); setUser(result); return result; };
+  return { user, setUser, refresh, loading, error, logout, retry: () => setAttempt(value => value + 1) };
 }

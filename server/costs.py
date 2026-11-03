@@ -1,19 +1,16 @@
 """Private invoice arithmetic. Inputs are manual; no statutory entitlement inference."""
-import io
 import json
 import re
 import uuid
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from html import escape
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 from .fee_tables import FeeBasis, lookup
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from .dates import display_date
+from .exports import amount, document_response, table_response
 
 CENT = Decimal('0.01')
 
@@ -163,6 +160,38 @@ def migrate(connection):
     ''')
 
 
+def report_blocks(item, de):
+    """Cost review report as (style, text) blocks, shared by the PDF and the Word export."""
+    inv, result = item['invoice'], item['result']
+    blocks = []
+    def paragraph(value, style='BodyText'):
+        blocks.append((style, str(value)))
+    paragraph('Kostenprüfung' if de else 'Cost review', 'Title')
+    paragraph(inv['title'], 'Heading2')
+    paragraph(f"{item['case_reference']} · {item['case_title']} · Version {item['version']} · {display_date(item['updated_at'], de)}")
+    kinds = {'invoice': 'Rechnung', 'lawyer': 'Anwaltsrechnung', 'court': 'Gerichtskosten', 'operating': 'Betriebskosten'} if de else {'invoice': 'Invoice', 'lawyer': 'Lawyer invoice', 'court': 'Court costs', 'operating': 'Operating costs'}
+    paragraph(f"{inv['issuer']} · {inv['invoice_number']} · {display_date(inv['invoice_date'], de)} · {kinds[inv['kind']]}")
+    paragraph(('Rechenprüfung anhand manueller Eingaben. Keine rechtliche Freigabe.' if de else 'Arithmetic check using manual inputs. No legal approval.'))
+    for idx, (line, checked) in enumerate(zip(inv['lines'], result['lines']), 1):
+        paragraph(f"{idx}. {line['description']}: {line['quantity']} × {line['unit_net']} = {checked['net']} {inv['currency']}; {line['tax_rate']}%", 'Heading3')
+        paragraph(f"{'Rechnungsnetto / Differenz' if de else 'Billed net / difference'}: {line['billed_net'] or '-'} / {checked['difference'] or '-'}; {'Beleg' if de else 'Evidence'}: {line['evidence'] or '-'}")
+        source=checked.get('fee_source')
+        if source:
+            paragraph(f"{source['source']['citation']} · {source['version']} · 1.0: {source['base_fee']} EUR · {'Wertstufe' if de else 'Value bracket'}: {source['bracket']} EUR · {'Quellen geprüft' if de else 'Sources checked'}: {display_date(source['source_checked_on'], de)}")
+            paragraph(source['source']['table']+'\n'+source['source']['transition']+'\n'+source['applicability_note']+'\nSHA-256: '+source['table_sha256'])
+    for group in result['tax_groups']:
+        paragraph(f"{'Steuer auf netto' if de else 'Tax on net'} {group['net']} {inv['currency']} × {group['rate']}% = {group['tax']} {inv['currency']}")
+    for label, value in [(('Netto' if de else 'Net'), result['net']), (('Steuer' if de else 'Tax'), result['tax']), (('Brutto' if de else 'Gross'), result['gross']), (('Abzüge brutto' if de else 'Gross credits'), inv['credit_gross']), (('Errechnet zahlbar' if de else 'Calculated payable'), result['payable']), (('Rechnung zahlbar' if de else 'Billed payable'), inv['billed_total']), (('Differenz: Rechnung minus errechnet' if de else 'Difference: billed minus calculated'), result['difference'])]:
+        paragraph(f'{label}: {value} {inv["currency"]}')
+    paragraph('Rundung: Positionsnetto kaufmännisch auf Cent; Steuer je Steuersatzgruppe auf Cent; Abzüge brutto.' if de else 'Rounding: line net half-up to cents; tax half-up per rate group; credits gross.')
+    paragraph(('Grundlage / Tabellenstand / offene Rechtsfragen' if de else 'Basis / table version / unresolved legal issues'), 'Heading2')
+    paragraph(inv['basis'] or ('Nicht erfasst' if de else 'Not recorded'))
+    paragraph(inv['notes'] or '-')
+    if item['document_name']:
+        paragraph(('Verknüpftes Dokument: ' if de else 'Linked document: ') + item['document_name'])
+    return blocks
+
+
 def router(db, require_user, now, record_activity):
     routes = APIRouter()
 
@@ -238,8 +267,7 @@ def router(db, require_user, now, record_activity):
             owned(connection, review_id, user['id'])
             return [{'version': row['version'], 'invoice': json.loads(row['invoice']), 'result': json.loads(row['result']), 'saved_at': row['saved_at']} for row in connection.execute('SELECT * FROM cost_review_versions WHERE review_id=? ORDER BY version DESC', (review_id,))]
 
-    @routes.get('/api/cost-reviews/{review_id}/report.pdf')
-    def report(review_id: str, lang: Literal['de', 'en'] = 'de', version: int | None = None, user: dict = Depends(require_user)):
+    def load(review_id, version, user):
         with db() as connection:
             item = public(connection, owned(connection, review_id, user['id']))
             if version is not None:
@@ -247,36 +275,27 @@ def router(db, require_user, now, record_activity):
                 if not saved:
                     raise HTTPException(404, 'Version not found')
                 item.update(version=version, invoice=json.loads(saved['invoice']), result=json.loads(saved['result']), updated_at=saved['saved_at'])
+        return item
+
+    @routes.get('/api/cost-reviews/{review_id}/report.{fmt}')
+    def report(review_id: str, fmt: Literal['pdf', 'docx'], lang: Literal['de', 'en'] = 'de', version: int | None = None, user: dict = Depends(require_user)):
+        item = load(review_id, version, user)
+        return document_response(fmt, f'cost-review-v{item["version"]}', item['invoice']['title'], report_blocks(item, lang == 'de'),
+                                 'Editable export of an arithmetic check using manual inputs. No legal approval; changes made in Word are not reviewed.')
+
+    @routes.get('/api/cost-reviews/{review_id}/lines.{fmt}')
+    def lines(review_id: str, fmt: Literal['csv', 'xlsx'], lang: Literal['de', 'en'] = 'de', version: int | None = None, user: dict = Depends(require_user)):
+        item = load(review_id, version, user)
         inv, result, de = item['invoice'], item['result'], lang == 'de'
-        styles, output = getSampleStyleSheet(), io.BytesIO()
-        story = []
-        def paragraph(value, style='BodyText'):
-            story.append(Paragraph(escape(str(value)).replace('\n', '<br/>'), styles[style]))
-            story.append(Spacer(1, 6))
-        paragraph('Schimmelpilz · ' + ('Kostenprüfung' if de else 'Cost review'), 'Title')
-        paragraph(inv['title'], 'Heading2')
-        paragraph(f"{item['case_reference']} · {item['case_title']} · Version {item['version']} · {item['updated_at']}")
-        kinds = {'invoice': 'Rechnung', 'lawyer': 'Anwaltsrechnung', 'court': 'Gerichtskosten', 'operating': 'Betriebskosten'} if de else {'invoice': 'Invoice', 'lawyer': 'Lawyer invoice', 'court': 'Court costs', 'operating': 'Operating costs'}
-        paragraph(f"{inv['issuer']} · {inv['invoice_number']} · {inv['invoice_date'] or '-'} · {kinds[inv['kind']]}")
-        paragraph(('Rechenprüfung anhand manueller Eingaben. Keine rechtliche Freigabe.' if de else 'Arithmetic check using manual inputs. No legal approval.'))
-        for idx, (line, checked) in enumerate(zip(inv['lines'], result['lines']), 1):
-            paragraph(f"{idx}. {line['description']}: {line['quantity']} × {line['unit_net']} = {checked['net']} {inv['currency']}; {line['tax_rate']}%", 'Heading3')
-            paragraph(f"{'Rechnungsnetto / Differenz' if de else 'Billed net / difference'}: {line['billed_net'] or '-'} / {checked['difference'] or '-'}; {'Beleg' if de else 'Evidence'}: {line['evidence'] or '-'}")
-            source=checked.get('fee_source')
-            if source:
-                paragraph(f"{source['source']['citation']} · {source['version']} · 1.0: {source['base_fee']} EUR · {'Wertstufe' if de else 'Value bracket'}: {source['bracket']} EUR · {'Quellen geprüft' if de else 'Sources checked'}: {source['source_checked_on']}")
-                paragraph(source['source']['table']+'\n'+source['source']['transition']+'\n'+source['applicability_note']+'\nSHA-256: '+source['table_sha256'])
-        for group in result['tax_groups']:
-            paragraph(f"{'Steuer auf netto' if de else 'Tax on net'} {group['net']} {inv['currency']} × {group['rate']}% = {group['tax']} {inv['currency']}")
-        for label, value in [(('Netto' if de else 'Net'), result['net']), (('Steuer' if de else 'Tax'), result['tax']), (('Brutto' if de else 'Gross'), result['gross']), (('Abzüge brutto' if de else 'Gross credits'), inv['credit_gross']), (('Errechnet zahlbar' if de else 'Calculated payable'), result['payable']), (('Rechnung zahlbar' if de else 'Billed payable'), inv['billed_total']), (('Differenz: Rechnung minus errechnet' if de else 'Difference: billed minus calculated'), result['difference'])]:
-            paragraph(f'{label}: {value} {inv["currency"]}')
-        paragraph('Rundung: Positionsnetto kaufmännisch auf Cent; Steuer je Steuersatzgruppe auf Cent; Abzüge brutto.' if de else 'Rounding: line net half-up to cents; tax half-up per rate group; credits gross.')
-        paragraph(('Grundlage / Tabellenstand / offene Rechtsfragen' if de else 'Basis / table version / unresolved legal issues'), 'Heading2')
-        paragraph(inv['basis'] or ('Nicht erfasst' if de else 'Not recorded'))
-        paragraph(inv['notes'] or '-')
-        if item['document_name']:
-            paragraph(('Verknüpftes Dokument: ' if de else 'Linked document: ') + item['document_name'])
-        SimpleDocTemplate(output, title=inv['title']).build(story)
-        return Response(output.getvalue(), media_type='application/pdf', headers={'Content-Disposition': f'attachment; filename="cost-review-v{item["version"]}.pdf"'})
+        headers = (['Pos.', 'Beschreibung', 'Menge', 'Einzelpreis netto', 'Netto errechnet', 'Rechnungsnetto', 'Differenz', 'Steuersatz %', 'Beleg', 'Währung'] if de
+                   else ['No.', 'Description', 'Quantity', 'Unit net', 'Calculated net', 'Billed net', 'Difference', 'Tax rate %', 'Evidence', 'Currency'])
+        rows = [[index, line['description'], amount(line['quantity']), amount(line['unit_net']), amount(checked['net']), amount(line['billed_net']), amount(checked['difference']),
+                 amount(line['tax_rate']), line['evidence'], inv['currency']] for index, (line, checked) in enumerate(zip(inv['lines'], result['lines']), 1)]
+        rows.append([None] * len(headers))
+        for label, value in [(('Netto' if de else 'Net'), result['net']), (('Steuer' if de else 'Tax'), result['tax']), (('Brutto' if de else 'Gross'), result['gross']),
+                             (('Abzüge brutto' if de else 'Gross credits'), inv['credit_gross']), (('Errechnet zahlbar' if de else 'Calculated payable'), result['payable']),
+                             (('Rechnung zahlbar' if de else 'Billed payable'), inv['billed_total']), (('Differenz: Rechnung minus errechnet' if de else 'Difference: billed minus calculated'), result['difference'])]:
+            rows.append([None, label, None, None, amount(value), None, None, None, '', inv['currency']])
+        return table_response(fmt, f'cost-review-v{item["version"]}', 'Kostenprüfung' if de else 'Cost review', headers, rows, de)
 
     return routes

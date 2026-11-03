@@ -54,6 +54,28 @@ class DocumentResearchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()['id']
 
+    def test_interrupted_extraction_can_be_retried_but_invalid_files_stay_final(self):
+        with TestClient(api.app) as client:
+            self.login(client)
+            case_id = self.case(client)
+            # The automatic reading right after the upload is interrupted (worker timeout).
+            with patch.object(api.subprocess, 'run', side_effect=api.subprocess.TimeoutExpired('extract', 30)):
+                upload = client.post(f'/api/cases/{case_id}/documents', files={'file': ('invoice.pdf', synthetic_pdf(), 'application/pdf')})
+            self.assertEqual(upload.status_code, 201, upload.text)
+            document_id = upload.json()['id']
+            url = f'/api/cases/{case_id}/documents/{document_id}/text'
+            failed = client.get(url).json()
+            self.assertEqual((failed['extraction']['status'], failed['extraction']['error_code']), ('failed', 'extraction_failed'))
+            url = f'/api/cases/{case_id}/documents/{document_id}/extract'
+            retried = client.post(url).json()
+            self.assertEqual(retried['extraction']['status'], 'ready')
+            self.assertIn('TEST-778', retried['units'][0]['original_text'])
+            broken = client.post(f'/api/cases/{case_id}/documents', files={'file': ('broken.pdf', b'%PDF-1.4 not a pdf', 'application/pdf')}).json()['id']
+            broken_url = f'/api/cases/{case_id}/documents/{broken}/extract'
+            self.assertEqual(client.post(broken_url).json()['extraction']['error_code'], 'invalid_document')
+            with patch.object(api.subprocess, 'run', side_effect=AssertionError('stored result must be reused')):
+                self.assertEqual(client.post(broken_url).json()['extraction']['error_code'], 'invalid_document')
+
     def test_pdf_review_selection_and_immutable_generation_sources(self):
         with TestClient(api.app) as client:
             self.login(client)

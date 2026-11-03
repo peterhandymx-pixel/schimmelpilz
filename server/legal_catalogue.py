@@ -317,7 +317,12 @@ def catalogue_status():
 def sync_catalogue(decisions_per_court=8):
     if not SYNC_LOCK.acquire(blocking=False):
         return False
-    init_catalogue()
+    try:
+        init_catalogue()
+    except Exception:
+        # Never keep the refresh lock when the local catalogue cannot even be opened.
+        SYNC_LOCK.release()
+        raise
     with PROGRESS_LOCK:
         PROGRESS.update(running=True,completed=0,total=len(LAWS)+1,current='',errors=[])
     def task(name, work):

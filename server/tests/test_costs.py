@@ -123,3 +123,13 @@ class CostApiTests(unittest.TestCase):
 
 if __name__=='__main__':
     unittest.main()
+
+
+class DisplayDateTests(unittest.TestCase):
+    def test_documents_use_german_day_month_year(self):
+        from server.dates import display_date
+        self.assertEqual(display_date('2026-11-05'), '05.11.2026')
+        self.assertEqual(display_date('2026-11-05', de=False), '05/11/2026')
+        self.assertEqual(display_date('2026-10-21T22:30:00+00:00'), '22.10.2026')  # late UTC evening is already the next day in Berlin
+        self.assertEqual(display_date(None), '-')
+        self.assertEqual(display_date('not a date'), 'not a date')

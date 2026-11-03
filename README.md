@@ -2,9 +2,13 @@
 
 Implementation plan for an English/German legal assistant on one self-managed server.
 
-Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page with planned pricing/trial offers, tailored registration/sign-in, account-owned case files, structured intake, persistent documents with reviewed PDF/DOCX text extraction, versioned drafts with manual review and account-holder approval, private letter-paper PDF exports, manual tasks/activity and a local Ollama research bot with a German federal-law catalogue. Local OCR, invoice arithmetic, bounded fee-table lookup, procedural working papers, Word/ZIP/calendar exports are also implemented. Team roles, case grants, system administration and an explicit seven-day trial are implemented. Stripe checkout/portal/webhooks require operator credentials and a real sandbox test; automated substantive legal approval remains unimplemented.
+Status: working local prototype for consumers, businesses and law firms. Implemented: bilingual landing page with planned pricing/trial offers, tailored registration/sign-in, account-owned case files, structured intake, persistent documents with reviewed PDF/DOCX text extraction, versioned drafts with manual review and account-holder approval, private letter-paper PDF exports, manual tasks/activity and an AI research bot (Gemini API by default, local Ollama optional) with a German federal-law catalogue. Local OCR, invoice arithmetic, bounded fee-table lookup, procedural working papers, Word/ZIP/calendar exports are also implemented. Team roles, case grants, system administration and an explicit seven-day trial are implemented. Paid access uses prepaid monthly Clip payment links confirmed by an administrator; Impressum, privacy notice and terms pages read the operator's particulars from `.env` and need legal review. Automated substantive legal approval remains unimplemented.
 
-**Posteingang / Inbox** accepts one or several private files before a case is chosen. Record a subject, sender, manual received date and internal note, then explicitly assign each file to an existing owned case. Pending metadata can be edited with version checks; assignment is transactional; corrections retain earlier document records and an explicit audit trail. The original bytes are retained and available for download. Assigned PDF/DOCX files use the existing transcription-review workflow before their passages can be selected for research. This is a file-upload inbox; email accounts, automatic assignment and automatic deadlines are not connected. Local OCR is available after case assignment.
+**Account and data management:** users edit their profile, change email (with confirmation link) and password, reset a forgotten password by email, enable two-factor sign-in (authenticator app plus recovery codes; mandatory for administrators) and permanently delete cases, documents, drafts, tasks, contacts, inbox entries or their whole account. Deletion is owner-only. Inbox originals return to the Posteingang when their case copy is deleted. Email features need the operator's SMTP settings in `.env` (`SMTP_HOST`, `SMTP_FROM`, …); `MAIL_OUTBOX_DIR` writes messages to files for local testing. See [account, mail and deadline functions](docs/account-and-mail.md).
+
+**Fristenrechner** calculates forward statutory periods under §§ 187, 188, 193 BGB / § 222 ZPO with statewide holidays (2015–2035) and can save the result as a high-priority task. It is a calculation aid; which period applies and when it starts remains the user's decision. Saved drafts can be **emailed** explicitly as PDF or Word; this is never formal court filing.
+
+**Posteingang / Inbox** accepts one or several private files before a case is chosen. Record a subject, sender, manual received date and internal note, then explicitly assign each file to an existing owned case. Pending metadata can be edited with version checks; assignment is transactional; corrections retain earlier document records and an explicit audit trail. The original bytes are retained and available for download. Assigned PDF/DOCX files use the existing transcription-review workflow before their passages can be selected for research. Owners can also fetch attachments from unread emails in their own IMAP mailbox (read-only, encrypted password, no automatic assignment). Local OCR is available after case assignment.
 
 The public price overview proposes **Personal €9.90, Business €29.90 and Law firm €49.90 per individual account/month**, with a **7-day free trial at launch**. Prices are proposed final amounts including applicable taxes, not an active checkout. The current pilot stays free: no payment details, charges, subscription or trial expiry are created by registration. Pricing buttons preselect the corresponding account type. See [pricing assumptions and billing boundary](docs/pricing-plan.md).
 
@@ -12,7 +16,7 @@ Saved drafts now have **Draft → In review → Approved (user review)**, per-it
 
 The application restores saved cases, documents, drafts, tasks and research conversations after browser reloads and backend restarts. Open a case under **Aktenbestand** to use its overview, parties, documents, drafts, deadlines/tasks and history registers. Internal references stay unchanged when particulars are edited. Global registers provide search across the account. SQLite and uploaded files are kept under `data/`, outside Git. See [storage and API instructions](server/README.md).
 
-Encrypted operator backups now capture a consistent database and its referenced uploads/letter-paper versions, validate their integrity, and restore only to a new directory. Restore revokes saved sessions. Native Windows daily/sign-in backup tasks are installed for both local installations; no automatic deletion or off-host copy is configured. See [backup/restore operation and verification](docs/backup-restore.md).
+Encrypted operator backups now capture a consistent database and its referenced uploads/letter-paper versions, validate their integrity, and restore only to a new directory. Restore revokes saved sessions. Native Windows daily/sign-in backup tasks are installed for both local installations; no automatic deletion or off-host copy is configured. See [backup/restore operation and verification](docs/backup-restore.md). For the Docker server installation, a `backup` service makes and verifies one encrypted backup per day; see the [production go-live runbook](docs/production.md).
 
 **Recherche** contains the AI bot with case selection, German/English output, six work modes and adoption of an answer as an editable draft. It uses selected account-owned case particulars, bounded chat history, explicitly selected transcription-reviewed PDF/DOCX excerpts and selected or automatically found public legal passages. Filenames alone do not provide file contents. Responses, exact supplied passages, generation IDs, model, token counts and failures are persisted per case. Only one local generation runs at a time.
 
@@ -37,15 +41,15 @@ Use one Linux server in the location selected by the owner. Run four services th
 | Service | Responsibility |
 | --- | --- |
 | Frontend | React interface, login, cases, uploads, research chat and draft editor |
-| API | FastAPI authentication, ownership checks, SQLite, private uploads and local model requests |
-| Ollama | Run the chosen English/German model locally; disable cloud features |
+| API | FastAPI authentication, ownership checks, SQLite, private uploads and AI requests (Gemini API by default) |
+| Backup | Daily encrypted, verified backups |
 | Caddy | HTTPS and routing to the web application |
 
-The implemented application uses React/Vite and Python/FastAPI. Keep the database in SQLite and uploads in private local directories. Run a single API worker: a process lock serialises local generation and SQLite records pending/completed/failed requests. A durable background queue remains future work. OCR runs in a bounded local worker. No separate database server, Redis, hosted vector database or external AI API is needed.
+The implemented application uses React/Vite and Python/FastAPI. Keep the database in SQLite and uploads in private local directories. Run a single API worker: a process lock serialises generation and SQLite records pending/completed/failed requests. A durable background queue remains future work. OCR runs in a bounded local worker. No separate database server, Redis or hosted vector database is needed. Research chat uses the Gemini API; `AI_PROVIDER=ollama` switches back to a local Ollama model.
 
-Only Caddy exposes public web ports. The application and Ollama communicate over an internal Docker network. The browser never calls Ollama directly. Pin dependency and container versions when implementation starts.
+Only Caddy exposes public web ports. The browser never calls the AI provider directly; only the API holds the key. Pin dependency and container versions when implementation starts.
 
-Case storage, AI inference and draft preparation happen on this server; OCR runs locally after installing its runtime and German/English models. Optional off-server backups are operator-managed and must be treated as a separate data flow. GitHub holds source code and documentation; runtime data stays outside Git.
+Case storage and draft preparation happen on this server; AI answers are generated by Google's Gemini API from the context the API sends with each research question. OCR runs locally after installing its runtime and German/English models. Optional off-server backups are operator-managed and must be treated as a separate data flow. GitHub holds source code and documentation; runtime data stays outside Git.
 
 ## First release
 
@@ -70,9 +74,9 @@ Store hashed passwords, use secure server-side sessions, CSRF protection, login 
 
 ## Server and model selection
 
-The same server must have enough RAM/VRAM for the selected model, context size and concurrent requests. Select a local model with suitable English/German performance and a licence appropriate for the intended use. Benchmark representative documents on the actual hardware before choosing a model or quoting capacity. CPU inference is possible, but latency may be unsuitable for interactive use.
+With the Gemini API the server needs no GPU: a small Linux server suffices for the API, OCR and LibreOffice conversion. Choose the Gemini model by `GEMINI_MODEL`, use a paid key so prompts are not used for training, and evaluate answer quality on representative synthetic cases before advertising the research scope.
 
-Set OLLAMA_NO_CLOUD=1, select a local model, and do not publish Ollama's port. Queue requests and start with one model request at a time. A model download needs internet access; ordinary local inference should not send case content to a cloud model.
+To keep case content on the server instead, set `AI_PROVIDER=ollama` and run a local model (see Shadow PC development below); that needs enough RAM/VRAM for the model, and `OLLAMA_NO_CLOUD=1`.
 
 ## Deployment handoff
 
@@ -84,10 +88,9 @@ For a local production-shaped run:
 cp .env.example .env
 # Set DOMAIN to the hostname that points to this server.
 docker compose up -d --build
-docker compose exec ollama ollama pull qwen2.5:7b
 ```
 
-The public web service is exposed through Caddy. The API and SQLite data remain on the internal network and persistent `app_data` volume; downloaded models use `ollama_models`. Set `OLLAMA_MODEL` in `.env` and pull that same model when changing it. The supplied Compose configuration uses CPU inference unless the operator adds GPU support; Docker deployment has not been tested on Shadow.
+The public web service is exposed through Caddy. The API and SQLite data remain on the internal network and persistent `app_data` volume; set `GEMINI_API_KEY` in `.env` for research chat. Docker deployment has not been tested on Shadow.
 
 ### Shadow PC development
 
@@ -112,16 +115,16 @@ Use Docker on the eventual Linux server, where Caddy, the landing page and the A
 
 This workspace has the official portable Ollama 0.35.1 distribution under ignored `data/ollama-v0.35.1/`, with `qwen2.5:7b` downloaded under `data/models`. These runtime files are not on GitHub. Configure `OLLAMA_MODELS` to that directory when restarting the portable runtime. API defaults: `OLLAMA_BASE_URL=http://127.0.0.1:11434`, `OLLAMA_MODEL=qwen2.5:7b`; no external AI key is required. Model quality must be evaluated for the intended legal work.
 
-The installed native services can be started together with `./start-local.ps1` from the repository root. The launcher reuses running services and existing data; it does not install dependencies. A hidden, independent Windows worker starts the services and the launcher checks the API and web proxy before reporting readiness. It does not register a Windows login task or restart services after a crash/reboot. Research chat calls the real local model and retains case-specific conversation and supplied document/legal-source passages. The native browser tests use separate synthetic preview data. Automated substantive legal approval remains pending. See [API documentation](server/README.md) for extraction/context limits and endpoint details.
+The installed native services can be started together with `./start-local.ps1` from the repository root. The launcher reuses running services and existing data; it does not install dependencies. A hidden, independent Windows worker starts the services and the launcher checks the API and web proxy before reporting readiness. It does not register a Windows login task or restart services after a crash/reboot. Research chat calls the configured model (set `AI_PROVIDER=ollama` locally to use the installed Ollama runtime) and retains case-specific conversation and supplied document/legal-source passages. The native browser tests use separate synthetic preview data. Automated substantive legal approval remains pending. See [API documentation](server/README.md) for extraction/context limits and endpoint details.
 
 The Adressen module now provides an account-owned central address book: create/edit contacts, assign multiple case files with a role per case, search/filter and copy existing case parties explicitly. The same contacts appear in case Beteiligte tabs and can be selected as draft recipients. Existing case particulars and saved draft addresses remain unchanged after contact edits. Version checks prevent stale contact edits from silently overwriting newer data.
 
 The owner supplies the server, domain, DNS and secret values. Target workflow once those deployment files exist:
 
 1. Clone the GitHub repository onto the server.
-2. Copy .env.example to .env and configure the domain, application secret and local model.
+2. Copy .env.example to .env and configure the domain, Gemini key, operator particulars, SMTP and Clip links.
 3. Start the Compose services, initialise storage and create the first administrator.
-4. Download the selected model and test a synthetic case end to end.
+4. Test a synthetic case end to end, including a research question.
 5. Configure encrypted backups and perform a restore test.
 
 For upgrades: back up persistent data, fetch a reviewed Git revision, rebuild containers, apply migrations, and verify health. Keep a known-good application revision and a matching database backup for rollback. Do not remove persistent volumes during routine updates.

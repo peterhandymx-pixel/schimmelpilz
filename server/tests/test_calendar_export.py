@@ -35,6 +35,10 @@ class CalendarApiTests(test_case_tools.CaseToolsTests):
             data=owner.get(endpoint).content.decode()
             self.assertIn('Calendar task ÄÖÜ',data)
             self.assertNotIn('Undated task',data)
+            # German by default, English on request.
+            self.assertIn('Manuell erfasster Termin',data)
+            self.assertIn('Manually recorded date',owner.get(endpoint+'?lang=en').content.decode())
+            self.assertEqual(owner.get(endpoint+'?lang=fr').status_code,422)
             self.assertNotIn('Calendar task',other.get(endpoint).content.decode())
             self.assertEqual(other.get(endpoint+'?case_id='+case['id']).status_code,404)
             self.assertEqual(owner.get(endpoint+'?alarm_days=31').status_code,422)

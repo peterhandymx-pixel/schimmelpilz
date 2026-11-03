@@ -4,7 +4,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -73,7 +73,7 @@ def migrate(connection):
             connection.execute(f'ALTER TABLE documents ADD COLUMN {name} TEXT')
 
 
-def router(db, require_user, now, record_activity, upload_directory, max_bytes, allowed_extensions):
+def router(db, require_user, now, record_activity, upload_directory, max_bytes, allowed_extensions, read_text=None):
     routes = APIRouter()
 
     def owned(connection, identifier, user_id):
@@ -156,7 +156,7 @@ def router(db, require_user, now, record_activity, upload_directory, max_bytes, 
             return public(connection,owned(connection,identifier,user['id']))
 
     @routes.post('/api/inbox/{identifier}/assign')
-    def assign(identifier: str, payload: Assignment, user: dict = Depends(require_user)):
+    def assign(identifier: str, payload: Assignment, background_tasks: BackgroundTasks, user: dict = Depends(require_user)):
         with db() as connection:
             connection.execute('BEGIN IMMEDIATE')
             row = owned(connection,identifier,user['id'])
@@ -172,10 +172,12 @@ def router(db, require_user, now, record_activity, upload_directory, max_bytes, 
                 VALUES(?,?,?,?,?,?,?)''',(identifier,case_id,row['original_name'],row['stored_name'],row['content_type'],row['size_bytes'],row['created_at']))
             connection.execute('UPDATE inbox_documents SET case_id=?,document_id=?,assigned_at=?,version=version+1 WHERE id=?',(case_id,identifier,now(),identifier))
             record_activity(connection,case_id,'inbox_assigned',row['original_name'])
-            return public(connection,owned(connection,identifier,user['id']))
+            result=public(connection,owned(connection,identifier,user['id']))
+        if read_text:read_text(background_tasks,case_id,identifier,user['id'])
+        return result
 
     @routes.post('/api/inbox/{identifier}/correct')
-    def correct(identifier: str, payload: Correction, user: dict = Depends(require_user)):
+    def correct(identifier: str, payload: Correction, background_tasks: BackgroundTasks, user: dict = Depends(require_user)):
         with db() as connection:
             connection.execute('BEGIN IMMEDIATE')
             row = owned(connection,identifier,user['id'])
@@ -201,6 +203,8 @@ def router(db, require_user, now, record_activity, upload_directory, max_bytes, 
             connection.execute('UPDATE inbox_documents SET case_id=?,document_id=?,assigned_at=?,version=version+1 WHERE id=?',(case_id,document_id,timestamp,identifier))
             for affected in [row['case_id'],case_id]:
                 record_activity(connection,affected,'inbox_corrected',row['original_name']+' · '+payload.reason)
-            return public(connection,owned(connection,identifier,user['id']))
+            result=public(connection,owned(connection,identifier,user['id']))
+        if read_text:read_text(background_tasks,case_id,document_id,user['id'])
+        return result
 
     return routes

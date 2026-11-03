@@ -1,0 +1,35 @@
+.account-settings{display:grid;gap:18px;padding:20px 24px;border-top:1px solid #dce2dc}
+.account-section{display:grid;gap:10px;padding-top:16px;border-top:1px solid #e6ebe5}
+.account-section h3,.account-danger summary{margin:0;font-size:15px;color:#153d32}
+.account-section p{margin:0}
+.account-form{display:grid;gap:10px;max-width:720px}
+.account-form fieldset{min-width:0;border:0;padding:0;margin:0}
+.account-form label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#234635}
+.account-form input{font:inherit;max-width:100%;padding:9px;border:1px solid #bec9c1;border-radius:4px;background:#fff;color:#153d32}
+.account-form .control-check{flex-direction:row;align-items:flex-start;gap:9px}
+.account-actions{display:flex;flex-wrap:wrap;gap:8px}
+.account-ok{color:#075442;font-weight:600}
+.account-secret{font-size:15px;letter-spacing:.04em;overflow-wrap:anywhere}
+.account-codes{padding:14px;border:1px solid #c9b46a;border-radius:6px;background:#fffbea}
+.account-codes ul{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;padding:0;margin:10px 0;list-style:none}
+.account-codes code{font-size:14px}
+.account-danger{padding:14px 16px;border:1px solid #e0b4ac;border-radius:6px;background:#fdf5f3}
+.account-danger summary{cursor:pointer;color:#8a2b1c}
+.account-danger>p{margin:10px 0}
+.desk-button.danger{background:#9b2c1d;border-color:#9b2c1d;color:#fff}
+.desk-button.danger:hover{background:#7a2216}
+.desk-button.danger:disabled,.desk-button:disabled{opacity:.55;cursor:not-allowed}
+.desk-delete{color:#9b2c1d!important}
+@media(max-width:600px){.account-settings{padding:14px}}
+.deadline-calculator h2{display:flex;align-items:center;gap:6px}
+.deadline-result{margin:0 24px 12px;padding:14px 16px;border:1px solid #b9d3c2;border-radius:6px;background:#f2f8f3}
+.deadline-result p{margin:0 0 6px}.deadline-result ul{margin:0 0 10px;padding-left:18px}
+.deadline-calculator .field-help{padding:0 24px 16px}
+.draft-send{margin:14px 0;padding:12px 16px;border:1px solid #cad3c6;border-radius:6px;background:#fbfcf9}
+.draft-send summary{cursor:pointer;font-weight:600;color:#153d32;display:flex;align-items:center;gap:6px}
+.draft-send .field-help{margin:8px 0}
+.mailbox-import{margin:0 24px 14px}
+.mailbox-import small{align-self:center;color:#536b5f}
+.account-qr{margin:12px 0;display:flex;align-items:center;gap:16px}
+.account-qr img{background:#fff;border:1px solid #d9dfdb;border-radius:4px;padding:4px}
+.account-qr figcaption{max-width:260px;font-size:14px;color:#4b5a54}

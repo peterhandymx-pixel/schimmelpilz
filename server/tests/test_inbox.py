@@ -60,7 +60,9 @@ class InboxTests(unittest.TestCase):
             self.assertEqual(corrected['corrections'][0]['reason'],'Synthetic correction of wrong case')
             self.assertEqual(client.get(base+'/download').content,synthetic_pdf())
             self.assertEqual(client.get(base+'/text').json()['units'][0]['reviewed_text'],'SYNTHETIC REVIEWED INVOICE 480 EUR')
-            self.assertEqual(client.get(f"/api/cases/{second}/documents/{corrected['document_id']}/text").json()['units'],[])
+            # The new association starts unreviewed: only freshly read machine text, nothing carried over from the old case.
+            fresh=client.get(f"/api/cases/{second}/documents/{corrected['document_id']}/text").json()['units']
+            self.assertTrue(all(unit['reviewed_text'] is None and unit['reviewed_at'] is None for unit in fresh))
             with api.db() as connection:
                 self.assertEqual(select_sources(connection,first,[entry['id']],'invoice'),[])
             repeat=client.post(f'/api/cases/{first}/research',json=question)

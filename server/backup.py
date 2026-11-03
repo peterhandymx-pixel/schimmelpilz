@@ -173,6 +173,8 @@ def decrypt_archive(source, destination, key):
             if not 100 <= size <= CHUNK * 2:
                 raise BackupError('Invalid encrypted record')
             token = incoming.read(size)
+            if len(token) != size:
+                raise BackupError('Backup is incomplete')
             try:
                 payload = fernet.decrypt(token)
             except InvalidToken:

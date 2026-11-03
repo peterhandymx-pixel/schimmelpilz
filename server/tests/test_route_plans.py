@@ -59,7 +59,7 @@ class RouteApiTests(test_case_tools.CaseToolsTests):
             pdf=owner.get(base+'/report.pdf?version=1')
             self.assertEqual(pdf.status_code,200)
             text='\n'.join(page.extract_text() for page in PdfReader(io.BytesIO(pdf.content)).pages)
-            self.assertIn('Amtsgericht',text);self.assertIn('2026-10-13',text)
+            self.assertIn('Amtsgericht',text);self.assertIn('Quellenstand 13.10.2026',text)
             self.assertEqual(other.get(base+'/report.pdf').status_code,404)
             self.assertEqual(other.put(base,json=payload()).status_code,404)
             self.assertEqual(other.get(base+'/versions').status_code,404)

@@ -71,6 +71,7 @@ class RegisterInput(BaseModel):
 class LoginInput(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=128)
+    mfa_code: str | None = Field(default=None, max_length=20)
 
 
 def password_hash(password: str, salt: str) -> str:
@@ -86,7 +87,9 @@ def token_hash(token: str) -> str:
 
 
 def public_user(row) -> dict:
-    return {**{key: row[key] for key in ("id", "email", "audience", "full_name", "organisation", "street", "postal_code", "city", "country", "phone", "created_at")}, "profile": json.loads(row["profile"]), "letterhead_id": row["letterhead_id"], "is_admin": bool(row["is_admin"]) if "is_admin" in row.keys() else False}
+    return {**{key: row[key] for key in ("id", "email", "audience", "full_name", "organisation", "street", "postal_code", "city", "country", "phone", "created_at")}, "profile": json.loads(row["profile"]), "letterhead_id": row["letterhead_id"], "is_admin": bool(row["is_admin"]) if "is_admin" in row.keys() else False,
+            "email_verified": bool(row["email_verified_at"]) if "email_verified_at" in row.keys() else False,
+            "mfa_enabled": bool(row["mfa_enabled_at"]) if "mfa_enabled_at" in row.keys() else False}
 
 
 def set_session(connection, user_id: str, request: Request, response: Response) -> None:
