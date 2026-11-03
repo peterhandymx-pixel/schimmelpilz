@@ -16,13 +16,23 @@ def admin_mfa_required():
     return __import__('os').getenv('ADMIN_MFA_REQUIRED','true').lower()!='false'
 
 
+def admin_allowlist():
+    # ADMIN_EMAILS (comma-separated) limits operator powers to these addresses, whatever the is_admin flag says.
+    return {item.strip().lower() for item in __import__('os').getenv('ADMIN_EMAILS','').split(',') if item.strip()}
+
+
+def allowlisted(email):
+    allowed=admin_allowlist()
+    return not allowed or (email or '').strip().lower() in allowed
+
+
 def operator_active(user):
     """Operator powers need an administrator who signed in with a second factor (unless disabled for development)."""
-    return bool(user.get('is_admin')) and (bool(user.get('mfa_enabled')) or not admin_mfa_required())
+    return bool(user.get('is_admin')) and allowlisted(user.get('email')) and (bool(user.get('mfa_enabled')) or not admin_mfa_required())
 
 
 def require_operator(user):
-    if not user.get('is_admin'):raise HTTPException(403,'administrator_required')
+    if not user.get('is_admin') or not allowlisted(user.get('email')):raise HTTPException(403,'administrator_required')
     if not operator_active(user):raise HTTPException(403,'admin_mfa_required')
 
 
@@ -243,6 +253,9 @@ def router(db,require_user,now,system_status=None):
         with db() as c:
             c.execute('BEGIN IMMEDIATE')
             if len(payload.reason.strip())<10:raise HTTPException(422,'Reason required')
+            target=c.execute('SELECT email,is_admin FROM users WHERE id=?',(identifier,)).fetchone()
+            if not target:raise HTTPException(404,'User not found')
+            if payload.is_admin and not target['is_admin'] and not allowlisted(target['email']):raise HTTPException(403,'admin_not_allowlisted')
             result=c.execute('UPDATE users SET disabled=?,is_admin=?,control_version=control_version+1 WHERE id=? AND control_version=?',(payload.disabled,payload.is_admin,identifier,payload.expected_version))
             if not result.rowcount:raise HTTPException(409,'User changed')
             if not c.execute('SELECT 1 FROM users WHERE is_admin=1 AND disabled=0 LIMIT 1').fetchone():raise HTTPException(409,'At least one active administrator is required')

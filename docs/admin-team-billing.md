@@ -4,7 +4,17 @@
 
 A system administrator is an explicit database role; registration never grants it. Create a dedicated local account with `python -m server.bootstrap_admin --data-dir data` (or `data/desk-preview` for the isolated preview). Docker: run the same module inside the API container with `--data-dir /data`. The tool generates a random password, stores it in the private data directory's `admin-access.json`, does not print it, does not reset an existing account and does not claim legacy case records. Keep this file private and outside Git. The first non-admin registration retains the existing legacy-case adoption behavior.
 
-After ordinary sign-in, **Administration** offers account counts, user disable/re-enable, operator role changes, session revocation, subscription state/pilot controls and the latest 100 audited actions. An administrator cannot disable or demote themselves; at least one active administrator must remain. Operator settings can pause new registrations and new AI questions without deleting saved cases, answers or files. The model, OCR readiness and public catalogue are shown, with a catalogue-refresh action.
+To make an existing account the administrator instead, run `python -m server.bootstrap_admin --data-dir data --promote you@example.com`. Set `ADMIN_EMAILS` (comma-separated) to limit operator powers to those addresses: any other account flagged as admin is refused, and the role cannot be granted to anyone else. Operator functions also require two-factor sign-in (`ADMIN_MFA_REQUIRED`, default true).
+
+After ordinary sign-in with two factors, the separate **ADMIN** section in the sidebar offers:
+
+- **Übersicht** – account and subscription counts, sign-ups, revenue per month (real and test payments apart), accounts ending within seven days, latest bookings.
+- **Benutzer** – search and filter accounts; per account: edit master data, mark the email as verified, create a one-hour password-reset link (mailed when mail is set up, always shown to the operator), reset two-factor sign-in, revoke sessions, disable/re-enable, withdraw the admin role, delete the account (confirmed with its email; payments stay for bookkeeping), plus its subscription, payments, team links and audit entries.
+- **Abrechnungen** – all subscriptions with status filters, CSV export of every payment; per account: extend the trial, change the plan, credit free months (booked as a 0-amount `manual` payment), record Clip payments, end access, and reverse the latest booking (it stays on record as reversed and access is recalculated).
+- **Tools & System** – status of AI model, OCR, catalogue, mail, payments, admin allowlist and disk; pause registrations/AI; refresh the public catalogue; send a test mail and read the local mail outbox.
+- **Protokoll** – the full audit log with search, action filter and paging.
+
+Every change requires a reason and is written to the audit log. An administrator cannot disable or demote themselves; at least one active administrator must remain. Operator settings can pause new registrations and new AI questions without deleting saved cases, answers or files. The model, OCR readiness and public catalogue are shown, with a catalogue-refresh action.
 
 The workspace selector lets operators explicitly open an account's workspace. This is broad access to private case contents and should only be assigned to trusted operators. Switches and successful authenticated writes record the actual actor, workspace, action/path and date. Draft version/review actors retain the actual member/operator identity. Audit entries are application records, not an external tamper-proof logging service. User/role actions require reasons and optimistic versions. Disabling an account revokes its sessions and denies further sign-ins.
 

@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, Response as BinaryResponse
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from . import control, billing, document_ocr
+from . import control, billing, document_ocr, admin
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ai_status, prepare_messages, generate_answer, AI_MODEL
 from .document_context import select_sources
@@ -1345,6 +1345,7 @@ app.include_router(ocr_routes.router(db, require_user, now, record_activity, get
 app.include_router(control.router(db,require_user,now,lambda:{'ai':ai_status(),'ocr_available':document_ocr.available(),'catalogue':legal_catalogue.catalogue_status()}))
 
 app.include_router(billing.router(db,require_user,now))
+app.include_router(admin.router(db,require_user,now,lambda:UPLOAD_DIR,lambda:DATA_DIR,lambda:{'ai':ai_status(),'ocr_available':document_ocr.available(),'catalogue':legal_catalogue.catalogue_status()}))
 app.include_router(legal_notice.router())
 app.include_router(account.router(db, require_user, lambda: UPLOAD_DIR, lambda: DATA_DIR))
 app.include_router(deadlines.router(require_user))

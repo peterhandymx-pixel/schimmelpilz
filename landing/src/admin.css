@@ -1,0 +1,46 @@
+/* Operator back office */
+.desk-admin-nav{margin-top:14px;padding-top:10px;border-top:1px solid rgba(0,0,0,.08)}
+.desk-admin-nav .desk-sidebar-label span{color:#9b3d3d;letter-spacing:.14em;font-weight:700}
+.admin-area{padding:22px 26px}
+.admin-area h2{margin:0}
+.admin-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:6px 0 14px}
+.admin-head>span{color:#6b7a73;font-size:14px}
+.admin-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:0 0 16px}
+.admin-tiles div{border:1px solid #dfe5e1;border-radius:6px;padding:12px 14px;background:#fbfcfb}
+.admin-tiles strong{display:block;font-size:24px;color:#263e39}
+.admin-tiles span{font-size:13px;color:#6b7a73}
+.admin-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.admin-card{border:1px solid #dfe5e1;border-radius:6px;padding:16px 18px;margin:0 0 16px;background:#fff}
+.admin-card h3{margin:0 0 10px;font-size:17px}
+.admin-card h4{margin:16px 0 6px;font-size:15px}
+.admin-card form label,.admin-reason{display:block;margin:0 0 10px;font-size:14px}
+.admin-card form input,.admin-card form select,.admin-reason input,.admin-card>label input{display:block;width:100%;margin-top:4px}
+.admin-reason{padding:12px 14px;border:1px solid #e6d3a8;background:#fffaf0;border-radius:6px;margin:0 0 16px}
+.admin-reason small{color:#7a6a45;font-weight:400}
+.admin-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+.admin-inline{display:inline-flex !important;align-items:center;gap:8px;margin:0 !important}
+.admin-inline input{width:72px !important;display:inline-block !important;margin:0 !important}
+.admin-inline input[type=email]{width:260px !important}
+.admin-inline select{width:auto !important;display:inline-block !important;margin:0 !important}
+.admin-facts{margin:0 0 6px;padding-left:18px;font-size:14px;line-height:1.7}
+.admin-list{list-style:none;margin:0;padding:0}
+.admin-list li{padding:6px 0;border-bottom:1px solid #eef1ef}
+.admin-list small{display:block;color:#6b7a73}
+.admin-users td small,.admin-area td small{display:block;color:#6b7a73;font-size:12px}
+.admin-pill{display:inline-block;margin-right:6px;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600}
+.admin-pill.on{background:#e6f1ea;color:#2f5d4d}
+.admin-pill.off{background:#f6e4e2;color:#9b3d3d}
+.admin-pill.admin{background:#ece6f3;color:#5b3f7d}
+.admin-reversed td{color:#9aa49f;text-decoration:line-through}
+.admin-reversed td:last-child,.admin-reversed td small{text-decoration:none}
+.admin-link{display:block;margin:6px 0;padding:8px;background:#fff;border:1px solid #e1d6bd;border-radius:4px;font-size:12px;overflow-wrap:anywhere}
+.admin-danger{border-color:#e5b9b4;background:#fffafa}
+.desk-button.danger{background:#9b3d3d;border-color:#9b3d3d;color:#fff}
+.desk-button.danger:disabled{opacity:.45}
+.admin-bars{display:flex;align-items:flex-end;gap:6px;height:150px;padding:6px 0 18px;border-bottom:1px solid #dfe5e1}
+.admin-bars div{position:relative;flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end}
+.admin-bars small{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:11px;color:#6b7a73}
+.bar-paid,.legend-paid{background:#2f5d4d}
+.bar-test,.legend-test{background:#d9b27a}
+.bar-paid,.bar-test{display:block;border-radius:2px 2px 0 0;min-height:0}
+.legend-paid,.legend-test{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 8px}
