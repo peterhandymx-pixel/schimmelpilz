@@ -10,7 +10,7 @@ const copy = {
     trial: '7 Tage kostenlos testen', terms: 'Keine Kreditkarte · Keine automatische Abbuchung',
     monthly: 'pro Inhaber-Arbeitsbereich / Monat', cta: 'Testzugang anlegen',
     shared: 'In allen Tarifen: Deutsch & Englisch, Aktenzeichen, Dokumentablage, KI-Recherche mit verfügbaren Originalquellen, bearbeitbare Entwürfe und PDF-Export.',
-    pilot: 'Aktuell kostenlose Pilotphase. Pilotkonten bleiben ohne Testzeitraum kostenlos. Bezahlt wird ausdrücklich über einen Clip-Zahlungslink, jeweils einen Monat im Voraus – ohne automatische Verlängerung. Mit der Registrierung entsteht kein kostenpflichtiges Abonnement.',
+    pilot: '7 Tage kostenlos testen ab der Registrierung. Danach bezahlen Sie ausdrücklich über einen Clip-Zahlungslink, jeweils einen Monat im Voraus – ohne automatische Verlängerung. Mit der Registrierung entsteht kein kostenpflichtiges Abonnement.',
     note: 'Monatliche Endpreise einschließlich anfallender Steuern. Jede Person hat ein eigenes Konto; Teamzugriff wird vom Inhaber ausdrücklich freigegeben. Die Assistenz ersetzt keine individuelle anwaltliche Beratung.',
     plans: [
       { id: 'consumer', name: 'Privat', price: 9.90, description: 'Eigene Rechte verstehen und den nächsten Schritt vorbereiten.', features: ['Strukturierte Akten für eigene Anliegen', 'Unterlagen und Belege zusammenhalten', 'Rechtsfragen im KI-Chat recherchieren', 'Anschreiben und Einwendungen vorbereiten'] },
@@ -24,7 +24,7 @@ const copy = {
     trial: 'Try free for 7 days', terms: 'No credit card · No automatic charge',
     monthly: 'per owner workspace / month', cta: 'Create trial account',
     shared: 'Every plan: German & English, case references, document storage, AI research with available original sources, editable drafts and PDF export.',
-    pilot: 'Currently a free pilot. Pilot accounts stay free and need no trial. Payment is explicit through a Clip payment link, one month in advance at a time, with no automatic renewal. Registering does not create a paid subscription.',
+    pilot: '7 free trial days from registration. After that you pay explicitly through a Clip payment link, one month in advance, with no automatic renewal. Registering does not create a paid subscription.',
     note: 'Monthly final prices, including applicable taxes. Each person has their own login; owners explicitly grant team access. The assistant does not replace individual advice from a qualified lawyer.',
     plans: [
       { id: 'consumer', name: 'Personal', price: 9.90, description: 'Understand your rights and prepare your next step.', features: ['Structured files for personal matters', 'Keep documents and evidence together', 'Research legal questions in AI chat', 'Prepare letters and objections'] },

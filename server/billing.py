@@ -1,4 +1,4 @@
-"""Explicit seven-day trial and prepaid monthly access paid through reusable Clip payment links; no silent pilot conversion.
+"""Seven-day trial from registration, then prepaid monthly access paid through reusable Clip payment links; nothing converts silently.
 
 Clip's reusable links have no API callback that identifies the account, so the operator records each payment seen in the
 Clip dashboard. A recorded payment extends paid access by whole calendar months; nothing renews or charges automatically.
@@ -18,7 +18,8 @@ from .control import audit, require_operator
 
 PLAN_IDS=('personal','business','firm')
 DEFAULT_PRICES={'personal':'9.90','business':'29.90','firm':'49.90'}
-ACCESS={'pilot','trial','active'}
+ACCESS={'trial','active'}
+TRIAL_DAYS=7
 RENEWAL_NOTICE_DAYS=7
 AUDIENCE_PLAN="CASE audience WHEN 'business' THEN 'business' WHEN 'law_firm' THEN 'firm' ELSE 'personal' END"
 
@@ -33,12 +34,17 @@ def migrate(c):
     ''')
     if 'completed_at' not in {r[1] for r in c.execute('PRAGMA table_info(billing_orders)')}:
         c.execute('ALTER TABLE billing_orders ADD COLUMN completed_at TEXT')
-    # Pilot rows created before plans followed the account type still show 'personal'; nothing was chosen or paid for them yet.
-    c.execute(f"UPDATE subscriptions SET plan=(SELECT {AUDIENCE_PLAN} FROM users WHERE users.id=subscriptions.user_id) WHERE status='pilot' AND plan='personal' AND trial_started IS NULL AND subscription_id IS NULL")
+    # The pilot phase is over: accounts still on free pilot access get the same seven-day trial as new accounts, counted from now.
+    start=datetime.now(UTC)
+    c.execute(f"UPDATE subscriptions SET plan=(SELECT {AUDIENCE_PLAN} FROM users WHERE users.id=subscriptions.user_id),status='trial',trial_started=?,trial_end=?,updated_at=?,version=version+1 WHERE status='pilot'",
+              (start.isoformat(),(start+timedelta(days=TRIAL_DAYS)).isoformat(),start.isoformat()))
 
 
 def ensure(c,user_id):
-    c.execute(f'INSERT OR IGNORE INTO subscriptions(user_id,plan,updated_at) SELECT id,{AUDIENCE_PLAN},? FROM users WHERE id=?',(datetime.now(UTC).isoformat(),user_id))
+    # The trial starts with the account: the first time an account is seen it gets TRIAL_DAYS of full access.
+    start=datetime.now(UTC)
+    c.execute(f"INSERT OR IGNORE INTO subscriptions(user_id,plan,status,trial_started,trial_end,updated_at) SELECT id,{AUDIENCE_PLAN},'trial',?,?,? FROM users WHERE id=?",
+              (start.isoformat(),(start+timedelta(days=TRIAL_DAYS)).isoformat(),start.isoformat(),user_id))
     return dict(c.execute('SELECT * FROM subscriptions WHERE user_id=?',(user_id,)).fetchone())
 
 
@@ -118,8 +124,9 @@ class Checkout(Plan):
     consent:Literal[True]
 
 
-class PilotControl(BaseModel):
-    pilot:bool
+class AccessControl(BaseModel):
+    # Only ending access is possible; free access without a time limit no longer exists.
+    pilot:Literal[False]=False
     reason:str
     expected_version:int
 
@@ -142,7 +149,7 @@ def router(db,require_user,now):
 
     @r.get('/api/public/pricing')
     def public_pricing():
-        return {'currency':currency(),'plans':plans(),'trial_days':7}
+        return {'currency':currency(),'plans':plans(),'trial_days':TRIAL_DAYS}
 
     @r.get('/api/billing')
     def status(user:dict=Depends(require_user)):
@@ -152,16 +159,14 @@ def router(db,require_user,now):
             pending=c.execute('SELECT plan,created_at FROM billing_orders WHERE user_id=? AND completed_at IS NULL ORDER BY created_at DESC LIMIT 1',(user['id'],)).fetchone()
         ready=links_ready()
         return {**{k:v for k,v in row.items() if k not in {'customer_id','subscription_id'}},'effective_status':effective(row),'checkout_ready':any(ready.values()),'links_ready':ready,
-                'plans':plans(),'currency':currency(),'trial_days':7,'payments':payments,'pending_payment':dict(pending) if pending else None,'renewal_due':renewal_due(row),'payment_reference':user['email']}
+                'plans':plans(),'currency':currency(),'trial_days':TRIAL_DAYS,'payments':payments,'pending_payment':dict(pending) if pending else None,'renewal_due':renewal_due(row),'payment_reference':user['email']}
 
     @r.post('/api/billing/trial')
     def trial(payload:Plan,user:dict=Depends(require_user)):
         with db() as c:
             c.execute('BEGIN IMMEDIATE');row=ensure(c,user['id'])
             if row['trial_started'] or c.execute('SELECT 1 FROM billing_payments WHERE user_id=? LIMIT 1',(user['id'],)).fetchone():raise HTTPException(409,'Trial already used or paid access exists')
-            # A trial would replace unlimited free pilot access with a seven-day expiry.
-            if effective(row)=='pilot':raise HTTPException(409,'Pilot access is already free; no trial needed')
-            end=(datetime.now(UTC)+timedelta(days=7)).isoformat()
+            end=(datetime.now(UTC)+timedelta(days=TRIAL_DAYS)).isoformat()
             c.execute("UPDATE subscriptions SET plan=?,status='trial',trial_started=?,trial_end=?,updated_at=?,version=version+1 WHERE user_id=?",(payload.plan,now(),end,now(),user['id']))
             audit(c,user['id'],user['id'],'trial_started',payload.plan)
         return {'trial_end':end}
@@ -173,7 +178,6 @@ def router(db,require_user,now):
         if not url:raise HTTPException(503,'payment_link_not_configured')
         with db() as c:
             c.execute('BEGIN IMMEDIATE');row=ensure(c,user['id'])
-            if effective(row)=='pilot':raise HTTPException(409,'Pilot access is free; no payment needed')
             c.execute('UPDATE billing_orders SET completed_at=? WHERE user_id=? AND completed_at IS NULL AND plan<>?',(now(),user['id'],payload.plan))
             pending=c.execute('SELECT id FROM billing_orders WHERE user_id=? AND plan=? AND completed_at IS NULL',(user['id'],payload.plan)).fetchone()
             identifier=pending['id'] if pending else str(uuid.uuid4())
@@ -220,7 +224,7 @@ def router(db,require_user,now):
         return {'period_end':end.isoformat()}
 
     @r.put('/api/admin/billing/{identifier}')
-    def pilot(identifier:str,payload:PilotControl,user:dict=Depends(require_user)):
+    def end_access(identifier:str,payload:AccessControl,user:dict=Depends(require_user)):
         require_operator(user)
         if len(payload.reason.strip())<10:raise HTTPException(422,'Reason required')
         with db() as c:
@@ -228,7 +232,7 @@ def router(db,require_user,now):
             if not c.execute('SELECT 1 FROM users WHERE id=?',(identifier,)).fetchone():raise HTTPException(404,'User not found')
             row=ensure(c,identifier)
             if row['version']!=payload.expected_version:raise HTTPException(409,'Subscription changed')
-            c.execute('UPDATE subscriptions SET status=?,updated_at=?,version=version+1 WHERE user_id=?',('pilot' if payload.pilot else 'expired',now(),identifier))
-            audit(c,user['id'],identifier,'pilot_access_changed',payload.reason.strip())
+            c.execute("UPDATE subscriptions SET status='expired',updated_at=?,version=version+1 WHERE user_id=?",(now(),identifier))
+            audit(c,user['id'],identifier,'access_ended',payload.reason.strip())
         return {'saved':True}
     return r
