@@ -1,10 +1,11 @@
-import { IconFolders, IconUsers, IconFileText, IconEdit, IconCalendar, IconMessageChatbot, IconFileDescription, IconBuilding, IconPlus, IconListCheck, IconBook2, IconGavel, IconBuildingBank, IconReceipt, IconWorld, IconScale, IconBuildingCommunity, IconReportMoney, IconExternalLink, IconInbox } from '@tabler/icons-react';
+import { IconBooks, IconFolders, IconUsers, IconFileText, IconEdit, IconCalendar, IconMessageChatbot, IconFileDescription, IconBuilding, IconPlus, IconListCheck, IconBook2, IconGavel, IconBuildingBank, IconReceipt, IconWorld, IconScale, IconBuildingCommunity, IconReportMoney, IconExternalLink, IconInbox } from '@tabler/icons-react';
 
 const internal = [
   ['cases', 'Akten', 'Case files', IconFolders, '#b3984c'],
   ['parties', 'Adressen', 'Addresses', IconUsers, '#47879f'],
   ['documents', 'E-Akte', 'Electronic files', IconFileText, '#c7744d'],
   ['drafts', 'Schriftverkehr', 'Correspondence', IconEdit, '#526e95'],
+  ['samples', 'Musterbibliothek', 'Sample library', IconBooks, '#7a5c8e'],
   ['tasks', 'Termine / Fristen', 'Dates / deadlines', IconCalendar, '#7f8c5d'],
   ['research', 'KI-Recherche', 'AI research', IconMessageChatbot, '#087967'],
   ['account', 'Briefpapier & Profil', 'Letter paper & profile', IconFileDescription, '#9b7252'],

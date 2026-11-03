@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { IconDownload, IconEdit, IconFileText, IconFolderOpen, IconMailForward, IconUpload } from "@tabler/icons-react";
 import { API_BASE } from "./useCaseStorage.js";
 import { reviewLabels } from "./DraftReview.jsx";
+import { draftSubject } from "./draftTemplates.js";
 import { dateLabel, matches } from "./workbench.js";
 
 const KINDS = {
@@ -24,7 +25,7 @@ export function EAkte({ cases, selectedCase, lang, query = "", open, onSelectCas
 
   const sheets = [
     ...current.documents.map(doc => ({ type: "in", id: doc.id, date: doc.created_at, title: doc.original_name, doc })),
-    ...(current.drafts || []).map(draft => ({ type: "out", id: draft.id, date: draft.created_at, title: KINDS[lang][draft.kind] || KINDS[lang].letter, draft })),
+    ...(current.drafts || []).map(draft => ({ type: "out", id: draft.id, date: draft.created_at, title: draftSubject(draft.body) || KINDS[lang][draft.kind] || KINDS[lang].letter, draft })),
   ].sort((a, b) => a.date.localeCompare(b.date)).map((sheet, index) => ({ ...sheet, no: index + 1 }));
   const shown = sheets.filter(sheet => (filter === "all" || filter === sheet.type) && matches(query, sheet.title, sheet.draft?.recipient));
   const docState = doc => ["queued", "running"].includes(doc.auto_text_status) ? (de ? "Text wird gelesen …" : "Reading text …")

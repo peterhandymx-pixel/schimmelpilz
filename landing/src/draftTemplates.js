@@ -13,6 +13,18 @@ export const draftCopy = {
   },
 };
 
+// The subject line of a letter (the first line after the reference block) or the heading of a pleading, for lists.
+export function draftSubject(body = "") {
+  const lines = body.split("\n").map(line => line.trim());
+  const ref = lines.findIndex(line => /^(Unser (Akten)?[Zz]eichen|Our reference)/.test(line));
+  if (ref >= 0) {
+    const gap = lines.indexOf("", ref);
+    const subject = gap >= 0 ? lines.slice(gap).find(Boolean) : "";
+    if (subject && !/^(Sehr geehrte|Dear)/.test(subject)) return subject.slice(0, 120);
+  }
+  return (lines.find(line => /^[A-ZÄÖÜ]{5,}$/.test(line)) || "").slice(0, 120);
+}
+
 export function documentTemplate(item, language = "de", kind = "letter", recipient = "") {
   const d = item.details || {};
   const de = language === "de";
