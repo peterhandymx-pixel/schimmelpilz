@@ -18,6 +18,7 @@ import { AccountSettings } from './AccountSettings.jsx';
 import { DeadlineCalculator } from './DeadlineCalculator.jsx';
 import { profileFields, profileValue } from './AuthForm.jsx';
 import { ActivityList, CaseTable, DocumentList, DraftList, TaskBoard } from "./DeskComponents.jsx";
+import { EAkte } from "./EAkte.jsx";
 import { intakeCopy } from "./CaseIntake.jsx";
 import { caseMatches, dateLabel, localToday, statusLabels, taskRows } from "./workbench.js";
 
@@ -65,7 +66,7 @@ export function Dashboard({ lang, setLang, t, user, storage, view, setView, onNe
         {view === "inbox" && <Inbox lang={lang} cases={storage.cases} query={query} open={open} onChanged={() => storage.reload()} canDelete={canDelete} />}
         {view === "routes" && <RoutePlanner cases={storage.cases} lang={lang} onChanged={storage.reload} onDraft={workspaceProps.onDraft} />}
         {view === "costs" && <CostReview lang={lang} cases={storage.cases} query={query} open={open} onChanged={() => storage.reload()} onDraft={workspaceProps.onDraft} />}
-        {view === "documents" && <section className="desk-panel"><DocumentList cases={storage.cases} lang={lang} query={query} open={open} onRefresh={storage.reload} canDelete={canDelete} /></section>}
+        {view === "documents" && <section className="desk-panel"><EAkte cases={storage.cases} selectedCase={storage.selectedCase} lang={lang} query={query} open={open} onSelectCase={workspaceProps.onSelectCase} onFile={workspaceProps.onFile} uploading={storage.uploading} notice={workspaceProps.uploadNotice} onDraft={workspaceProps.onDraft} onRefresh={storage.reload} /></section>}
         {view === "drafts" && <section className="desk-panel"><DraftList cases={storage.cases} lang={lang} query={query} open={open} onDraft={workspaceProps.onDraft} onChanged={storage.reload} canDelete={canDelete} /></section>}
         {view === "tasks" && <><section className="desk-panel"><TaskBoard cases={storage.cases} lang={lang} query={query} open={open} saveTask={storage.saveTask} onChanged={storage.reload} canDelete={canDelete} /></section><DeadlineCalculator lang={lang} cases={storage.cases.filter(item => !item.archived_at)} saveTask={access?.role === "viewer" ? null : storage.saveTask} /></>}
         {view === "case" && storage.selectedCase && <CaseFile canDelete={canDelete} contacts={contacts} item={storage.selectedCase} lang={lang} storage={storage} workspace={workspaceProps} open={open} back={() => changeView("cases")} />}

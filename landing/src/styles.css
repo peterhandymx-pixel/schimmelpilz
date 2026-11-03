@@ -196,3 +196,21 @@
 .cost-actions.task-filter{align-items:flex-end}
 .task-filter~.desk-checkbox{margin:12px 22px 4px}
 .task-filter~.field-help{margin:0;padding:6px 22px 14px}
+
+/* E-Akte: one case's file in order */
+.eakte-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.eakte-filter{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid #e3e7e5}
+.eakte-filter label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#4f5f5a}
+.eakte-filter select{padding:9px 10px;border:1px solid #cbd3cf;border-radius:2px;background:#fff;color:#263e39;min-width:200px;max-width:100%;font:inherit}
+.eakte-filter label:first-child select{min-width:320px}
+.eakte-filter>span{margin-left:auto;color:#748179;font-size:12px;padding-bottom:10px}
+.eakte-table td{vertical-align:top}
+.eakte-no{font-variant-numeric:tabular-nums;color:#748179;width:44px}
+.eakte-title{display:block;font-weight:600;color:#263e39}
+.eakte-table small{display:block;color:#748179;font-size:12px;margin-top:3px}
+.eakte-type{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:12px;white-space:nowrap}
+.eakte-in{background:#eef3ef;color:#2f5d4d}
+.eakte-out{background:#f6efe3;color:#7a5a2c}
+.eakte-links{white-space:nowrap}
+.eakte-links .desk-link{margin-right:12px}
+@media(max-width:720px){.eakte-filter label:first-child select{min-width:0;width:100%}.eakte-filter>span{margin-left:0}}
