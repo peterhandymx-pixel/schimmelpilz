@@ -37,8 +37,11 @@ function PlanForCase({ item,lang,onChanged,onDraft }) {
   </section>;
 }
 
-export function RoutePlanner({ cases,lang,caseId='',onChanged,onDraft }) {
-  const [selected,setSelected]=useState(caseId);
+export function RoutePlanner({ cases,lang,caseId='',preferredCaseId='',onChanged,onDraft }) {
+  // Without a case from the file view, start on the case last worked on (or the first active one) instead of an empty sheet.
+  const [selected,setSelected]=useState(caseId||preferredCaseId||cases.find(value=>!value.archived_at)?.id||'');
+  // Cases arrive after the first render; pick one as soon as they do.
+  useEffect(()=>{ if(!selected){ const id=preferredCaseId||cases.find(value=>!value.archived_at)?.id; if(id) setSelected(id); } },[cases.length,preferredCaseId]);
   const item=cases.find(value=>value.id===selected),de=lang==='de';
-  return <div className="cost-workspace">{!caseId&&<section className="desk-panel"><label>{de?'Verfahrensplanung für Akte':'Procedural planning for case'}<select aria-label={de?'Verfahrensplanung für Akte':'Procedural planning for case'} value={selected} onChange={e=>setSelected(e.target.value)}><option value="">{de?'Akte auswählen':'Select case'}</option>{cases.map(value=><option key={value.id} value={value.id}>{value.reference} · {value.title}</option>)}</select></label></section>}{item?<PlanForCase key={item.id} item={item} lang={lang} onChanged={onChanged} onDraft={onDraft}/>:<p>{de?'Wählen Sie eine Akte für das Arbeitsblatt.':'Choose a case for the working paper.'}</p>}</div>;
+  return <div className="cost-workspace">{!caseId&&<section className="desk-panel eakte-filter"><label>{de?'Verfahrensplanung für Akte':'Procedural planning for case'}<select aria-label={de?'Verfahrensplanung für Akte':'Procedural planning for case'} value={selected} onChange={e=>setSelected(e.target.value)}><option value="">{de?'Akte auswählen':'Select case'}</option>{cases.map(value=><option key={value.id} value={value.id}>{value.reference} · {value.title}</option>)}</select></label></section>}{item?<PlanForCase key={item.id} item={item} lang={lang} onChanged={onChanged} onDraft={onDraft}/>:<p>{de?'Wählen Sie eine Akte für das Arbeitsblatt.':'Choose a case for the working paper.'}</p>}</div>;
 }
