@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rechtsassistentin Schimmelpilz</title>
+<meta name="description" content="Lokale KI-Rechtsassistenz für Verbraucher, Unternehmen und Kanzleien: Akten, Recherche mit Fundstellen und bearbeitbare Schriftsätze.">
+<link rel="icon" href="assets/schimmelpilz-mark.webp">
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+:root{
+  --ink:#101b1d; --green:#075442; --green-dark:#043c30; --night:#021f19;
+  --gold:#987243; --gold-hi:#d9b27a; --paper:#f8f7f2; --sage:#dfe7de;
+  --line:#d9d2c4; --muted:#677073; --white:#fff;
+  --serif:"Libre Caslon Display",Georgia,serif; --sans:"Source Sans 3",Arial,sans-serif;
+  --ease:cubic-bezier(.2,.7,.1,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:18px;line-height:1.55;overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:inherit}
+.wrap{width:min(1180px,100% - 32px);margin-inline:auto}
+.serif{font-family:var(--serif);font-weight:400}
+.eyebrow{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);font-weight:700}
+
+/* ---------- NAV ---------- */
+.nav{position:fixed;inset:0 0 auto;z-index:50;transition:background .4s,backdrop-filter .4s,box-shadow .4s}
+.nav .wrap{display:flex;align-items:center;justify-content:space-between;height:92px;gap:16px}
+.nav .brand{display:flex;align-items:center;gap:14px;text-decoration:none;color:#fff;font-family:var(--serif);font-size:28px;line-height:1.05}
+.nav .brand .name em{display:block;font-style:normal;color:var(--gold-hi)}
+.nav .brand img{width:72px;height:auto;filter:drop-shadow(0 4px 10px rgba(0,0,0,.35))}
+.nav ul{display:flex;gap:24px;list-style:none;white-space:nowrap}
+.nav ul a{text-decoration:none;color:rgba(255,255,255,.82);font-size:16px;transition:color .2s}
+.nav ul a:hover{color:var(--gold-hi)}
+.nav.solid{background:rgba(248,247,242,.86);backdrop-filter:blur(14px);box-shadow:0 1px 0 var(--line)}
+.nav.solid .brand,.nav.solid ul a{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:8px;font-weight:700;font-size:16px;text-decoration:none;border:1px solid transparent;cursor:pointer;transition:transform .25s var(--ease),box-shadow .25s,background .25s}
+.btn:hover{transform:translateY(-2px)}
+.btn-gold{background:linear-gradient(135deg,#e2bd85,var(--gold));color:#1b1206;box-shadow:0 10px 30px -10px rgba(217,178,122,.7)}
+.btn-gold:hover{box-shadow:0 16px 40px -10px rgba(217,178,122,.9)}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover{background:var(--green-dark)}
+.btn-ghost{border-color:rgba(255,255,255,.35);color:#fff}
+.nav.solid .btn-ghost{border-color:var(--ink);color:var(--ink)}
+.nav .brand{white-space:nowrap}
+@media (max-width:1100px){.nav ul{display:none}}
+@media (max-width:520px){.nav .btn-ghost{display:none}}
+@media (max-width:480px){.nav .wrap{height:76px}.nav .brand{font-size:19px;gap:10px}.nav .brand img{width:50px}.nav .btn{padding:10px 14px;font-size:14px}}
+
+/* ---------- HERO (cinematic) ---------- */
+.hero{position:relative;min-height:100svh;background:radial-gradient(120% 90% at 70% 30%,#0a5a47 0%,var(--green-dark) 40%,var(--night) 100%);color:#fff;overflow:hidden;display:flex;align-items:center}
+.hero video,.hero canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero video{opacity:.35;mix-blend-mode:screen}
+.hero .grain{position:absolute;inset:-50%;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");opacity:.07;animation:grain 1.2s steps(6) infinite;pointer-events:none}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-5%,3%)}40%{transform:translate(4%,-4%)}60%{transform:translate(-3%,-2%)}80%{transform:translate(3%,5%)}100%{transform:translate(0,0)}}
+.hero .vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.55));pointer-events:none}
+.hero .wrap{position:relative;z-index:2;display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;padding-block:120px 80px}
+.hero h1{font-family:var(--serif);font-weight:400;font-size:clamp(44px,7.6vw,118px);line-height:.98;letter-spacing:-.01em}
+.refa{display:inline-block;margin-top:22px;padding:8px 18px;border:1px solid var(--gold-hi);border-radius:999px;background:rgba(217,178,122,.12);color:var(--gold-hi);font-weight:700;font-size:clamp(16px,1.5vw,19px);opacity:0;animation:fade 1s .45s forwards}
+.hero h1 .line{display:block;overflow:hidden}
+.hero h1 .line span{display:inline-block;transform:translateY(110%);animation:rise 1.2s var(--ease) forwards}
+.hero h1 .line:nth-child(2) span{animation-delay:.15s}
+.hero h1 em{font-style:normal;background:linear-gradient(100deg,#f3d9ac 0%,var(--gold-hi) 30%,#fff3dc 50%,var(--gold-hi) 70%,#b08452 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:rise 1.2s .15s var(--ease) forwards,sheen 6s 1.4s linear infinite}
+@keyframes rise{to{transform:none}}
+@keyframes sheen{to{background-position:-250% 0}}
+.hero .sub{margin-top:26px;font-size:clamp(18px,2vw,22px);color:rgba(255,255,255,.78);max-width:34ch;opacity:0;animation:fade 1s .6s forwards}
+.hero .sub b{color:#fff}
+.hero .ctas{margin-top:34px;display:flex;flex-wrap:wrap;gap:14px;opacity:0;animation:fade 1s .8s forwards}
+.hero .note{margin-top:16px;font-size:14px;color:rgba(255,255,255,.55);opacity:0;animation:fade 1s 1s forwards}
+@keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.stage{position:relative;aspect-ratio:1;perspective:1000px;opacity:0;animation:fade 1.4s .3s forwards}
+.stage .halo{position:absolute;inset:6%;border-radius:50%;background:conic-gradient(from 0deg,transparent,rgba(217,178,122,.55),transparent 30%,rgba(217,178,122,.3),transparent 65%);filter:blur(28px);animation:spin 14s linear infinite}
+.stage .ring{position:absolute;inset:2%;border-radius:50%;border:1px solid rgba(217,178,122,.35)}
+.stage .ring.r2{inset:12%;border-style:dashed;animation:spin 60s linear infinite reverse}
+.stage .ring.r2::after{content:"§";position:absolute;top:-14px;left:50%;color:var(--gold-hi);font-family:var(--serif);font-size:22px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stage .card{position:absolute;inset:14%;transform-style:preserve-3d;transition:transform .2s ease-out}
+.stage .card img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 40px 50px rgba(0,0,0,.55));animation:float 7s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-14px) rotate(-1deg)}}
+.chip{position:absolute;z-index:3;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(10px);padding:10px 14px;border-radius:12px;font-size:14px;white-space:nowrap;box-shadow:0 14px 40px -12px rgba(0,0,0,.5);animation:float 6s ease-in-out infinite}
+.chip b{color:var(--gold-hi)}
+.chip.c1{top:8%;left:-4%}
+.chip.c2{bottom:14%;right:0;animation-delay:-2s}
+.chip.c3{bottom:2%;left:6%;animation-delay:-4s}
+.scroll-cue{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);z-index:3;width:26px;height:42px;border:2px solid rgba(255,255,255,.4);border-radius:14px}
+.scroll-cue::after{content:"";position:absolute;left:50%;top:8px;width:4px;height:8px;margin-left:-2px;border-radius:2px;background:var(--gold-hi);animation:cue 1.8s infinite}
+@keyframes cue{60%{transform:translateY(14px);opacity:0}100%{opacity:0}}
+@media (max-width:900px){.hero .wrap{gap:18px;padding-top:100px}.hero h1{font-size:clamp(28px,6.2vw,60px)}.hero .sub{font-size:16px}.chip{font-size:11px;padding:7px 10px}.chip.c1{left:0;top:2%}.chip.c2{right:0}.chip.c3{left:0}}
+@media (max-width:540px){.hero h1{font-size:clamp(34px,11.8vw,62px)}.hero .wrap{grid-template-columns:1fr}.stage{max-width:360px;width:100%;margin-inline:auto;order:-1}}
+
+/* ---------- MARQUEE ---------- */
+.areas-band{background:var(--night);padding:44px 20px;text-align:center}
+.areas-band h2{font-family:var(--serif);font-weight:400;font-size:clamp(26px,3.4vw,40px);color:#fff}
+.areas-band h2 em{font-style:normal;color:var(--gold-hi)}
+.areas{list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:10px;max-width:920px;margin:20px auto 0;padding:0}
+.areas li{padding:7px 15px;border:1px solid rgba(217,178,122,.45);border-radius:999px;color:var(--gold-hi);font-size:16px}
+.marquee{background:var(--night);color:rgba(255,255,255,.75);border-block:1px solid rgba(217,178,122,.25);overflow:hidden;padding:18px 0}
+.marquee .track{display:flex;gap:48px;width:max-content;animation:marq 38s linear infinite}
+.marquee span{font-family:var(--serif);font-size:22px;white-space:nowrap}
+.marquee span::before{content:"§ ";color:var(--gold-hi)}
+.marquee .lbl{font-family:var(--sans);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-hi);align-self:center}
+.marquee .lbl::before{content:""}
+@keyframes marq{to{transform:translateX(-50%)}}
+
+/* ---------- reveal ---------- */
+.reveal{opacity:0;transform:translateY(40px);transition:opacity 1s var(--ease),transform 1s var(--ease)}
+.reveal.in{opacity:1;transform:none}
+.reveal.d1{transition-delay:.1s}.reveal.d2{transition-delay:.2s}.reveal.d3{transition-delay:.3s}
+
+section{padding:120px 0}
+.h2{font-family:var(--serif);font-weight:400;font-size:clamp(36px,5vw,64px);line-height:1.04;letter-spacing:-.01em}
+.lead{color:var(--muted);font-size:20px;max-width:60ch;margin-top:18px}
+
+/* ---------- STEPS (pinned scroll film) ---------- */
+.film{position:relative;height:300vh;background:var(--paper);padding:0}
+.film .sticky{position:sticky;top:0;height:100svh;display:flex;align-items:center;overflow:hidden}
+.film .grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+.film .progress{height:2px;background:var(--line);margin-top:36px;position:relative}
+.film .progress i{position:absolute;inset:0 auto 0 0;width:0;background:var(--gold)}
+.steps{list-style:none;margin-top:28px;display:grid;gap:8px}
+.steps li{display:grid;grid-template-columns:56px 1fr;gap:14px;padding:16px 0;border-bottom:1px solid var(--line);opacity:.35;transition:opacity .5s}
+.steps li.on{opacity:1}
+.steps .n{font-family:var(--serif);font-size:34px;color:var(--gold);line-height:1}
+.steps h3{font-size:22px}
+.steps p{color:var(--muted);font-size:16px}
+.screen{position:relative;aspect-ratio:4/3.2;border-radius:18px;background:#fff;box-shadow:0 50px 100px -40px rgba(4,60,48,.45),0 0 0 1px var(--line);overflow:hidden}
+.screen .bar{height:38px;background:#f1efe8;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px;padding:0 14px}
+.screen .bar i{width:11px;height:11px;border-radius:50%;background:#d9d2c4}
+.screen .bar span{margin-left:12px;font-size:13px;color:var(--muted)}
+.scene{position:absolute;inset:38px 0 0;padding:28px;opacity:0;transform:scale(.96) translateY(20px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.scene.on{opacity:1;transform:none}
+.field{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:15px}
+.field small{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.typed::after{content:"▍";color:var(--green);animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.file{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;font-size:15px;transform:translateX(40px);opacity:0;transition:.6s var(--ease)}
+.scene.on .file{transform:none;opacity:1}
+.scene.on .file:nth-child(2){transition-delay:.15s}.scene.on .file:nth-child(3){transition-delay:.3s}.scene.on .file:nth-child(4){transition-delay:.45s}
+.file .ic{width:36px;height:44px;border-radius:5px;background:var(--sage);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--green)}
+.file .ok{margin-left:auto;color:var(--green);font-weight:700;font-size:13px}
+.doc{font-family:Georgia,serif;font-size:14px;line-height:1.7;color:#2a3335}
+.doc .hd{display:flex;justify-content:space-between;border-bottom:2px solid var(--green);padding-bottom:8px;margin-bottom:14px;font-family:var(--sans);font-size:12px;color:var(--muted)}
+.doc .hd b{color:var(--green);font-family:var(--serif);font-size:16px}
+.doc mark{background:linear-gradient(transparent 55%,rgba(217,178,122,.45) 55%);color:inherit}
+.doc .ph{background:#fff3d6;border:1px dashed var(--gold);border-radius:4px;padding:0 4px;font-family:var(--sans);font-size:12px}
+@media (max-width:900px){.film{height:auto}.film .sticky{position:relative;height:auto;padding:100px 0}.film .grid{grid-template-columns:1fr}.steps li{opacity:1}}
+
+/* ---------- DEMO (video-like) ---------- */
+.demo{background:var(--night);color:#fff;position:relative;overflow:hidden}
+.demo::before{content:"";position:absolute;width:900px;height:900px;left:-300px;top:-300px;background:radial-gradient(circle,rgba(7,84,66,.9),transparent 60%);filter:blur(20px)}
+.demo .wrap{position:relative}
+.demo .lead{color:rgba(255,255,255,.65)}
+.player{margin-top:56px;border-radius:20px;overflow:hidden;background:#0b2a23;border:1px solid rgba(217,178,122,.25);box-shadow:0 60px 120px -40px rgba(0,0,0,.8)}
+.player .top{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.08);font-size:14px;color:rgba(255,255,255,.6)}
+.player .live{display:flex;align-items:center;gap:8px;color:var(--gold-hi);font-weight:700;letter-spacing:.1em;font-size:12px}
+.player .live i{width:8px;height:8px;border-radius:50%;background:#e45b4b;animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.player .body{display:grid;grid-template-columns:260px 1fr;min-height:440px}
+.player aside{border-right:1px solid rgba(255,255,255,.08);padding:20px;font-size:14px}
+.player aside h4{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-hi);margin:6px 0 10px}
+.player aside .it{padding:9px 10px;border-radius:8px;color:rgba(255,255,255,.7);margin-bottom:4px}
+.player aside .it.act{background:rgba(217,178,122,.14);color:#fff}
+.chat{padding:24px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:78%;padding:14px 16px;border-radius:14px;font-size:15px;opacity:0;transform:translateY(12px);transition:.5s var(--ease)}
+.msg.show{opacity:1;transform:none}
+.msg.u{align-self:flex-end;background:var(--green);border-bottom-right-radius:4px}
+.msg.a{align-self:flex-start;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-bottom-left-radius:4px}
+.cite{display:inline-flex;gap:6px;margin:8px 6px 0 0;padding:4px 10px;border-radius:999px;background:rgba(217,178,122,.15);border:1px solid rgba(217,178,122,.4);color:var(--gold-hi);font-size:12px;font-weight:700;opacity:0;transform:scale(.8);transition:.4s var(--ease)}
+.cite.show{opacity:1;transform:none}
+.player .scrub{height:4px;background:rgba(255,255,255,.08)}
+.player .scrub i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--gold-hi))}
+@media (max-width:760px){.player .body{grid-template-columns:1fr}.player aside{display:none}.msg{max-width:92%}}
+
+/* ---------- AUDIENCES ---------- */
+.aud{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:56px}
+.tile{position:relative;padding:34px 30px;border-radius:18px;background:#fff;border:1px solid var(--line);overflow:hidden;transition:transform .5s var(--ease),box-shadow .5s}
+.tile::before{content:"";position:absolute;inset:0;background:radial-gradient(400px circle at var(--mx,50%) var(--my,0%),rgba(217,178,122,.22),transparent 50%);opacity:0;transition:opacity .4s}
+.tile:hover{transform:translateY(-6px);box-shadow:0 30px 60px -30px rgba(4,60,48,.4)}
+.tile:hover::before{opacity:1}
+.tile .ico{width:52px;height:52px;border-radius:14px;background:var(--sage);display:grid;place-items:center;font-family:var(--serif);font-size:26px;color:var(--green);margin-bottom:20px}
+.tile h3{font-family:var(--serif);font-weight:400;font-size:30px}
+.tile p{color:var(--muted);margin-top:10px;font-size:16px;position:relative}
+@media (max-width:900px){.aud{grid-template-columns:1fr}}
+
+/* ---------- FEATURES bento ---------- */
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:18px;margin-top:56px}
+.bx{grid-column:span 2;border-radius:18px;padding:28px;background:var(--white);border:1px solid var(--line);position:relative;overflow:hidden}
+.bx.w3{grid-column:span 3}
+.bx.dark{background:var(--green-dark);color:#fff;border-color:transparent}
+.bx.dark p{color:rgba(255,255,255,.7)}
+.bx .tag{display:inline-block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--green);background:var(--sage);padding:4px 10px;border-radius:999px}
+.bx.dark .tag{background:rgba(217,178,122,.18);color:var(--gold-hi)}
+.bx .tag.plan{background:#f3ead9;color:var(--gold)}
+.bx h3{font-family:var(--serif);font-weight:400;font-size:28px;margin:16px 0 8px;line-height:1.1}
+.bx p{color:var(--muted);font-size:16px}
+.bx ul{margin-top:14px;list-style:none;font-size:15px}
+.bx li{padding:6px 0;border-top:1px dashed var(--line)}
+.bx.dark li{border-color:rgba(255,255,255,.14)}
+.bx li::before{content:"§ ";color:var(--gold)}
+.big§{position:absolute;right:-20px;bottom:-60px;font-family:var(--serif);font-size:260px;line-height:1;color:rgba(217,178,122,.12);animation:float 9s ease-in-out infinite}
+@media (max-width:900px){.bento{grid-template-columns:1fr}.bx,.bx.w3{grid-column:auto}}
+
+/* ---------- STATS ---------- */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:20px;text-align:center}
+.stat b{display:block;font-family:var(--serif);font-weight:400;font-size:clamp(40px,5vw,64px);color:var(--green)}
+.stat span{color:var(--muted);font-size:15px}
+@media (max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* ---------- PRICING ---------- */
+.pricing{background:linear-gradient(180deg,var(--paper),var(--sage))}
+.trial{display:inline-flex;gap:10px;align-items:center;margin-top:22px;padding:10px 18px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:15px}
+.trial b{color:var(--green)}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:50px;align-items:stretch}
+.plan{background:#fff;border:1px solid var(--line);border-radius:20px;padding:34px 30px;display:flex;flex-direction:column;transition:transform .5s var(--ease),box-shadow .5s}
+.plan:hover{transform:translateY(-8px);box-shadow:0 40px 70px -40px rgba(4,60,48,.5)}
+.plan.feat{background:var(--green-dark);color:#fff;border:1px solid var(--gold);position:relative;transform:scale(1.03)}
+.plan.feat:hover{transform:scale(1.03) translateY(-8px)}
+.plan.feat::before{content:"Beliebt";position:absolute;top:-13px;left:30px;background:linear-gradient(135deg,#e2bd85,var(--gold));color:#1b1206;font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;letter-spacing:.06em}
+.plan h3{font-family:var(--serif);font-weight:400;font-size:32px}
+.plan .d{color:var(--muted);font-size:15px;margin-top:6px;min-height:46px}
+.plan.feat .d,.plan.feat .per,.plan.feat li{color:rgba(255,255,255,.75)}
+.plan .price{font-family:var(--serif);font-size:54px;margin-top:20px;line-height:1}
+.plan .per{font-size:14px;color:var(--muted)}
+.plan ul{list-style:none;margin:22px 0 28px;font-size:15px;flex:1}
+.plan li{padding:8px 0;border-top:1px solid var(--line);display:flex;gap:10px}
+.plan.feat li{border-color:rgba(255,255,255,.12)}
+.plan li::before{content:"✓";color:var(--gold);font-weight:700}
+.plan .btn{justify-content:center}
+.fine{margin-top:34px;font-size:14px;color:var(--muted);max-width:80ch}
+@media (max-width:900px){.plans{grid-template-columns:1fr}.plan.feat{transform:none}.plan.feat:hover{transform:translateY(-8px)}}
+
+/* ---------- FAQ ---------- */
+.faq{max-width:820px}
+details{border-bottom:1px solid var(--line);padding:22px 0}
+summary{cursor:pointer;list-style:none;font-family:var(--serif);font-size:26px;display:flex;justify-content:space-between;gap:20px}
+summary::after{content:"+";color:var(--gold);transition:transform .3s}
+details[open] summary::after{transform:rotate(45deg)}
+details p{color:var(--muted);margin-top:12px;animation:fade .5s}
+
+/* ---------- CTA ---------- */
+.cta{position:relative;background:var(--night);color:#fff;text-align:center;overflow:hidden}
+.cta canvas{position:absolute;inset:0;width:100%;height:100%}
+.cta .wrap{position:relative}
+.cta img{width:180px;margin:0 auto 26px;filter:drop-shadow(0 20px 40px rgba(0,0,0,.5));animation:float 6s ease-in-out infinite}
+.cta .h2 em{font-style:normal;color:var(--gold-hi)}
+.cta .wordmark{font-family:var(--serif);font-size:clamp(26px,3.4vw,40px);color:#fff;margin:-6px auto 34px;max-width:none;line-height:1.1}
+.cta .wordmark em{font-style:normal;background:linear-gradient(100deg,#f3d9ac 0%,var(--gold-hi) 30%,#fff3dc 50%,var(--gold-hi) 70%,#b08452 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sheen 6s linear infinite}
+.cta .wordmark::after{content:"§";display:block;color:var(--gold-hi);font-size:.7em;margin-top:10px}
+.cta p{color:rgba(255,255,255,.7);margin:18px auto 34px;max-width:52ch}
+footer{background:var(--night);color:rgba(255,255,255,.5);font-size:14px;padding:30px 0;border-top:1px solid rgba(255,255,255,.08)}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}.hero h1 .line span{transform:none}.hero .sub,.hero .ctas,.hero .note,.stage{opacity:1}}
+
+/* =================================================================
+   DURCHGEHEND DUNKEL: the whole page in the tone of the hero
+   ================================================================= */
+:root{
+  --ink:#f4efe4; --paper:#021f19; --line:rgba(217,178,122,.18); --muted:rgba(244,239,228,.62);
+  --glass:rgba(255,255,255,.035); --glass-hi:rgba(255,255,255,.06);
+  --glow:radial-gradient(70% 60% at 85% 20%,rgba(10,90,71,.55),transparent 70%),radial-gradient(60% 50% at 10% 90%,rgba(7,84,66,.45),transparent 70%);
+}
+body{background:var(--night);color:var(--ink)}
+.eyebrow{color:var(--gold-hi)}
+.nav.solid{background:rgba(2,31,25,.78);box-shadow:0 1px 0 var(--line)}
+.nav.solid .brand,.nav.solid ul a{color:#fff}
+.nav.solid .btn-ghost{border-color:rgba(255,255,255,.35);color:#fff}
+
+/* each section sits on the same night-green with a soft glow, like the hero */
+.film,#who,#features,.pricing,#faq{background:var(--glow),var(--night)}
+#who,#faq{background:radial-gradient(60% 60% at 15% 30%,rgba(10,90,71,.45),transparent 70%),var(--night)}
+.h2{color:#fff}
+
+/* steps */
+.steps .n{color:var(--gold-hi)}
+.film .progress i{background:linear-gradient(90deg,var(--gold),var(--gold-hi))}
+.screen{background:#0b2a23;box-shadow:0 60px 120px -40px rgba(0,0,0,.8),0 0 0 1px rgba(217,178,122,.25)}
+.screen .bar{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}
+.screen .bar i{background:rgba(217,178,122,.35)}
+.field,.file{border-color:rgba(255,255,255,.1);background:var(--glass)}
+.field small{color:var(--gold-hi)}
+.typed::after{color:var(--gold-hi)}
+.file .ic{background:rgba(217,178,122,.15);color:var(--gold-hi)}
+.file .ok{color:var(--gold-hi)}
+.doc{color:rgba(244,239,228,.85)}
+.doc .hd{border-color:var(--gold)}
+.doc .hd b{color:var(--gold-hi)}
+.doc .ph{background:rgba(217,178,122,.15);color:var(--gold-hi)}
+
+/* audiences */
+.tile{background:var(--glass);border-color:var(--line);backdrop-filter:blur(6px)}
+.tile:hover{box-shadow:0 30px 60px -30px rgba(0,0,0,.8),0 0 0 1px rgba(217,178,122,.4)}
+.tile .ico{background:rgba(217,178,122,.14);color:var(--gold-hi)}
+
+/* features */
+.bx{background:var(--glass);border-color:var(--line)}
+.bx.dark{background:linear-gradient(160deg,#0a5a47,#043c30);border-color:rgba(217,178,122,.35)}
+.bx .tag{background:rgba(217,178,122,.14);color:var(--gold-hi)}
+.bx .tag.plan{background:rgba(255,255,255,.06);color:var(--muted)}
+.stat b{color:var(--gold-hi)}
+
+/* pricing */
+.trial{background:var(--glass);border-color:var(--line)}
+.trial b{color:var(--gold-hi)}
+.plan{background:var(--glass);border-color:var(--line)}
+.plan:hover{box-shadow:0 40px 70px -40px rgba(0,0,0,.9)}
+.plan.feat{background:linear-gradient(160deg,#0a5a47,#043c30)}
+.plan .btn-green{background:transparent;border:1px solid var(--gold);color:var(--gold-hi)}
+.plan .btn-green:hover{background:rgba(217,178,122,.12)}
+
+/* faq + footer */
+summary{color:#fff}
+footer{border-top-color:var(--line)}
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="assets/schimmelpilz-mark.webp" alt=""><span class="name">Rechtsassistentin <em>Schimmelpilz</em></span></a>
+    <ul>
+      <li><a href="#how">So funktioniert’s</a></li>
+      <li><a href="#demo">Demo</a></li>
+      <li><a href="#features">Funktionen</a></li>
+      <li><a href="#pricing">Preise</a></li>
+      <li><a href="#faq">FAQ</a></li>
+      <li><a href="index.html">Startseite</a></li>
+    </ul>
+    <div style="display:flex;gap:10px">
+      <a class="btn btn-ghost" data-app="login" href="#">Einloggen</a>
+      <a class="btn btn-gold" data-app href="#">Registrieren</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <!-- Optional: drop a real clip at assets/hero.mp4 and it plays behind the animation -->
+  <video id="heroVideo" autoplay muted loop playsinline preload="none" hidden></video>
+  <canvas id="heroFx"></canvas>
+  <div class="grain"></div>
+  <div class="vignette"></div>
+  <div class="wrap">
+    <div>
+      <p class="eyebrow" style="color:var(--gold-hi);opacity:0;animation:fade 1s .1s forwards">Lokale KI · Deutsches Bundesrecht · DE / EN</p>
+      <h1 style="margin-top:18px">
+        <span class="line"><span>Rechtsassistentin</span></span>
+        <span class="line"><span><em>Schimmelpilz</em></span></span>
+      </h1>
+      <p class="refa">Entwickelt von einem ausgelernten ReFa</p>
+      <p class="sub">Von der Rechtsfrage zur nächsten Handlung. Für alle Rechtsgebiete, von Kündigungsschutz bis Sozialrecht.</p>
+      <div class="ctas">
+        <a class="btn btn-gold" data-app href="#">7 Tage kostenlos testen →</a>
+        <a class="btn btn-ghost" href="#demo">▶ Demo ansehen</a>
+      </div>
+      <p class="note">Keine Kreditkarte · Keine automatische Abbuchung</p>
+    </div>
+    <div class="stage" id="stage">
+      <div class="halo"></div>
+      <div class="ring"></div>
+      <div class="ring r2"></div>
+      <div class="card" id="card"><img src="assets/schimmelpilz-mark.webp" alt="Schimmelpilz ringt mit Justitia vor dem Arbeitsgericht München"></div>
+      <div class="chip c1">📎 <b>§ 626 BGB</b> · Fundstelle geprüft</div>
+      <div class="chip c2">⚖️ Entwurf: <b>Kündigungsschutzklage</b></div>
+      <div class="chip c3">🔒 Läuft <b>lokal</b></div>
+    </div>
+  </div>
+  <a class="scroll-cue" href="#courts" aria-label="Weiter scrollen"></a>
+</header>
+
+<!-- ============ LEGAL AREAS ============ -->
+<section class="areas-band" aria-label="Rechtsgebiete">
+  <h2>Nicht nur Arbeitsrecht. <em>Alle Rechtsgebiete.</em></h2>
+  <ul class="areas"><li>Kündigungsschutz</li><li>Arbeitsrecht</li><li>Sozialrecht</li><li>Zivilrecht</li><li>Mietrecht</li><li>Vertragsrecht</li><li>Verbraucherrecht</li><li>Familienrecht</li><li>Handelsrecht</li><li>Verwaltungsrecht</li><li>Strafrecht</li></ul>
+</section>
+
+<!-- ============ COURTS MARQUEE ============ -->
+<div class="marquee" id="courts" aria-label="Getestet und verbessert in Verfahren beim">
+  <div class="track">
+    <span class="lbl">Getestet in Verfahren beim</span>
+    <span>Arbeitsgericht München</span><span>Arbeitsgericht Offenbach</span><span>Sozialgericht Köln</span><span>Landessozialgericht NRW</span><span>Landgericht München I</span><span>Amtsgericht Wedding</span>
+    <span class="lbl">Getestet in Verfahren beim</span>
+    <span>Arbeitsgericht München</span><span>Arbeitsgericht Offenbach</span><span>Sozialgericht Köln</span><span>Landessozialgericht NRW</span><span>Landgericht München I</span><span>Amtsgericht Wedding</span>
+  </div>
+</div>
+
+<!-- ============ PINNED FILM: 3 STEPS ============ -->
+<section class="film" id="how">
+  <div class="sticky">
+    <div class="wrap grid">
+      <div>
+        <p class="eyebrow">So funktioniert’s</p>
+        <h2 class="h2" style="margin-top:14px">In drei Schritten zum nächsten Schritt.</h2>
+        <ol class="steps" id="steps">
+          <li class="on"><span class="n">01</span><div><h3>Fall beschreiben</h3><p>Schildern Sie kurz Ihr Anliegen und die wichtigsten Eckdaten.</p></div></li>
+          <li><span class="n">02</span><div><h3>Unterlagen hinzufügen</h3><p>Laden Sie relevante Dokumente sicher und übersichtlich hoch.</p></div></li>
+          <li><span class="n">03</span><div><h3>Entwurf vorbereiten</h3><p>Erhalten Sie verständliche Analysen und erstellen Sie Dokumententwürfe.</p></div></li>
+        </ol>
+        <div class="progress"><i id="filmBar"></i></div>
+      </div>
+      <div class="screen" aria-hidden="true">
+        <div class="bar"><i></i><i></i><i></i><span>schimmelpilz · Akte 2026/014</span></div>
+        <div class="scene on" data-scene="0">
+          <div class="field"><small>Rechtsgebiet</small>Arbeitsrecht</div>
+          <div class="field"><small>Gegenseite</small>Muster Logistik GmbH</div>
+          <div class="field" style="min-height:120px"><small>Sachverhalt</small><span id="typeTarget" class="typed"></span></div>
+        </div>
+        <div class="scene" data-scene="1">
+          <div class="file"><span class="ic">PDF</span>Kündigungsschreiben_03-10.pdf<span class="ok">✓ Text geprüft</span></div>
+          <div class="file"><span class="ic">DOCX</span>Arbeitsvertrag_2021.docx<span class="ok">✓ Text geprüft</span></div>
+          <div class="file"><span class="ic">JPG</span>Abmahnung_Foto.jpg<span class="ok">OCR · Kontrolle</span></div>
+          <div class="file"><span class="ic">PDF</span>Gehaltsabrechnung_09.pdf<span class="ok">✓ Text geprüft</span></div>
+        </div>
+        <div class="scene doc" data-scene="2">
+          <div class="hd"><b>An das Arbeitsgericht München</b><span>Entwurf · nicht rechtlich geprüft</span></div>
+          <p><b>Klage</b> der <span class="ph">[Name Kläger/in]</span> gegen die Muster Logistik GmbH wegen Kündigungsschutz.</p>
+          <p style="margin-top:10px">Es wird beantragt festzustellen, dass das Arbeitsverhältnis durch die Kündigung vom 03.10. <mark>nicht aufgelöst worden ist</mark> (§ 4 Satz 1 KSchG).</p>
+          <p style="margin-top:10px">Die Klagefrist von drei Wochen ist <mark>gewahrt</mark>. Anlagen: K1 Kündigungsschreiben, K2 Arbeitsvertrag.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEMO (plays like a video) ============ -->
+<section class="demo" id="demo">
+  <div class="wrap">
+    <p class="eyebrow" style="color:var(--gold-hi)">Live-Demo</p>
+    <h2 class="h2 reveal" style="margin-top:14px">Antworten mit Fundstellen.<br>Nicht mit Bauchgefühl.</h2>
+    <p class="lead reveal d1">Der lokale KI-Chat recherchiert in deutschem Bundesrecht und veröffentlichten Bundesentscheidungen – und zeigt die Originalpassage gleich mit.</p>
+    <div class="player reveal d2" id="player">
+      <div class="top"><span>Akte 2026/014 · KI-Chat</span><span class="live"><i></i>LÄUFT LOKAL</span></div>
+      <div class="body">
+        <aside>
+          <h4>Akte</h4>
+          <div class="it act">💬 KI-Chat</div>
+          <div class="it">📁 Unterlagen (4)</div>
+          <div class="it">📝 Schriftsätze</div>
+          <div class="it">🧮 Kostenprüfung</div>
+          <h4 style="margin-top:22px">Quellen</h4>
+          <div class="it">§ Bundesrecht</div>
+          <div class="it">⚖️ Bundesgerichte</div>
+        </aside>
+        <div class="chat" id="chat"></div>
+      </div>
+      <div class="scrub"><i id="scrub"></i></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ AUDIENCES ============ -->
+<section id="who">
+  <div class="wrap">
+    <p class="eyebrow reveal">Für wen</p>
+    <h2 class="h2 reveal d1" style="margin-top:14px">Strukturierte Akten. Nachvollziehbare Recherche.<br>Bearbeitbare Schriftsätze.</h2>
+    <div class="aud">
+      <article class="tile reveal"><div class="ico">V</div><h3>Verbraucher</h3><p>Käufe, Verträge, Wohnen, Arbeit und Forderungen: Unterlagen ordnen, Rechte recherchieren und die eigene Angelegenheit verständlich vorbereiten.</p></article>
+      <article class="tile reveal d1"><div class="ico">B</div><h3>Business</h3><p>Verträge, offene Rechnungen, Personal und Geschäftspartner: Sachverhalte dokumentieren, Risiken recherchieren und Korrespondenz vorbereiten.</p></article>
+      <article class="tile reveal d2"><div class="ico">K</div><h3>Anwaltskanzleien</h3><p>Mandatsakten, Normen und Rechtsprechung: Recherche mit Fundstellen, Gegenpositionen und Verfahrensbezug vorbereiten und Entwürfe bearbeiten.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section id="features" style="padding-top:20px">
+  <div class="wrap">
+    <p class="eyebrow reveal">Funktionen & Recherche</p>
+    <h2 class="h2 reveal d1" style="margin-top:14px">Alles in einer Akte.</h2>
+    <div class="bento">
+      <div class="bx w3 dark reveal"><span class="tag">Quellensuche verfügbar</span><h3>Gesetze & Normen</h3><p>Ansprüche, Voraussetzungen, Ausnahmen und Verfahrensregeln mit Paragraph, Fassung und Quellenbezug.</p>
+        <ul><li>BGB, EGBGB, HGB, GmbHG, InsO</li><li>KSchG, BUrlG, ArbGG</li><li>ZPO, GVG, FamFG, VwGO, SGG</li></ul><div class="big§">§</div></div>
+      <div class="bx w3 reveal d1"><span class="tag">Quellensuche verfügbar</span><h3>Urteile & Beschlüsse</h3><p>Bundesgerichtsindex nach Gericht, Datum und Aktenzeichen durchsuchen. Tragende Gründe, Leitsätze und Gegenargumente für die Akte aufbereiten.</p>
+        <ul><li>Fundstellen und Originalentscheidungen</li><li>Urteil vs. Beschluss</li><li>Relevanz, Abweichungen, Instanzenzug</li></ul></div>
+      <div class="bx reveal"><span class="tag">Rechenprüfung verfügbar</span><h3>Kostenrechnungen prüfen</h3><p>RVG, GKG, FamGKG nachrechnen, Abweichungen markieren, PDF-Prüfberichte erstellen.</p></div>
+      <div class="bx reveal d1"><span class="tag">Vorlagen verfügbar</span><h3>Klagen & Anschreiben</h3><p>Vorlagen übernehmen Aktenzeichen, Beteiligte und Sachverhalt. Export als Text, Word oder PDF mit Briefkopf.</p></div>
+      <div class="bx reveal d2"><span class="tag plan">Geplant</span><h3>Welches Gericht ist zuständig?</h3><p>Rechtsweg, sachliche und örtliche Zuständigkeit anhand von Streitgegenstand und Ort untersuchen.</p></div>
+    </div>
+    <div class="stats">
+      <div class="stat reveal"><b data-count="6">0</b><span>Gerichte im Praxistest</span></div>
+      <div class="stat reveal d1"><b data-count="2">0</b><span>Arbeitssprachen</span></div>
+      <div class="stat reveal d2"><b data-count="3">0</b><span>Exportformate</span></div>
+      <div class="stat reveal d3"><b data-count="7">0</b><span>Tage kostenlos testen</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRICING ============ -->
+<section class="pricing" id="pricing">
+  <div class="wrap">
+    <p class="eyebrow reveal">Preise & Testzugang</p>
+    <h2 class="h2 reveal d1" style="margin-top:14px">Der passende Einstieg für Ihre Arbeit.</h2>
+    <div class="trial reveal d2">🎁 <b>7 Tage kostenlos</b> · Keine Kreditkarte · Keine automatische Abbuchung</div>
+    <div class="plans">
+      <div class="plan reveal"><h3>Privat</h3><p class="d">Eigene Rechte verstehen und den nächsten Schritt vorbereiten.</p><div class="price">9,90 €</div><span class="per">pro Inhaber-Arbeitsbereich / Monat</span>
+        <ul><li>Strukturierte Akten für eigene Anliegen</li><li>Unterlagen und Belege zusammenhalten</li><li>Rechtsfragen im KI-Chat recherchieren</li><li>Anschreiben und Einwendungen vorbereiten</li></ul><a class="btn btn-green" data-app href="#">Testzugang anlegen</a></div>
+      <div class="plan feat reveal d1"><h3>Business</h3><p class="d">Verträge, Forderungen und Geschäftspost im Blick behalten.</p><div class="price">29,90 €</div><span class="per">pro Inhaber-Arbeitsbereich / Monat</span>
+        <ul><li>Passendes Unternehmensprofil</li><li>Verträge und Vorgänge in Akten organisieren</li><li>Korrespondenz mit eigenem Briefpapier</li><li>Entwürfe mit Prüfvermerken und Versionen</li></ul><a class="btn btn-gold" data-app href="#">Testzugang anlegen</a></div>
+      <div class="plan reveal d2"><h3>Kanzlei</h3><p class="d">Mandatsakten, Recherche und Schriftsätze an einem Ort.</p><div class="price">49,90 €</div><span class="per">pro Inhaber-Arbeitsbereich / Monat</span>
+        <ul><li>Passendes Kanzlei- und Berufsprofil</li><li>Deutsche Normen und Entscheidungen suchen</li><li>Textblöcke neben Originalpassagen prüfen</li><li>Schriftsatzversionen und eigene Freigaben</li></ul><a class="btn btn-green" data-app href="#">Testzugang anlegen</a></div>
+    </div>
+    <p class="fine">7 Tage kostenlos testen, keine Kreditkarte, keine automatische Abbuchung. Monatliche Endpreise in Euro einschließlich anfallender Steuern. Die Assistenz ersetzt keine individuelle anwaltliche Beratung.</p>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq">
+  <div class="wrap faq">
+    <p class="eyebrow reveal">FAQ</p>
+    <h2 class="h2 reveal d1" style="margin:14px 0 30px">Klarheit, bevor Sie starten.</h2>
+    <details class="reveal"><summary>Ersetzt die Assistenz eine Rechtsberatung?</summary><p>Nein. Die lokale KI strukturiert Angaben und bereitet Entwürfe vor. Antworten sind rechtlich nicht geprüft; die technische Quellen- und Verweisprüfung ersetzt keine individuelle anwaltliche Beratung.</p></details>
+    <details class="reveal"><summary>Wo werden meine Unterlagen verarbeitet?</summary><p>Der KI-Chat, die Quellensuche und die OCR laufen lokal. Ausgewählte, zuvor überprüfte PDF/DOCX-Textauszüge werden mit Seiten- oder Abschnittsbezug eingebunden.</p></details>
+    <details class="reveal"><summary>Kann ich auf Deutsch und Englisch arbeiten?</summary><p>Ja. Deutsch und Englisch sind die Arbeitssprachen. Der lokale Quellenkatalog enthält deutsches Bundesrecht; EU-Quellen sind separat verlinkt.</p></details>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="cta">
+  <canvas id="ctaFx"></canvas>
+  <div class="wrap">
+    <img src="assets/schimmelpilz-mark.webp" alt="" style="width:min(240px,60%)">
+    <p class="wordmark">Rechtsassistentin <em>Schimmelpilz</em></p>
+    <h2 class="h2 reveal">Bereit, <em>Justitia</em> in den Griff zu bekommen?</h2>
+    <p class="reveal d1">Legen Sie Ihre erste Akte an – in wenigen Minuten. 7 Tage kostenlos, ohne automatische Abbuchung.</p>
+    <a class="btn btn-gold reveal d2" data-app href="#">Jetzt kostenlos starten →</a>
+  </div>
+</section>
+<footer><div class="wrap"><span>© 2026 Rechtsassistentin Schimmelpilz</span><span>Die Assistenz ersetzt keine individuelle anwaltliche Beratung.</span><span><a href="impressum.html" style="color:inherit">Impressum</a> · <a href="datenschutz.html" style="color:inherit">Datenschutz</a></span></div></footer>
+
+<script>
+/* ===== Where the CTA buttons go ===== */
+const APP_URL = "/?open=register";
+const LOGIN_URL = "/?open=login";
+document.querySelectorAll("[data-app]").forEach(a => a.href = a.dataset.app === "login" ? LOGIN_URL : APP_URL);
+
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ===== Optional real hero video: plays only if assets/hero.mp4 exists ===== */
+(() => {
+  const v = document.getElementById("heroVideo");
+  fetch("assets/hero.mp4", { method: "HEAD" }).then(r => {
+    if (r.ok && !reduce) { v.src = "assets/hero.mp4"; v.hidden = false; v.play().catch(()=>{}); }
+  }).catch(()=>{});
+})();
+
+/* ===== Nav background on scroll ===== */
+const nav = document.getElementById("nav");
+addEventListener("scroll", () => nav.classList.toggle("solid", scrollY > innerHeight * .8), { passive: true });
+
+/* ===== Cinematic particle field (gold dust + drifting § glyphs + light rays) ===== */
+function fx(canvas, opts) {
+  const ctx = canvas.getContext("2d");
+  let w, h, dpr, parts = [], mx = .5, my = .5;
+  const resize = () => {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    w = canvas.clientWidth; h = canvas.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const n = Math.round((w * h) / (opts.density || 9000));
+    parts = Array.from({ length: n }, () => ({
+      x: Math.random() * w, y: Math.random() * h, z: Math.random() * .9 + .1,
+      r: Math.random() * 1.8 + .3, vy: -(Math.random() * .25 + .05), ph: Math.random() * 6.28,
+      glyph: Math.random() < (opts.glyphs || .04)
+    }));
+  };
+  resize(); addEventListener("resize", resize);
+  canvas.parentElement.addEventListener("pointermove", e => {
+    const b = canvas.getBoundingClientRect(); mx = (e.clientX - b.left) / b.width; my = (e.clientY - b.top) / b.height;
+  });
+  let t = 0, visible = true;
+  new IntersectionObserver(([e]) => visible = e.isIntersecting).observe(canvas);
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (!visible) return;
+    t += .016; ctx.clearRect(0, 0, w, h);
+    if (opts.rays) {   // volumetric light rays from top-right
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < 5; i++) {
+        const a = -2.2 + i * .14 + Math.sin(t * .25 + i) * .04;
+        const g = ctx.createLinearGradient(w * .85, -50, w * .85 + Math.cos(a) * h * 1.6, Math.sin(-a) * h * 1.6);
+        g.addColorStop(0, "rgba(217,178,122,.10)"); g.addColorStop(1, "rgba(217,178,122,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(w * .85, -50);
+        ctx.lineTo(w * .85 + Math.cos(a - .05) * h * 2, -50 - Math.sin(a - .05) * h * 2);
+        ctx.lineTo(w * .85 + Math.cos(a + .05) * h * 2, -50 - Math.sin(a + .05) * h * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    for (const p of parts) {
+      p.y += p.vy * p.z * 2; p.x += Math.sin(t + p.ph) * .15 * p.z;
+      if (p.y < -20) { p.y = h + 20; p.x = Math.random() * w; }
+      const px = p.x + (mx - .5) * 40 * p.z, py = p.y + (my - .5) * 30 * p.z;
+      const tw = .5 + .5 * Math.sin(t * 2 + p.ph);
+      if (p.glyph) {
+        ctx.font = `${14 + p.z * 26}px "Libre Caslon Display", Georgia, serif`;
+        ctx.fillStyle = `rgba(217,178,122,${.10 + .18 * p.z * tw})`;
+        ctx.fillText("§", px, py);
+      } else {
+        ctx.beginPath(); ctx.arc(px, py, p.r * p.z * 1.4, 0, 6.28);
+        ctx.fillStyle = `rgba(240,210,160,${.25 + .6 * p.z * tw})`;
+        ctx.shadowColor = "rgba(217,178,122,.9)"; ctx.shadowBlur = 8 * p.z; ctx.fill(); ctx.shadowBlur = 0;
+      }
+    }
+  })();
+}
+if (!reduce) {
+  fx(document.getElementById("heroFx"), { density: 7000, glyphs: .05, rays: true });
+  fx(document.getElementById("ctaFx"), { density: 11000, glyphs: .06 });
+}
+
+/* ===== 3D tilt + scroll parallax on the hero mark ===== */
+const stage = document.getElementById("stage"), card = document.getElementById("card");
+document.querySelector(".hero").addEventListener("pointermove", e => {
+  const b = stage.getBoundingClientRect();
+  const x = (e.clientX - b.left) / b.width - .5, y = (e.clientY - b.top) / b.height - .5;
+  card.style.transform = `rotateY(${x * 18}deg) rotateX(${-y * 14}deg)`;
+});
+addEventListener("scroll", () => {
+  if (scrollY < innerHeight) stage.style.transform = `translateY(${scrollY * .25}px) scale(${1 - scrollY / innerHeight * .12})`;
+}, { passive: true });
+
+/* ===== Reveal on scroll ===== */
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .15 });
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+/* ===== Spotlight on audience tiles ===== */
+document.querySelectorAll(".tile").forEach(t => t.addEventListener("pointermove", e => {
+  const b = t.getBoundingClientRect();
+  t.style.setProperty("--mx", (e.clientX - b.left) + "px"); t.style.setProperty("--my", (e.clientY - b.top) + "px");
+}));
+
+/* ===== Count-up stats ===== */
+const cio = new IntersectionObserver(es => es.forEach(e => {
+  if (!e.isIntersecting) return; cio.unobserve(e.target);
+  const el = e.target, to = +el.dataset.count, t0 = performance.now();
+  (function f(n) { const k = Math.min((n - t0) / 1200, 1); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(f); })(t0);
+}), { threshold: .6 });
+document.querySelectorAll("[data-count]").forEach(el => cio.observe(el));
+
+/* ===== Pinned "film": scroll scrubs through the 3 scenes ===== */
+const film = document.getElementById("how"), scenes = [...film.querySelectorAll(".scene")],
+      stepEls = [...document.querySelectorAll("#steps li")], filmBar = document.getElementById("filmBar");
+let curScene = -1, typeTimer;
+function setScene(i) {
+  if (i === curScene) return; curScene = i;
+  scenes.forEach((s, k) => s.classList.toggle("on", k === i));
+  stepEls.forEach((s, k) => s.classList.toggle("on", k === i));
+  if (i === 0) typeIt();
+}
+addEventListener("scroll", () => {
+  if (innerWidth <= 900) return;
+  const b = film.getBoundingClientRect(), total = film.offsetHeight - innerHeight;
+  const p = Math.min(Math.max(-b.top / total, 0), 1);
+  filmBar.style.width = (p * 100) + "%";
+  setScene(Math.min(2, Math.floor(p * 3)));
+}, { passive: true });
+// on mobile: auto-cycle like a looped clip
+if (innerWidth <= 900) { let i = 0; setScene(0); setInterval(() => setScene(i = (i + 1) % 3), 3800); }
+
+function typeIt() {
+  const el = document.getElementById("typeTarget");
+  const txt = "Am 03.10. fristlos gekündigt, ohne vorherige Abmahnung. Seit 2021 beschäftigt, 38 Mitarbeitende im Betrieb.";
+  clearInterval(typeTimer); el.textContent = ""; let i = 0;
+  typeTimer = setInterval(() => { el.textContent = txt.slice(0, ++i); if (i >= txt.length) clearInterval(typeTimer); }, 28);
+}
+typeIt();
+
+/* ===== Demo "video": scripted chat that plays when in view, loops ===== */
+const script = [
+  { who: "u", text: "Mir wurde fristlos gekündigt. Muss mein Arbeitgeber vorher abmahnen?" },
+  { who: "a", text: "In der Regel ja. Eine außerordentliche Kündigung setzt einen wichtigen Grund voraus; bei verhaltensbedingten Pflichtverletzungen ist meist zuvor eine Abmahnung erforderlich, außer das Vertrauen ist bereits schwer erschüttert.",
+    cites: ["§ 626 Abs. 1 BGB", "§ 314 Abs. 2 BGB", "BAG · Originalpassage"] },
+  { who: "u", text: "Bis wann muss ich reagieren?" },
+  { who: "a", text: "Für die Kündigungsschutzklage gilt eine Frist von drei Wochen ab Zugang der Kündigung. Ich habe den Entwurf in Ihrer Akte vorbereitet – Platzhalter sind markiert.",
+    cites: ["§ 4 Satz 1 KSchG", "Entwurf öffnen →"] },
+];
+const chat = document.getElementById("chat"), scrub = document.getElementById("scrub");
+let playing = false;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function playDemo() {
+  if (playing) return; playing = true;
+  while (true) {
+    chat.innerHTML = ""; const t0 = performance.now(), dur = 16000;
+    const tick = setInterval(() => scrub.style.width = Math.min((performance.now() - t0) / dur * 100, 100) + "%", 100);
+    for (const m of script) {
+      const el = document.createElement("div"); el.className = "msg " + m.who; chat.appendChild(el);
+      await wait(250); el.classList.add("show");
+      if (m.who === "a") {
+        for (let i = 1; i <= m.text.length; i += 3) { el.textContent = m.text.slice(0, i); await wait(16); }
+        el.textContent = m.text;
+        const row = document.createElement("div"); el.appendChild(row);
+        for (const c of m.cites) { const s = document.createElement("span"); s.className = "cite"; s.textContent = c; row.appendChild(s); await wait(180); s.classList.add("show"); }
+        await wait(1400);
+      } else { el.textContent = m.text; await wait(1100); }
+    }
+    await wait(Math.max(0, dur - (performance.now() - t0)));
+    clearInterval(tick);
+  }
+}
+new IntersectionObserver(([e]) => { if (e.isIntersecting) playDemo(); }, { threshold: .35 }).observe(document.getElementById("player"));
+</script>
+</body>
+</html>

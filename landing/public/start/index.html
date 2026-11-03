@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rechtsassistentin Schimmelpilz</title>
+<meta name="description" content=" Rechtsassistentin Schimmelpilz begleitet Sie vom Vorplatz bis in den Gerichtssaal.">
+<link rel="icon" href="assets/schimmelpilz-mark.webp">
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+:root{
+  --ink:#f4efe4; --muted:rgba(244,239,228,.68); --night:#021f19; --green:#075442; --green-dark:#043c30;
+  --gold:#987243; --gold-hi:#d9b27a; --line:rgba(217,178,122,.28);
+  --serif:"Libre Caslon Display",Georgia,serif; --sans:"Source Sans 3",Arial,sans-serif;
+  --ease:cubic-bezier(.2,.7,.1,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--night)}
+body{background:var(--night);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.5}
+a{color:inherit}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold-hi);outline-offset:3px}
+
+#film{position:fixed;inset:0;overflow:hidden;background:var(--night)}
+#film .shot{position:absolute;inset:0;opacity:0;will-change:transform,opacity;background-size:cover;background-repeat:no-repeat}
+#film::after{content:"";position:absolute;inset:0;z-index:5;pointer-events:none;background:radial-gradient(ellipse at center,transparent 52%,rgba(2,20,16,.62)),linear-gradient(180deg,rgba(2,24,19,.5),transparent 24%,transparent 64%,rgba(2,24,19,.6))}
+#dust{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
+#ai{position:fixed;z-index:29;right:14px;bottom:56px;font-size:12px;color:var(--muted);text-shadow:0 1px 6px #000}
+#legal{position:fixed;z-index:41;right:calc(clamp(14px,2.2vw,32px) + 54px);top:116px;display:flex;gap:14px;font-size:13.5px;text-shadow:0 1px 6px #000}
+#legal a{color:var(--ink);text-decoration:none}
+#legal a:hover{color:var(--gold-hi)}
+@media (max-width:720px){#legal{left:14px;right:auto;top:76px;font-size:13px}}
+#sound{position:fixed;z-index:41;right:clamp(14px,2.2vw,32px);top:104px;width:42px;height:42px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--gold-hi);background:rgba(3,34,27,.82);color:var(--gold-hi);font-size:20px;line-height:1;cursor:pointer;transition:background .3s,color .3s}
+#sound:hover{background:rgba(217,178,122,.22)}
+#sound[aria-pressed="true"]{background:var(--gold-hi);color:#10231d}
+#sound[aria-pressed="false"] span{opacity:.55;text-decoration:line-through}
+@media (max-width:720px){#sound{top:104px;width:38px;height:38px}}
+.nav .brand{opacity:0;pointer-events:none;transform:translateY(-8px);transition:opacity .45s,transform .45s}
+body.scrolled .nav .brand{opacity:1;pointer-events:auto;transform:none}
+.villain{position:absolute;z-index:-1;left:clamp(-10px,1.6vw,34px);bottom:-9vh;height:82vh;width:auto;max-width:none;filter:drop-shadow(0 12px 26px rgba(0,0,0,.65));transform-origin:50% 100%;animation:creep 1.2s cubic-bezier(.2,.9,.3,1) .7s backwards,lurk 5s ease-in-out 1.9s infinite}
+@keyframes creep{from{transform:translateX(-120%)}}
+@keyframes lurk{50%{transform:scale(1.012)}}
+@media (max-width:720px){.villain{left:-52px;bottom:-4vh;height:30vh}}
+@media (prefers-reduced-motion:reduce){.villain{animation:none}}
+body #intro .eyebrow{font-size:clamp(15px,1.7vw,20px)}
+body #intro{padding-top:clamp(92px,12vh,118px)}
+body #intro h1{font-size:clamp(40px,6vw,76px)}
+body #intro p.sub{max-width:68ch;margin-top:12px}
+#intro h1,#intro p.sub,#intro .eyebrow{text-shadow:0 3px 26px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.6)}
+#intro::before{content:"";position:absolute;inset:0 0 40%;z-index:-1;background:linear-gradient(180deg,rgba(2,24,19,.86),rgba(2,24,19,.55) 65%,transparent)}
+@media (max-width:720px){#ai{top:80px;bottom:auto;right:10px}}
+#track{height:calc(8 * 150svh)}
+
+/* loading */
+#loader{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--night);transition:opacity .9s}
+#loader.off{opacity:0;pointer-events:none}
+#loader div{text-align:center;color:var(--gold-hi);font-family:var(--serif);font-size:22px}
+#loader i{display:block;width:44px;height:44px;margin:0 auto 16px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--gold-hi);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* nav */
+.nav{position:fixed;inset:0 0 auto;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px clamp(16px,3vw,32px);background:linear-gradient(180deg,rgba(2,31,25,.8),transparent)}
+.brand{display:flex;align-items:center;gap:14px;font-family:var(--serif);font-size:30px;line-height:1.05;text-decoration:none;white-space:nowrap}
+.brand .name em{font-style:normal;color:var(--gold-hi)}
+.brand img{width:72px;height:auto}
+.nav .right{display:flex;align-items:center;gap:18px}
+.nav .alt{font-size:15px;color:var(--muted);text-decoration:none}
+.nav .alt:hover{color:var(--gold-hi)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:8px;font-weight:700;font-size:16px;text-decoration:none;border:1px solid transparent;transition:transform .25s var(--ease),box-shadow .25s,background .25s;white-space:nowrap}
+.btn:hover{transform:translateY(-2px)}
+.btn-gold{background:linear-gradient(135deg,#e2bd85,var(--gold));color:#1b1206;box-shadow:0 10px 30px -10px rgba(217,178,122,.7)}
+.btn-line{border-color:var(--gold-hi);color:var(--gold-hi)}
+.btn-line:hover{background:rgba(217,178,122,.12)}
+@media (max-width:720px){.nav .alt{display:none}.brand{font-size:19px;gap:10px}.brand .name em{display:block}.brand img{width:50px}.nav .btn{padding:9px 13px;font-size:14px}}
+
+/* intro */
+#intro{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;padding:clamp(96px,14vh,140px) 20px 0;text-align:center;pointer-events:none;transition:opacity .6s,transform .8s var(--ease)}
+#intro.off{opacity:0;transform:translateY(-30px)}
+.eyebrow{font-size:13px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:var(--gold-hi)}
+#intro h1{font-family:var(--serif);font-weight:400;font-size:clamp(40px,7vw,88px);line-height:1;margin-top:14px;text-shadow:0 8px 40px rgba(0,0,0,.6)}
+#intro h1 em{font-style:normal;color:var(--gold-hi)}
+#intro p.sub{max-width:52ch;margin-top:16px;font-size:clamp(17px,1.7vw,20px);color:var(--ink);text-shadow:0 2px 16px rgba(0,0,0,.8)}
+.refa{color:var(--gold-hi);display:block}
+.courts{position:absolute;left:0;right:0;bottom:0;overflow:hidden;padding:9px 0;background:rgba(2,24,19,.84);border-top:1px solid rgba(217,178,122,.35)}
+.courts .run{display:flex;gap:42px;width:max-content;animation:courts 36s linear infinite}
+.courts span{font-family:var(--serif);font-size:19px;white-space:nowrap;color:var(--ink)}
+.courts span::before{content:"§ ";color:var(--gold-hi)}
+.courts .lbl{font-family:inherit;font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-hi);align-self:center}
+.courts .lbl::before{content:none}
+@keyframes courts{to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.courts .run{animation:none}}
+body #intro .hint{bottom:58px}
+@media (max-width:720px){.courts span{font-size:16px}}
+@media (max-width:720px),(max-height:900px){body #intro h1.title{display:flex;align-items:center;justify-content:center;gap:clamp(12px,1.6vw,22px);margin-top:10px;font-size:clamp(38px,5.4vw,84px);line-height:1.02}
+#intro .title img{width:clamp(72px,7.4vw,112px);height:auto;filter:drop-shadow(0 6px 18px rgba(0,0,0,.6))}
+#intro .tag{margin-top:8px;font-family:var(--serif);font-size:clamp(22px,2.4vw,32px);color:var(--ink);text-shadow:0 3px 20px rgba(0,0,0,.95)}
+#intro .tag em{font-style:normal;color:var(--gold-hi)}
+@media (min-width:721px) and (max-height:780px){html body #intro{padding-top:76px}body #intro h1.title{font-size:clamp(38px,4.4vw,60px);margin-top:4px}#intro .title img{width:64px}#intro .tag{font-size:22px;margin-top:4px}body #intro p.sub{margin-top:6px;font-size:16px}}
+@media (max-width:720px){body #intro h1.title{flex-direction:column;gap:6px;margin-top:6px}#intro .title em{display:block}body #intro .eyebrow{font-size:12px;letter-spacing:.08em}body #intro p.sub{font-size:15px;margin-top:8px}}
+.areas{list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:6px 8px;max-width:680px;margin:14px 0 0;padding:0}
+.areas li{font-size:14px;line-height:1.3;padding:4px 11px;border:1px solid rgba(217,178,122,.5);border-radius:999px;background:rgba(2,24,19,.72);color:var(--gold-hi)}
+#cta .areas{justify-content:flex-start;margin-top:8px}
+#cta .areas li{font-size:13px;padding:3px 9px}
+#cta .lead{margin-top:20px;color:var(--ink)}
+@media (min-width:721px) and (max-height:860px){body #cta{padding:20px 28px 16px;scrollbar-width:none}body #cta h2{font-size:clamp(28px,2.3vw,34px)}body #cta h2 em{display:inline}#cta p{margin-top:8px}body .prices{margin-top:14px;gap:10px}body .prices div{padding:10px 14px}body .prices b{margin-top:2px;font-size:25px}#cta .row{margin-top:14px}#cta .btn{padding-block:10px}#cta .lead{margin-top:12px;font-size:15px}#cta .areas{gap:5px 6px;margin-top:6px}#cta .areas li{font-size:12.5px;padding:2px 8px}#cta small{margin-top:10px;font-size:11.5px}}
+@media (min-width:721px) and (max-height:580px){#cta .lead,#cta .areas{display:none}}
+@media (max-width:720px){#cta .lead{margin-top:8px;font-size:14px}#cta .areas{gap:4px 5px;margin-top:6px}#cta .areas,#cta .lead{display:none}body #cta{padding:20px 18px}.prices{gap:8px}.prices div{padding:12px 8px}.prices b{font-size:22px}.nav .right{gap:8px}.brand img{display:none}.nav .btn{padding:9px 11px;font-size:13px}}
+#intro .hint{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;font-size:14px;color:var(--gold-hi)}
+#intro .hint i{width:24px;height:38px;border:2px solid var(--gold-hi);border-radius:13px;position:relative}
+#intro .hint i::after{content:"";position:absolute;left:50%;top:6px;width:4px;height:7px;margin-left:-2px;border-radius:2px;background:var(--gold-hi);animation:cue 1.8s infinite}
+@keyframes cue{60%{transform:translateY(13px);opacity:0}100%{opacity:0}}
+
+/* assistant card */
+#card{position:fixed;z-index:30;left:clamp(16px,3vw,40px);bottom:clamp(16px,4vh,40px);width:min(470px,calc(100% - 32px));padding:20px 22px 18px;border-radius:18px;background:rgba(3,34,27,.84);backdrop-filter:blur(14px);border:1px solid var(--line);box-shadow:0 30px 70px -30px rgba(0,0,0,.9);opacity:0;transform:translateY(24px);pointer-events:none;transition:opacity .45s,transform .6s var(--ease)}
+#card.on{opacity:1;transform:none;pointer-events:auto}
+#card .who{display:flex;align-items:center;gap:12px}
+#card .ava{width:52px;height:52px;border-radius:50%;border:2px solid var(--gold-hi);background:url(assets/schimmelpilz-mark.webp) 92% 40%/190% auto no-repeat #e9dfca;flex:none}
+#card .stn{font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--gold-hi)}
+#card h2{font-family:var(--serif);font-weight:400;font-size:clamp(25px,2.6vw,32px);line-height:1.08}
+#card p{margin-top:12px;color:var(--ink);font-size:16.5px}
+.cites{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.cites span{padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(217,178,122,.12);color:var(--gold-hi);font-size:13px;font-weight:700}
+.feats{margin-top:12px;display:grid;gap:5px;font-size:14.5px;list-style:none}
+.feats li{display:flex;justify-content:space-between;gap:10px;padding-top:6px;border-top:1px solid rgba(255,255,255,.1)}
+.feats b{font-size:12px;letter-spacing:.06em;color:var(--gold-hi);white-space:nowrap}
+.feats .plan b{color:var(--muted)}
+#card .foot{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+#card .foot button{padding:8px 16px;font-size:15px}
+@media (max-width:720px){#card{padding:14px 16px;left:8px;right:8px;bottom:8px;width:auto;max-height:58svh;overflow:auto}#card .ava{width:42px;height:42px}#card p{font-size:15.5px;margin-top:8px}.feats{font-size:13.5px}}
+
+/* rail */
+#rail{position:fixed;z-index:30;right:clamp(12px,2vw,26px);top:50%;transform:translateY(-50%);display:grid;gap:4px}
+#rail button{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:5px 0;font-size:14px;color:var(--muted)}
+#rail span{opacity:0;transform:translateX(6px);transition:.25s;text-shadow:0 2px 8px #000}
+#rail i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--gold-hi);transition:.3s}
+#rail button:hover span,#rail button:focus-visible span,#rail button[aria-current] span{opacity:1;transform:none}
+#rail button[aria-current]{color:var(--gold-hi)}
+#rail button[aria-current] i{background:var(--gold-hi);box-shadow:0 0 12px var(--gold-hi)}
+#rail button.done i{background:rgba(217,178,122,.45)}
+#bar{position:fixed;z-index:41;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--gold),var(--gold-hi))}
+@media (max-width:900px){#rail{display:none}}
+
+/* name tag over the 3D assistant */
+#tag{position:fixed;z-index:15;left:0;top:0;padding:3px 10px;border-radius:999px;background:rgba(3,34,27,.8);border:1px solid var(--gold-hi);color:var(--gold-hi);font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .3s;will-change:transform}
+
+/* finale */
+#cta{position:fixed;z-index:30;left:clamp(16px,4vw,64px);top:calc(50% + 28px);width:min(640px,calc(100% - 32px));max-height:calc(100svh - 96px);overflow:auto;padding:34px 36px 26px;border-radius:20px;background:rgba(3,34,27,.88);backdrop-filter:blur(14px);border:1px solid var(--gold-hi);box-shadow:0 40px 90px -30px #000;transform:translateY(-44%);opacity:0;pointer-events:none;transition:opacity .6s,transform .8s var(--ease)}
+#cta.on{opacity:1;transform:translateY(-50%);pointer-events:auto}
+#cta h2{font-family:var(--serif);font-weight:400;font-size:clamp(32px,4vw,50px);line-height:1.05;margin-top:8px}
+#cta h2 em{font-style:normal;color:var(--gold-hi)}
+#cta p{margin-top:12px;color:var(--muted)}
+.prices{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}
+.prices div{padding:16px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:14px;line-height:1.3;color:var(--muted)}
+.prices span{display:block;font-weight:700;letter-spacing:.04em;color:var(--gold-hi)}
+.prices i{font-style:normal;font-size:13px}
+.prices b{display:block;margin-top:6px;font-family:var(--serif);font-weight:400;font-size:clamp(23px,2.2vw,31px);white-space:nowrap;color:var(--ink)}
+#cta .row{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}
+#cta small{display:block;margin-top:14px;color:var(--muted);font-size:12.5px;line-height:1.4}
+@media (max-width:720px){#cta{left:8px;right:8px;width:auto;top:auto;bottom:8px;transform:translateY(20px);padding:18px;max-height:calc(100svh - 84px);overflow:auto}#cta.on{transform:none}}
+
+/* no-WebGL fallback */
+#fallback{display:none}
+body.nogl #film,body.nogl #dust,body.nogl #ai,body.nogl #track,body.nogl #intro,body.nogl #card,body.nogl #rail,body.nogl #cta,body.nogl #bar,body.nogl #loader{display:none}
+body.nogl #fallback{display:block;max-width:760px;margin:0 auto;padding:110px 20px 60px}
+#fallback h1{font-family:var(--serif);font-weight:400;font-size:44px;line-height:1.05}
+#fallback article{padding:22px 0;border-bottom:1px solid var(--line)}
+#fallback h2{font-family:var(--serif);font-weight:400;font-size:28px}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Hauptmenü">
+  <a class="brand" href="#"><img src="assets/schimmelpilz-mark.webp" alt=""><span class="name">Rechtsassistentin <em>Schimmelpilz</em></span></a>
+  <div class="right">
+    <a class="alt" href="klassisch.html">Klassische Seite</a>
+    <a class="btn btn-line" data-app="login" href="#">Einloggen</a>
+    <a class="btn btn-gold" data-app href="#">Registrieren</a>
+  </div>
+</nav>
+
+<div id="bar"></div>
+<div id="film" aria-hidden="true"></div>
+<canvas id="dust" aria-hidden="true"></canvas>
+<div id="ai">KI-generierte Bilder</div>
+<main id="track"></main>
+<audio id="bgm" src="assets/musik.mp3" loop preload="none"></audio>
+<nav id="legal" aria-label="Rechtliches"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a></nav>
+<button id="sound" type="button" aria-pressed="false" aria-label="Hintergrundmusik an oder aus"><span aria-hidden="true">♪</span></button>
+
+<div id="loader"><div><i></i>Das Gericht öffnet …</div></div>
+
+<section id="intro">
+  <img class="villain" src="assets/schimmelpilz-boese.webp" alt="">
+  <p class="eyebrow">Arbeitsgericht München</p>
+  <h1 class="title"><img src="assets/schimmelpilz-mark.webp" alt=""><span>Rechtsassistentin <em>Schimmelpilz</em></span></h1>
+  <p class="tag">Gehen Sie nicht <em>allein</em> hinein.</p>
+  <p class="sub"><b class="refa">Entwickelt von einem ausgelernten ReFa.</b> Sie begleitet Sie vom Vorplatz bis in den Gerichtssaal: vom Kündigungsschutz über Sozial- und Mietrecht bis zum Zivilprozess.</p>
+  <div class="hint"><i></i>Scrollen und eintreten</div>
+  <div class="courts" aria-label="Erprobt in Verfahren beim Arbeitsgericht München, Arbeitsgericht Offenbach, Sozialgericht Köln, Landessozialgericht NRW, Landgericht München I, Amtsgericht Wedding"><div class="run" aria-hidden="true"><span class="lbl">Erprobt in Verfahren beim</span><span>Arbeitsgericht München</span><span>Arbeitsgericht Offenbach</span><span>Sozialgericht Köln</span><span>Landessozialgericht NRW</span><span>Landgericht München I</span><span>Amtsgericht Wedding</span><span class="lbl">Erprobt in Verfahren beim</span><span>Arbeitsgericht München</span><span>Arbeitsgericht Offenbach</span><span>Sozialgericht Köln</span><span>Landessozialgericht NRW</span><span>Landgericht München I</span><span>Amtsgericht Wedding</span></div></div>
+</section>
+
+<aside id="card" aria-live="polite">
+  <div class="who"><div class="ava"></div><div><div class="stn" id="cStn"></div><h2 id="cTitle"></h2></div></div>
+  <p id="cText"></p>
+  <div class="cites" id="cCites"></div>
+  <ul class="feats" id="cFeats"></ul>
+  <div class="foot"><button class="btn btn-line" id="cNext">Weiter →</button></div>
+</aside>
+
+<aside id="cta">
+  <p class="eyebrow">Ihr Start</p>
+  <h2>Ihr nächster Schritt beginnt <em>mit der Akte.</em></h2>
+  <p>7 Tage kostenlos testen. Keine Kreditkarte, keine automatische Abbuchung.</p>
+  <div class="prices">
+    <div><span>Privat</span><b>9,90 €</b><i>pro Monat</i></div>
+    <div><span>Business</span><b>29,90 €</b><i>pro Monat</i></div>
+    <div><span>Kanzlei</span><b>49,90 €</b><i>pro Monat</i></div>
+  </div>
+  <div class="row">
+    <a class="btn btn-gold" data-app href="#">7 Tage kostenlos testen →</a>
+    <button class="btn btn-line" id="restart">Von vorn</button>
+  </div>
+  <p class="lead">Für alle Rechtsgebiete:</p>
+  <ul class="areas"><li>Kündigungsschutz</li><li>Arbeitsrecht</li><li>Sozialrecht</li><li>Zivilrecht</li><li>Mietrecht</li><li>Vertragsrecht</li><li>Verbraucherrecht</li><li>Familienrecht</li><li>Handelsrecht</li><li>Verwaltungsrecht</li><li>Strafrecht</li></ul>
+  <small>Preise pro Inhaber-Arbeitsbereich / Monat. Die Assistenz ersetzt keine individuelle anwaltliche Beratung; Antworten sind rechtlich nicht geprüft. Die Bilder sind KI-generiert oder KI-bearbeitet und zeigen nicht das echte Gebäude; keine Verbindung zum Arbeitsgericht München.</small>
+</aside>
+
+<nav id="rail" aria-label="Stationen des Rundgangs"></nav>
+<div id="fallback"></div>
+
+<script type="module">
+/* ===== Where the signup buttons go ===== */
+const APP_URL = "/?open=register";
+const LOGIN_URL = "/?open=login";
+document.querySelectorAll("[data-app]").forEach(a => a.href = a.dataset.app === "login" ? LOGIN_URL : APP_URL);
+
+/* ===== The journey: one Stop per station ===== */
+const STOPS = [
+  { nav: "Start" },
+  { nav: "Vorplatz", stn: "Station 1 · Vorplatz", title: "Der Brief ist da.",
+    text: "Kündigung, Bescheid oder Klage: Atmen Sie durch. Oft läuft jetzt eine kurze Frist, etwa drei Wochen für die Kündigungsschutzklage oder ein Monat für den Widerspruch gegen einen Bescheid. Legen wir zuerst Ihre Akte an: wer, was, wann.",
+    cites: ["§ 4 Satz 1 KSchG", "§ 84 Abs. 1 SGG"],
+    feats: [["Akte anlegen, Aktenzeichen führen", "Verfügbar"], ["Frist tragen Sie derzeit selbst ein", "Manuell"]] },
+  { nav: "Pforte", stn: "Station 2 · Pforte", title: "Bin ich hier richtig?",
+    text: "Streit aus dem Arbeitsverhältnis gehört meist vors Arbeitsgericht, Sozialleistungen vors Sozialgericht, Miete und Verträge vors Amts- oder Landgericht. Ich zeige Ihnen die Normen mit Fundstelle. Die Zuständigkeit im Einzelfall prüfen Sie noch selbst.",
+    cites: ["§ 2 ArbGG", "§ 51 SGG", "§§ 23, 71 GVG"],
+    feats: [["Gesetze & Normen mit Quellenbezug", "Verfügbar"], ["Automatische Zuständigkeitsprüfung", "Geplant", 1]] },
+  { nav: "Rechtsantragstelle", stn: "Station 3 · Rechtsantragstelle", title: "Die Klage auf den Weg bringen.",
+    text: "Hier können Sie Ihre Klage aufnehmen lassen. Mit dem Entwurf aus Ihrer Akte kommen Sie vorbereitet: Beteiligte, Sachverhalt und Ziel stehen schon drin, fehlende Angaben sind als Platzhalter markiert.",
+    cites: ["§ 46 Abs. 2 ArbGG", "§ 496 ZPO", "§ 90 SGG"],
+    feats: [["Klage- und Antragsentwürfe", "Verfügbar"], ["Export als Text, Word oder PDF", "Verfügbar"]] },
+  { nav: "Flur", stn: "Station 4 · Flur vor den Sälen", title: "Warten. Und Ordnung schaffen.",
+    text: "Bescheide, Verträge, Schreiben der Gegenseite: alles an einem Ort. Scans liest die lokale OCR ein, den Text kontrollieren Sie. So finden Sie im Termin jede Seite sofort.",
+    cites: ["PDF", "DOCX", "PNG / JPG"],
+    feats: [["Dateiablage mit überprüfbaren Texten", "Verfügbar"], ["Lokale OCR mit Textkontrolle", "Verfügbar"]] },
+  { nav: "Güteverhandlung", stn: "Station 5 · Saal, Gütetermin", title: "Die Güteverhandlung.",
+    text: "Im Arbeits- und im Zivilprozess wird zuerst eine gütliche Einigung versucht. Vorab suche ich Ihnen veröffentlichte Entscheidungen mit tragenden Gründen und Gegenargumenten heraus, damit Sie wissen, was auf Sie zukommt.",
+    cites: ["§ 54 ArbGG", "§ 278 ZPO"],
+    feats: [["Recherche in Bundesentscheidungen", "Verfügbar"], ["Originalpassagen mit Fundstelle", "Verfügbar"]] },
+  { nav: "Kammertermin", stn: "Station 6 · Saal, Kammertermin", title: "Jetzt entscheidet die Kammer.",
+    text: "Scheitert die Güte, verhandelt die Kammer: Vorsitz und zwei ehrenamtliche Richter, so auch beim Sozialgericht. Vertreten kann ich Sie nicht, beim Landgericht brauchen Sie ohnehin eine Anwältin oder einen Anwalt. Schriftsätze und Kostenfragen bereite ich aber mit Ihnen vor.",
+    cites: ["§ 16 Abs. 2 ArbGG", "§ 12 SGG", "§ 78 ZPO"],
+    feats: [["Schriftsätze mit Versionen", "Verfügbar"], ["Kostenprüfung RVG / GKG", "Verfügbar"]] },
+  { nav: "Ihr Start" },
+];
+
+/* one photo per stop: `o` is where the camera walks to (a doorway or vanishing point) */
+const SHOTS = [{"f": "assets/photo/vorplatz-gericht.webp", "p": "assets/photo/vorplatz-gericht-hoch.webp", "o": "50% 72%", "b": "50% 20%"}, {"f": "assets/photo/vorplatz.webp", "o": "50% 58%"}, {"f": "assets/photo/pforte.webp", "o": "50% 55%"}, {"f": "assets/photo/rechtsantragstelle.webp", "o": "62% 62%", "z": {"f": "assets/photo/akte-mexiko.webp", "o": "0% 70%", "om": "50% 66%", "s": 1.24}}, {"f": "assets/photo/flur.webp", "o": "52% 58%"}, {"f": "assets/photo/saal-guete.webp", "o": "50% 55%"}, {"f": "assets/photo/saal-kammer.webp", "o": "62% 50%"}, {"f": "assets/photo/ende.webp", "o": "50% 30%"}];
+
+const N = STOPS.length;
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function fallback() {
+  document.body.classList.add("nogl");
+  $("fallback").innerHTML = `<h1>Ihr Weg durch das Arbeitsgericht</h1>` +
+    STOPS.filter(s => s.title).map(s => `<article><p class="eyebrow">${s.stn}</p><h2>${s.title}</h2><p>${s.text}</p><p style="color:var(--gold-hi)">${s.cites.join(" · ")}</p></article>`).join("") +
+    `<p>Die Assistentin hilft in: Kündigungsschutz, Arbeitsrecht, Sozialrecht, Zivilrecht, Mietrecht, Vertragsrecht, Verbraucherrecht, Familienrecht, Handelsrecht, Verwaltungsrecht, Strafrecht.</p>` +
+    `<p style="margin-top:28px"><a class="btn btn-gold" href="${APP_URL}">7 Tage kostenlos testen →</a></p>`;
+}
+
+/* ----- film strip ----- */
+const layers = SHOTS.map(s => {
+  const d = document.createElement("div"); d.className = "shot";
+  d.style.transformOrigin = s.o; d.style.backgroundPosition = s.b || s.o;
+  $("film").appendChild(d); return d;
+});
+const fitShots = () => layers.forEach((d, k) => { const s = SHOTS[k]; d.style.backgroundImage = `url(${s.p && innerWidth < innerHeight ? s.p : s.f})`; });
+fitShots(); addEventListener("resize", fitShots);
+/* Station 3 pushes in on the case file: a second layer over the same stop */
+const Z = 3, zoomShot = SHOTS[Z].z, close = document.createElement("div");
+const portrait = () => innerWidth < innerHeight;
+close.className = "shot"; close.style.backgroundImage = `url(${zoomShot.f})`;
+$("film").appendChild(close);
+function aimClose() {
+  /* a tall phone would crop the label, so there the photo sits above the card at reduced size */
+  const p = portrait();
+  close.style.transformOrigin = p ? "50% 40%" : zoomShot.o;
+  close.style.backgroundPosition = p ? "50% 92px" : zoomShot.o;
+  close.style.backgroundSize = p ? "170% auto" : "cover";
+  close.style.backgroundColor = p ? "#1a120c" : "transparent";
+}
+aimClose(); addEventListener("resize", aimClose);
+let zp = 0;   // 0 = wide shot at the counter, 1 = on the file
+const BASE = 1.07;   // room for the drift and the mouse parallax
+let mx = 0, my = 0, px = 0, py = 0;
+addEventListener("pointermove", e => { mx = e.clientX / innerWidth - .5; my = e.clientY / innerHeight - .5; }, { passive: true });
+
+function paint(f) {
+  const i = Math.min(N - 2, Math.floor(f)), frac = f - i;
+  const e = sstep(.36, 1, frac);                 // hold first, then walk
+  const fade = sstep(.52, .96, frac);
+  const x = -px * 16, y = -py * 10;
+  layers.forEach((l, k) => {
+    if (k === i) {
+      l.style.opacity = 1; l.style.zIndex = 1;
+      const drift = sstep(0, .36, frac) * .03;
+      l.style.transform = `translate(${x}px,${y}px) scale(${BASE + drift + e * e * .62 + (k === Z ? zp * zp * .9 : 0)})`;
+    } else if (k === i + 1) {
+      l.style.opacity = fade; l.style.zIndex = 2;
+      l.style.transform = `translate(${x}px,${y}px) scale(${BASE - .05 * (1 - e)})`;
+    } else l.style.opacity = 0;
+  });
+  /* the close-up rises out of the wide shot, then walks on with it */
+  const atZ = i === Z, near = i === Z - 1;
+  const zs = portrait() ? 1 : zoomShot.s;
+  close.style.opacity = atZ || near ? sstep(.25, .8, zp) * (near ? fade : 1) : 0;
+  close.style.zIndex = near ? 3 : 1;
+  close.style.transform = `translate(${x}px,${y}px) scale(${zs * (.9 + .1 * zp) + (atZ ? e * e * .62 : 0)})`;
+}
+
+/* ----- gold dust ----- */
+(() => {
+  if (reduce) return;
+  const c = $("dust"), g = c.getContext("2d"); let w, h, ps;
+  const size = () => {
+    w = c.width = innerWidth; h = c.height = innerHeight;
+    ps = Array.from({ length: Math.round(w * h / 26000) }, () => ({ x: Math.random() * w, y: Math.random() * h, z: Math.random() * .9 + .1, p: Math.random() * 6.3 }));
+  };
+  size(); addEventListener("resize", size);
+  let t = 0;
+  (function loop() {
+    requestAnimationFrame(loop); t += .016; g.clearRect(0, 0, w, h);
+    for (const q of ps) {
+      q.y -= .22 * q.z; q.x += Math.sin(t + q.p) * .12; if (q.y < -6) { q.y = h + 6; q.x = Math.random() * w; }
+      g.globalAlpha = (.2 + .5 * q.z) * (.55 + .45 * Math.sin(t * 1.6 + q.p));
+      g.fillStyle = "#ffdca0"; g.beginPath(); g.arc(q.x, q.y, .5 + q.z * 1.3, 0, 6.3); g.fill();
+    }
+  })();
+})();
+
+/* ----- UI ----- */
+const scrollMax = () => $("track").offsetHeight - innerHeight;
+const goTo = i => scrollTo({ top: i / (N - 1) * scrollMax(), behavior: reduce ? "auto" : "smooth" });
+STOPS.forEach((s, i) => {
+  const b = document.createElement("button"); b.innerHTML = `<span>${s.nav}</span><i></i>`; b.setAttribute("aria-label", s.nav);
+  b.onclick = () => goTo(i); $("rail").appendChild(b);
+});
+const railBtns = [...$("rail").children];
+let shown = -1, last = 0;
+function showStop(i) {
+  if (i === shown) return; shown = i;
+  const s = STOPS[i], hasCard = s && s.title;
+  $("card").classList.toggle("on", !!hasCard);
+  $("cta").classList.toggle("on", i === N - 1);
+  $("intro").classList.toggle("off", i !== 0);
+  if (hasCard) {
+    $("cStn").textContent = s.stn; $("cTitle").textContent = s.title; $("cText").textContent = s.text;
+    $("cCites").innerHTML = s.cites.map(c => `<span>${c}</span>`).join("");
+    $("cFeats").innerHTML = s.feats.map(f => `<li class="${f[2] ? "plan" : ""}"><span>${f[0]}</span><b>${f[1]}</b></li>`).join("");
+  }
+  railBtns.forEach((b, k) => { b.toggleAttribute("aria-current", k === i); b.classList.toggle("done", k < i); });
+}
+$("cNext").onclick = () => goTo(Math.min(N - 1, last + 1));
+$("restart").onclick = () => goTo(0);
+addEventListener("keydown", e => {
+  if (e.key === "ArrowRight") { e.preventDefault(); goTo(Math.min(N - 1, last + 1)); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); goTo(Math.max(0, last - 1)); }
+});
+
+/* ----- background music: browsers only allow sound after the visitor's first click or tap ----- */
+(() => {
+  const bgm = $("bgm"), btn = $("sound"), LEVEL = .13;
+  const read = () => { try { return localStorage.getItem("musik"); } catch { return null; } };
+  const save = v => { try { localStorage.setItem("musik", v); } catch {} };
+  let fader;
+  const fadeTo = (goal, then) => {
+    clearInterval(fader);
+    fader = setInterval(() => {
+      const v = bgm.volume + Math.sign(goal - bgm.volume) * .006;
+      if (Math.abs(goal - bgm.volume) <= .006) { bgm.volume = goal; clearInterval(fader); then && then(); } else bgm.volume = Math.max(0, Math.min(1, v));
+    }, 60);
+  };
+  const on = () => { bgm.volume = 0; const p = bgm.play(); if (p) p.then(() => { btn.setAttribute("aria-pressed", "true"); fadeTo(LEVEL); }).catch(() => {}); };
+  const off = () => { btn.setAttribute("aria-pressed", "false"); fadeTo(0, () => bgm.pause()); };
+  const first = e => {
+    removeEventListener("pointerdown", first); removeEventListener("keydown", first);
+    if (read() !== "aus" && !btn.contains(e.target)) on();
+  };
+  addEventListener("pointerdown", first); addEventListener("keydown", first);
+  btn.onclick = () => {
+    const playing = btn.getAttribute("aria-pressed") === "true";
+    save(playing ? "aus" : "an"); playing ? off() : on();
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (btn.getAttribute("aria-pressed") !== "true") return;
+    document.hidden ? bgm.pause() : bgm.play().catch(() => {});
+  });
+})();
+
+let cur = 0, prev = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const raw = Math.min((now - prev) / 1000, .25); prev = now;
+  const target = clamp(scrollY / Math.max(1, scrollMax()), 0, 1);
+  cur += (target - cur) * (reduce ? 1 : 1 - Math.pow(.0015, raw));
+  px += (mx - px) * .05; py += (my - py) * .05;
+  const f = cur * (N - 1), i = Math.min(N - 2, Math.floor(f)), frac = f - i;
+  /* the push-in runs on time, so it plays however the visitor arrives */
+  const zGoal = f > Z - .1 && f < Z + 1 ? 1 : 0;
+  zp = reduce ? zGoal : clamp(zp + Math.sign(zGoal - zp) * raw / 2.2, 0, 1);
+  paint(f);
+  const st = frac < .42 ? i : frac > .9 ? i + 1 : -2;
+  if (st >= 0) last = st;
+  showStop(st);
+  document.body.classList.toggle("scrolled", scrollY > 40);
+  $("bar").style.width = cur * 100 + "%";
+}
+
+/* start once every photo is here, so nothing pops in mid-walk */
+Promise.all([...SHOTS, zoomShot, { f: SHOTS[0].p }].map(s => new Promise(r => { const im = new Image(); im.onload = () => r(true); im.onerror = () => r(false); im.src = s.f; })))
+  .then(ok => {
+    if (!ok.every(Boolean)) return fallback();
+    paint(0); showStop(0); $("loader").classList.add("off"); requestAnimationFrame(frame);
+  });
+</script>
+</body>
+</html>
