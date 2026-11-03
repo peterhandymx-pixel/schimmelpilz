@@ -23,6 +23,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 #film{position:fixed;inset:0;overflow:hidden;background:var(--night)}
 #film .shot{position:absolute;inset:0;opacity:0;will-change:transform,opacity;background-size:cover;background-repeat:no-repeat}
+#film .shot.framed{background-color:var(--night);box-shadow:inset 0 0 120px rgba(0,0,0,.35)}
 #film::after{content:"";position:absolute;inset:0;z-index:5;pointer-events:none;background:radial-gradient(ellipse at center,transparent 52%,rgba(2,20,16,.62)),linear-gradient(180deg,rgba(2,24,19,.5),transparent 24%,transparent 64%,rgba(2,24,19,.6))}
 #dust{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 #ai{position:fixed;z-index:29;right:14px;bottom:56px;font-size:12px;color:var(--muted);text-shadow:0 1px 6px #000}
@@ -267,7 +268,7 @@ const STOPS = [
 ];
 
 /* one photo per stop: `o` is where the camera walks to (a doorway or vanishing point) */
-const SHOTS = [{"f": "assets/photo/vorplatz-gericht.webp", "p": "assets/photo/vorplatz-gericht-hoch.webp", "o": "50% 72%", "b": "50% 20%"}, {"f": "assets/photo/vorplatz.webp", "o": "50% 58%"}, {"f": "assets/photo/pforte.webp", "o": "50% 55%"}, {"f": "assets/photo/rechtsantragstelle.webp", "o": "62% 62%", "z": {"f": "assets/photo/akte-mexiko.webp", "o": "0% 70%", "om": "50% 66%", "s": 1.24}}, {"f": "assets/photo/flur.webp", "o": "52% 58%"}, {"f": "assets/photo/saal-guete.webp", "o": "50% 55%"}, {"f": "assets/photo/saal-kammer.webp", "o": "62% 50%"}, {"f": "assets/photo/ende.webp", "o": "50% 30%"}];
+const SHOTS = [{"f": "assets/photo/vorplatz-gericht.webp", "p": "assets/photo/vorplatz-gericht-hoch.webp", "o": "50% 72%", "b": "50% 20%"}, {"f": "assets/photo/vorplatz.webp", "o": "50% 58%"}, {"f": "assets/photo/pforte.webp", "o": "50% 55%"}, {"f": "assets/photo/rechtsantragstelle.webp", "o": "62% 62%", "z": {"f": "assets/photo/akte-mexiko.webp", "o": "0% 70%", "om": "50% 66%", "s": 1.24}}, {"f": "assets/photo/flur.webp", "o": "52% 58%"}, {"f": "assets/photo/saal-guete.webp", "o": "50% 55%"}, {"f": "assets/photo/kammertermin.webp", "o": "50% 40%", "sz": "min(54vw, 140vh) auto", "sp": "right 5.5vw center"}, {"f": "assets/photo/ende.webp", "o": "50% 30%"}];
 
 const N = STOPS.length;
 const $ = id => document.getElementById(id);
@@ -289,7 +290,16 @@ const layers = SHOTS.map(s => {
   d.style.transformOrigin = s.o; d.style.backgroundPosition = s.b || s.o;
   $("film").appendChild(d); return d;
 });
-const fitShots = () => layers.forEach((d, k) => { const s = SHOTS[k]; d.style.backgroundImage = `url(${s.p && innerWidth < innerHeight ? s.p : s.f})`; });
+// A shot with "sz" is shown smaller beside the stop card on wide screens instead of filling the frame.
+const framed = s => s.sz && innerWidth > innerHeight * 1.15;
+const fitShots = () => layers.forEach((d, k) => {
+  const s = SHOTS[k], small = framed(s);
+  d.style.backgroundImage = `url(${s.p && innerWidth < innerHeight ? s.p : s.f})`;
+  d.style.backgroundSize = small ? s.sz : "";
+  d.style.backgroundPosition = small ? s.sp : s.b || s.o;
+  d.style.transformOrigin = small ? "72% 50%" : s.o;
+  d.classList.toggle("framed", small);
+});
 fitShots(); addEventListener("resize", fitShots);
 /* Station 3 pushes in on the case file: a second layer over the same stop */
 const Z = 3, zoomShot = SHOTS[Z].z, close = document.createElement("div");
@@ -319,7 +329,7 @@ function paint(f) {
     if (k === i) {
       l.style.opacity = 1; l.style.zIndex = 1;
       const drift = sstep(0, .36, frac) * .03;
-      l.style.transform = `translate(${x}px,${y}px) scale(${BASE + drift + e * e * .62 + (k === Z ? zp * zp * .9 : 0)})`;
+      l.style.transform = `translate(${x}px,${y}px) scale(${BASE + drift + e * e * (framed(SHOTS[k]) ? .12 : .62) + (k === Z ? zp * zp * .9 : 0)})`;
     } else if (k === i + 1) {
       l.style.opacity = fade; l.style.zIndex = 2;
       l.style.transform = `translate(${x}px,${y}px) scale(${BASE - .05 * (1 - e)})`;
