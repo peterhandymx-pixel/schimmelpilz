@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { IconEdit, IconExternalLink, IconFileText, IconFolderOpen, IconMailForward, IconUpload } from "@tabler/icons-react";
+import { IconDownload, IconEdit, IconFileText, IconFolderOpen, IconMailForward, IconUpload } from "@tabler/icons-react";
 import { API_BASE } from "./useCaseStorage.js";
 import { reviewLabels } from "./DraftReview.jsx";
 import { dateLabel, matches } from "./workbench.js";
@@ -48,7 +48,7 @@ export function EAkte({ cases, selectedCase, lang, query = "", open, onSelectCas
           ? docState(sheet.doc) && <small>{docState(sheet.doc)}</small>
           : <small>{sheet.draft.recipient ? sheet.draft.recipient.split("\n")[0] + " · " : ""}{reviewLabels[lang][sheet.draft.review_status || "draft"]} · v{sheet.draft.version || 1}</small>}</td>
         <td className="eakte-links">{sheet.type === "in"
-          ? <><a className="desk-link" href={`${API_BASE}/api/cases/${current.id}/documents/${sheet.id}/download`} target="_blank" rel="noreferrer"><IconExternalLink size={15} />{de ? "Ansehen" : "View"}</a><button className="desk-link" onClick={() => open(current.id, "documents")}>{de ? "Text prüfen" : "Review text"}</button></>
+          ? <><a className="desk-link" href={`${API_BASE}/api/cases/${current.id}/documents/${sheet.id}/download`} download><IconDownload size={15} />{de ? "Herunterladen" : "Download"}</a><button className="desk-link" onClick={() => open(current.id, "documents")}>{de ? "Text prüfen" : "Review text"}</button></>
           : <><button className="desk-link" onClick={() => onDraft(sheet.draft, current)}><IconEdit size={15} />{de ? "Bearbeiten" : "Edit"}</button><a className="desk-link" href={`${API_BASE}/api/cases/${current.id}/drafts/${sheet.id}/pdf`} target="_blank" rel="noreferrer">PDF</a></>}</td>
       </tr>)}</tbody></table></div>
       : <p className="desk-empty">{sheets.length ? (de ? "Nichts in dieser Auswahl." : "Nothing in this selection.") : (de ? "Diese Akte ist noch leer. Laden Sie das erste Dokument hoch oder erstellen Sie einen Schriftsatz." : "This file is still empty. Upload a first document or create a draft.")}</p>}
