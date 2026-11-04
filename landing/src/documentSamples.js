@@ -41,6 +41,7 @@ export function sampleContext(item) {
     insurerPolicy: d.insurer_policy || "[Nummer]",
     insurerClaim: d.insurer_claim || "[Nummer, falls schon vergeben]",
     courtRef: d.court_reference || "[Aktenzeichen des Gerichts / der Behörde]",
+    receivedOn: d.received_on ? new Date(`${d.received_on}T12:00:00Z`).toLocaleDateString("de-DE") : "[Datum]",
     facts: item?.description || "[Sachverhalt in zeitlicher Reihenfolge schildern]",
     subject: item?.title || "[Angelegenheit]",
     value: d.dispute_value == null ? "[Betrag] EUR" : `${Number(d.dispute_value).toLocaleString("de-DE", { minimumFractionDigits: 2 })} ${d.currency || "EUR"}`,

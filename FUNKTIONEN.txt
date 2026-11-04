@@ -341,7 +341,37 @@ Inhalt
 - Für das ganze Kanzleiteam gemeinsam.
 
 
-24. BEWUSST NICHT ENTHALTEN (braucht Zulassung/Vertrag)
+24. BRIEF-ASSISTENT UND EINFACHE ANSICHT (für Verbraucher)
+--------------------------------------------------------------------
+- Verbraucher starten automatisch in der einfachen, geführten Ansicht;
+  Kanzleien und Unternehmen im vollen Arbeitsplatz. Umschalten jederzeit
+  („Alle Funktionen anzeigen“ / „Einfache, geführte Ansicht“), wird
+  pro Gerät gemerkt.
+- „Ich habe einen Brief bekommen“: Foto/PDF hochladen (mit Texterkennung)
+  oder Text einfügen.
+- Schritt 1 „Stimmt das?“: Art des Schreibens, Absender, Gegenseite/
+  Gläubiger, Datum, Aktenzeichen, Betrag, Frist aus dem Brief – alles
+  korrigierbar.
+- Schritt 2: wenige Fragen, eine pro Seite (Zustelldatum, „Schulden Sie
+  den Betrag?“, „Rechtsbehelfsbelehrung vorhanden?“ …).
+- Schritt 3: Frist mit Datum und Norm, nächste Schritte, Warnhinweise,
+  Hinweis auf Anwaltszwang/-empfehlung, fertig ausgefüllter Antwortentwurf.
+- Akte, Gegenseite, Gericht, Aktenzeichen und Frist (mit Erinnerung)
+  werden automatisch gespeichert.
+- Erkannte Briefarten: Mahnbescheid, Vollstreckungsbescheid, Klage/
+  Gerichtspost, Strafbefehl, Bußgeldbescheid, Anhörungsbogen, Steuer-
+  bescheid/Familienkasse, Behördenbescheid (inkl. Sozialrecht), Abmahnung
+  (Urheber/Wettbewerb und Arbeitgeber), Kündigung Arbeit und Wohnung,
+  Mieterhöhung, Nebenkostenabrechnung, Ablehnung durch Versicherung,
+  Inkasso, Rechnung/Mahnung, Sonstiges.
+- Fristen u. a.: § 692 ZPO, §§ 700, 339 ZPO, § 276 ZPO, § 410 StPO,
+  § 67 OWiG, § 355 AO, § 70 VwGO/§ 84 SGG (1 Jahr ohne Belehrung),
+  § 4 KSchG (+ § 38 SGB III, § 174 BGB), §§ 574, 574b BGB, § 558b BGB,
+  § 556 Abs. 3 BGB. Bekanntgabe von Bescheiden: 4. Tag nach Bescheiddatum.
+- Orientierungshilfe, keine Rechtsberatung.
+
+
+25. BEWUSST NICHT ENTHALTEN (braucht Zulassung/Vertrag)
 --------------------------------------------------------------------
 - ELSTER-Übermittlung (Zertifikat nötig) – Daten werden aber für die
   Umsatzsteuer-Voranmeldung aufbereitet.

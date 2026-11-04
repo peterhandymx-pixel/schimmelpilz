@@ -70,6 +70,26 @@ export const SAMPLES_PRIVATE = [
     body: c => `${c.letter(c.opp)}\n\nAnfechtung meiner Erklärung vom [Datum] – Vertrag über [Gegenstand]\n\nSehr geehrte Damen und Herren,\n\nhiermit fechte ich meine auf den Abschluss des Vertrags vom [Datum] gerichtete Willenserklärung an.\n\nAnfechtungsgrund: [Ich wurde arglistig getäuscht, denn … (§ 123 BGB) / Ich habe mich über … geirrt (§ 119 BGB), was ich am [Datum] bemerkt habe].\n\nDer Vertrag ist damit von Anfang an nichtig (§ 142 Abs. 1 BGB). Bereits erbrachte Leistungen sind zurückzugewähren. Ich fordere Sie auf, mir den gezahlten Betrag von [Betrag] EUR bis zum [Datum] zu erstatten; [die Ware stelle ich zur Abholung bereit].\n\n${sign}` },
   { id: "inkasso-bestreiten", area: "civil", kind: "letter", title: "Widerspruch gegen eine Inkassoforderung", norms: "§ 13a RDG; § 43d BRAO; § 286 BGB",
     body: c => `${c.letter(c.opp)}\n\nIhre Forderung, Aktenzeichen [Nummer], angeblicher Gläubiger: [Name]\n\nSehr geehrte Damen und Herren,\n\nIhre Forderung weise ich zurück.\n\n[Zutreffendes auswählen:]\n– Ein Vertrag mit [Gläubiger] ist nicht zustande gekommen.\n– Die Forderung habe ich am [Datum] bezahlt (Beleg anbei).\n– Die Forderung ist verjährt; ich erhebe die Einrede der Verjährung (§ 214 BGB).\n– Die Forderung ist der Höhe nach nicht nachvollziehbar.\n\nBitte übersenden Sie mir eine nachvollziehbare Aufstellung: Vertrag, Datum, Hauptforderung, Zinsen und Kosten einzeln sowie Ihre Inkassovollmacht. Inkassokosten erkenne ich nicht an, da [kein Verzug vorlag / die Forderung bestritten ist].\n\nEinen Eintrag bei Auskunfteien wegen dieser bestrittenen Forderung untersage ich.\n\n${sign}` },
+  { id: "forderung-zurueckweisen", area: "civil", kind: "letter", title: "Zurückweisung einer Zahlungsforderung (Rechnung, Mahnung)", norms: "§§ 286, 320, 362 BGB",
+    body: c => `${c.letter(c.opp)}
+
+Ihre Rechnung / Mahnung vom [Datum], Nummer [Nummer], über [Betrag] EUR
+
+Sehr geehrte Damen und Herren,
+
+Ihre Forderung weise ich [vollständig / in Höhe von [Betrag] EUR] zurück.
+
+[Zutreffendes auswählen:]
+– Die berechnete Leistung habe ich nicht bestellt.
+– Die Leistung wurde nicht oder nicht vollständig erbracht.
+– Die Leistung ist mangelhaft; ich habe den Mangel am [Datum] angezeigt.
+– Ich habe den Betrag am [Datum] bereits bezahlt (Beleg anbei).
+
+Bitte übersenden Sie mir eine nachvollziehbare Aufstellung mit Vertrag, Leistungsdatum und Einzelpositionen. Mahngebühren und Zinsen erkenne ich nicht an, da ich mich nicht in Verzug befinde.
+
+Einen Eintrag bei Auskunfteien wegen dieser bestrittenen Forderung untersage ich.
+
+${sign}` },
   { id: "verjaehrung", area: "civil", kind: "letter", title: "Einrede der Verjährung", norms: "§§ 195, 199, 214 BGB",
     body: c => `${c.letter(c.opp)}\n\nIhre Forderung vom [Datum] über [Betrag] EUR\n\nSehr geehrte Damen und Herren,\n\nSie verlangen Zahlung von [Betrag] EUR aus [Rechtsgrund, Datum].\n\nDer Anspruch ist im Jahr [Jahr] entstanden. Die regelmäßige Verjährungsfrist von drei Jahren (§ 195 BGB) begann mit dem Schluss dieses Jahres (§ 199 Abs. 1 BGB) und endete mit Ablauf des 31.12.[Jahr]. Eine Hemmung oder ein Neubeginn ist nicht eingetreten.\n\nIch erhebe die Einrede der Verjährung (§ 214 Abs. 1 BGB) und werde nicht zahlen.\n\n${sign}` },
   { id: "darlehen-rueckforderung", area: "civil", kind: "letter", title: "Kündigung und Rückforderung eines Privatdarlehens", norms: "§ 488 Abs. 3 BGB",
@@ -86,7 +106,7 @@ export const SAMPLES_PRIVATE = [
   // ---------- Zivilprozess ----------
   { id: "widerspruch-mahnbescheid", area: "court", kind: "objection", title: "Widerspruch gegen einen Mahnbescheid", norms: "§§ 692, 694 ZPO",
     note: "Widerspruch binnen zwei Wochen ab Zustellung; möglich bleibt er, solange kein Vollstreckungsbescheid verfügt ist. Am einfachsten mit dem beiliegenden Vordruck oder online – formlos schriftlich genügt.",
-    body: c => `An das\nAmtsgericht [Ort] – Zentrales Mahngericht\n[Anschrift]\n\n[Ort], [Datum]\n\nGeschäftsnummer: ${c.courtRef}\n\nIn dem Mahnverfahren\n${c.oppName} ./. ${c.ownName}\n\nlege ich gegen den Mahnbescheid vom [Datum], zugestellt am [Datum],\n\nWIDERSPRUCH\n\nein, und zwar [gegen den Anspruch insgesamt / in Höhe von [Betrag] EUR].\n\n[Eine Begründung ist nicht erforderlich. Optional: Die Forderung besteht nicht, weil …]\n\n${sign}` },
+    body: c => `An das\n${c.courtOr("Amtsgericht [Ort] – Zentrales Mahngericht\n[Anschrift]")}\n\n[Ort], [Datum]\n\nGeschäftsnummer: ${c.courtRef}\n\nIn dem Mahnverfahren\n${c.oppName} ./. ${c.ownName}\n\nlege ich gegen den Mahnbescheid vom [Datum], zugestellt am ${c.receivedOn},\n\nWIDERSPRUCH\n\nein, und zwar [gegen den Anspruch insgesamt / in Höhe von [Betrag] EUR].\n\n[Eine Begründung ist nicht erforderlich. Optional: Die Forderung besteht nicht, weil …]\n\n${sign}` },
   { id: "pkh", area: "court", kind: "application", title: "Antrag auf Prozesskostenhilfe", norms: "§§ 114, 117 ZPO",
     note: "Pflicht: die amtliche „Erklärung über die persönlichen und wirtschaftlichen Verhältnisse“ mit Belegen beifügen (Formularzwang, § 117 Abs. 3, 4 ZPO).",
     body: c => `${toCourt(c)}\n\nIn dem Rechtsstreit\n${c.ownName} ./. ${c.oppName}\n[Az.: ${c.courtRef}]\n\nbeantrage ich,\n\nmir für [die beabsichtigte Klage / die Rechtsverteidigung] in erster Instanz Prozesskostenhilfe ohne Ratenzahlung zu bewilligen [und mir Rechtsanwältin / Rechtsanwalt [Name] beizuordnen].\n\nBegründung:\n\n1. Erfolgsaussicht: Der Entwurf der Klage / Klageerwiderung liegt bei. [Kurz: worauf der Anspruch / die Verteidigung gestützt ist]\n${c.facts}\n\n2. Die Rechtsverfolgung ist nicht mutwillig.\n\n3. Wirtschaftliche Verhältnisse: Die amtliche Erklärung über die persönlichen und wirtschaftlichen Verhältnisse nebst Belegen ist beigefügt.\n\n${sign}` },
