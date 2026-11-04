@@ -23,6 +23,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 #film{position:fixed;inset:0;overflow:hidden;background:var(--night)}
 #film .shot{position:absolute;inset:0;opacity:0;will-change:transform,opacity;background-size:cover;background-repeat:no-repeat}
+#film .team{position:absolute;right:0;bottom:0;width:50vw;aspect-ratio:1161/775;container-type:inline-size}
+#film .team img{display:block;width:100%;height:100%}
+@media (max-width:720px){#film .team{bottom:auto}#film .team img{-webkit-mask-image:linear-gradient(#000 72%,transparent);mask-image:linear-gradient(#000 72%,transparent)}}
+#film .shot-label{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;padding:.7cqw 1.8cqw .8cqw;border:1.5px solid var(--gold-hi);border-radius:1cqw;background:rgba(3,34,27,.9);box-shadow:0 6px 18px rgba(0,0,0,.45);white-space:nowrap;line-height:1.15}
+#film .shot-label b{font-family:var(--serif);font-weight:400;font-size:clamp(11px,2.75cqw,30px);color:#f3e2c2}
+#film .shot-label small{font-size:clamp(9px,1.8cqw,19px);color:var(--gold-hi)}
+
 #film::after{content:"";position:absolute;inset:0;z-index:5;pointer-events:none;background:radial-gradient(ellipse at center,transparent 52%,rgba(2,20,16,.62)),linear-gradient(180deg,rgba(2,24,19,.5),transparent 24%,transparent 64%,rgba(2,24,19,.6))}
 #dust{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 #ai{position:fixed;z-index:29;right:14px;bottom:56px;font-size:12px;color:var(--muted);text-shadow:0 1px 6px #000}
@@ -267,7 +274,7 @@ const STOPS = [
 ];
 
 /* one photo per stop: `o` is where the camera walks to (a doorway or vanishing point) */
-const SHOTS = [{"f": "assets/photo/vorplatz-gericht.webp", "p": "assets/photo/vorplatz-gericht-hoch.webp", "o": "50% 72%", "b": "50% 20%"}, {"f": "assets/photo/vorplatz.webp", "o": "50% 58%"}, {"f": "assets/photo/pforte.webp", "o": "50% 55%"}, {"f": "assets/photo/rechtsantragstelle.webp", "o": "62% 62%", "z": {"f": "assets/photo/akte-mexiko.webp", "o": "0% 70%", "om": "50% 66%", "s": 1.24}}, {"f": "assets/photo/flur.webp", "o": "52% 58%"}, {"f": "assets/photo/saal-guete.webp", "o": "50% 55%"}, {"f": "assets/photo/kammertermin.webp", "o": "55% 40%", "zm": 0.22}, {"f": "assets/photo/ende.webp", "o": "50% 30%"}];
+const SHOTS = [{"f": "assets/photo/vorplatz-gericht.webp", "p": "assets/photo/vorplatz-gericht-hoch.webp", "o": "50% 72%", "b": "50% 20%"}, {"f": "assets/photo/vorplatz.webp", "o": "50% 58%"}, {"f": "assets/photo/pforte.webp", "o": "50% 55%"}, {"f": "assets/photo/rechtsantragstelle.webp", "o": "62% 62%", "z": {"f": "assets/photo/akte-mexiko.webp", "o": "0% 70%", "om": "50% 66%", "s": 1.24}}, {"f": "assets/photo/flur.webp", "o": "52% 58%"}, {"f": "assets/photo/saal-guete.webp", "o": "50% 55%"}, {"f": "assets/photo/kammertermin.webp", "o": "55% 40%", "zm": 0.22}, {"f": "assets/photo/schlussbild.webp", "o": "50% 50%", "labels": [{"x": 36, "y": 66.2, "t": "Der Entwickler", "s": "ausgelernter ReFa"}, {"x": 71.9, "y": 73.3, "t": "Richter Dr. Engels", "s": "fiktive Figur"}], "team": "assets/photo/team.webp"}];
 
 const N = STOPS.length;
 const $ = id => document.getElementById(id);
@@ -287,10 +294,32 @@ function fallback() {
 const layers = SHOTS.map(s => {
   const d = document.createElement("div"); d.className = "shot";
   d.style.transformOrigin = s.o; d.style.backgroundPosition = s.b || s.o;
+  // People shown as a cut-out with their name plates: same place and proportions at every screen size.
+  if (s.team) {
+    const t = document.createElement("div"); t.className = "team";
+    t.innerHTML = `<img src="${s.team}" alt="">` + s.labels.map(l => `<span class="shot-label" style="left:${l.x}%;top:${l.y}%"><b>${l.t}</b><small>${l.s}</small></span>`).join("");
+    d.appendChild(t);
+  }
   $("film").appendChild(d); return d;
 });
-const fitShots = () => layers.forEach((d, k) => { const s = SHOTS[k]; d.style.backgroundImage = `url(${s.p && innerWidth < innerHeight ? s.p : s.f})`; });
-fitShots(); addEventListener("resize", fitShots);
+// The cut-out fills the room right of the price card, so faces and name plates never sit behind it.
+function fitTeam(t) {
+  const W = innerWidth, H = innerHeight, cta = $("cta");
+  if (W <= 720) {                                                     // phones: the card sits at the bottom, the group above it
+    const cardTop = H - 8 - cta.offsetHeight, top = 64;
+    const h = Math.max(120, Math.min(W * 775 / 1161, (cardTop - top - 22) / .78));   // the lower name plate sits at 73 %
+    t.style.width = h * 1161 / 775 + "px"; t.style.top = top + "px"; return;
+  }
+  t.style.top = "";
+  const right = parseFloat(getComputedStyle(cta).left) + cta.offsetWidth;
+  const free = (W - right - 110) / (1 - .36);                          // the left name plate sits at 36 % of the group
+  t.style.width = Math.max(300, Math.min(free, H * .8 * 1161 / 775, W * .64)) + "px";
+}
+const fitShots = () => layers.forEach((d, k) => {
+  const s = SHOTS[k]; d.style.backgroundImage = `url(${s.p && innerWidth < innerHeight ? s.p : s.f})`;
+  d.querySelectorAll(".team").forEach(fitTeam);
+});
+fitShots(); addEventListener("resize", fitShots); addEventListener("load", fitShots);   // again once fonts have set the card height
 /* Station 3 pushes in on the case file: a second layer over the same stop */
 const Z = 3, zoomShot = SHOTS[Z].z, close = document.createElement("div");
 const portrait = () => innerWidth < innerHeight;
@@ -432,7 +461,7 @@ function frame(now) {
 }
 
 /* start once every photo is here, so nothing pops in mid-walk */
-Promise.all([...SHOTS, zoomShot, { f: SHOTS[0].p }].map(s => new Promise(r => { const im = new Image(); im.onload = () => r(true); im.onerror = () => r(false); im.src = s.f; })))
+Promise.all([...SHOTS, zoomShot, { f: SHOTS[0].p }, ...SHOTS.filter(s => s.team).map(s => ({ f: s.team }))].map(s => new Promise(r => { const im = new Image(); im.onload = () => r(true); im.onerror = () => r(false); im.src = s.f; })))
   .then(ok => {
     if (!ok.every(Boolean)) return fallback();
     paint(0); showStop(0); $("loader").classList.add("off"); requestAnimationFrame(frame);
