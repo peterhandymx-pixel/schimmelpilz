@@ -26,3 +26,16 @@
 .cost-register small {color:#68736c}.cost-register .cost-actions {flex-shrink:0}
 .cost-version {display:flex;gap:15px;flex-wrap:wrap;padding:8px 0}
 @media(max-width:760px){.cost-form-grid {grid-template-columns:1fr;gap:0}.cost-register article {flex-direction:column;align-items:stretch;gap:5px}.cost-result {padding:14px}.cost-result dl div {gap:10px}.cost-result dt {font-size:14px}.cost-result dd {white-space:nowrap}.cost-actions .desk-button {max-width:100%;white-space:normal}}
+
+/* Court finder in the procedural routes */
+.court-finder .court-current{margin:0 0 12px;padding:8px 12px;background:#f3f6f4;border-radius:4px;font-size:14px}
+.court-finder .court-actions{display:flex;align-items:flex-end}
+.court-results{display:grid;gap:10px;margin-top:14px}
+.court-card{border:1px solid #dfe5e1;border-radius:6px;padding:12px 16px;background:#fff}
+.court-card h3{margin:0 0 4px;font-size:17px}
+.court-card p{margin:4px 0 8px;font-size:14px;color:#4b5a54}
+.court-card small{display:block;color:#6b7a73}
+.court-card.recommended{border:2px solid #2f5d4d;background:#f6faf7}
+.court-badge{display:inline-block;margin-bottom:6px;padding:2px 9px;border-radius:10px;background:#2f5d4d;color:#fff;font-size:12px;font-weight:600}
+.court-choices{margin-top:12px;padding:12px 16px;border:1px dashed #b07b2c;border-radius:6px;background:#fffaf0}
+.court-choices ul{margin:6px 0 0;padding-left:18px;columns:2}

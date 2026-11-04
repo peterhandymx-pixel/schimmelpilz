@@ -1,15 +1,23 @@
 // German sample documents for the template library. Each body is filled with case data where a case is chosen;
 // everything else stays as a [placeholder]. Samples are starting points, not legal advice: norms, deadlines and form
 // requirements must be checked for the individual case.
+import { SAMPLES_PRIVATE } from "./samplesPrivate.js";
+import { SAMPLES_PUBLIC } from "./samplesPublic.js";
 
 export const SAMPLE_AREAS = [
   ["work", "Arbeitsrecht"],
   ["tenancy", "Mietrecht"],
   ["civil", "Zivil- & Verbraucherrecht"],
   ["court", "Zivilprozess"],
+  ["enforce", "Vollstreckung & Insolvenz"],
   ["privacy", "Datenschutz"],
   ["admin", "Verwaltung & Sozialrecht"],
+  ["tax", "Steuerrecht"],
+  ["criminal", "Straf- & Bußgeldrecht"],
+  ["traffic", "Verkehr & Versicherung"],
   ["family", "Familienrecht"],
+  ["inherit", "Erbrecht"],
+  ["commerce", "Handels- & Gesellschaftsrecht"],
   ["office", "Kanzlei & Mandat"],
 ];
 
@@ -23,9 +31,15 @@ export function sampleContext(item) {
   const ref = item ? `Unser Zeichen: ${item.reference}` : "Unser Zeichen: [Aktenzeichen]";
   const external = [["Ihr Zeichen", d.opponent_reference], ["Gerichtl. / behördl. Az.", d.court_reference]].filter(([, v]) => v).map(([l, v]) => `${l}: ${v}`).join("\n");
   const letter = to => `${own}\n\n${to}\n\n[Ort], [Datum]\n${ref}${external ? "\n" + external : ""}`;
+  // The court field holds "Name, street, postcode place" (from the court finder); letters need one line each.
+  const court = d.court ? d.court.split(/,\s*/).join("\n") : "";
   return {
     own, opp, ownName, oppName, letter,
-    court: d.court || "[Gericht, Anschrift]",
+    court: court || "[Gericht, Anschrift]",
+    courtOr: fallback => court || fallback,
+    insurer: d.insurer_name ? d.insurer_name.split(/,\s*/).join("\n") : "[Rechtsschutzversicherung]\n[Anschrift]",
+    insurerPolicy: d.insurer_policy || "[Nummer]",
+    insurerClaim: d.insurer_claim || "[Nummer, falls schon vergeben]",
     courtRef: d.court_reference || "[Aktenzeichen des Gerichts / der Behörde]",
     facts: item?.description || "[Sachverhalt in zeitlicher Reihenfolge schildern]",
     subject: item?.title || "[Angelegenheit]",
@@ -36,11 +50,11 @@ export function sampleContext(item) {
 const sign = "Mit freundlichen Grüßen\n\n\n[Name / Unterschrift]";
 const signLawyer = "[Name]\nRechtsanwältin / Rechtsanwalt";
 
-export const SAMPLES = [
+const BASE_SAMPLES = [
   // ---------- Arbeitsrecht ----------
   { id: "kschg-klage", area: "work", kind: "claim", title: "Kündigungsschutzklage", norms: "§§ 1, 4, 23 KSchG; § 102 BetrVG",
     note: "Klagefrist: drei Wochen ab Zugang der schriftlichen Kündigung (§ 4 KSchG). Vor dem Arbeitsgericht gibt es in erster Instanz keinen Anwaltszwang.",
-    body: c => `An das\nArbeitsgericht [Ort]\n[Anschrift]\n\n[Ort], [Datum]\n\nKLAGE\n\nin dem Rechtsstreit\n\n${c.own}\n– Kläger/in –\n\ngegen\n\n${c.opp}\nvertreten durch [Geschäftsführung / Vorstand]\n– Beklagte –\n\nwegen: Kündigung\n\nNamens und in Vollmacht der klagenden Partei erhebe ich Klage und werde beantragen:\n\n1. Es wird festgestellt, dass das Arbeitsverhältnis der Parteien durch die Kündigung der Beklagten vom [Datum], zugegangen am [Datum], nicht aufgelöst worden ist.\n\n2. [Optional:] Die Beklagte wird verurteilt, die klagende Partei bis zum rechtskräftigen Abschluss des Verfahrens zu unveränderten Arbeitsbedingungen als [Tätigkeit] weiterzubeschäftigen.\n\nBegründung:\n\n1. Die klagende Partei ist seit dem [Datum] bei der Beklagten als [Tätigkeit] beschäftigt. Das durchschnittliche Bruttomonatsgehalt beträgt [Betrag] EUR.\n\n2. Die Beklagte beschäftigt regelmäßig mehr als zehn Arbeitnehmer im Sinne von § 23 Abs. 1 KSchG. Das Arbeitsverhältnis besteht länger als sechs Monate. Das Kündigungsschutzgesetz findet Anwendung.\n\n3. Mit Schreiben vom [Datum], zugegangen am [Datum], kündigte die Beklagte das Arbeitsverhältnis [ordentlich zum … / fristlos]. Kündigungsschreiben in Kopie als\n– Anlage K1 –\n\n4. Die Kündigung ist sozial ungerechtfertigt (§ 1 Abs. 2 KSchG). Gründe in der Person, im Verhalten oder dringende betriebliche Erfordernisse liegen nicht vor. [Ggf.: Die Sozialauswahl ist fehlerhaft.]\n\n5. [Falls Betriebsrat besteht:] Die ordnungsgemäße Anhörung des Betriebsrats (§ 102 BetrVG) wird mit Nichtwissen bestritten.\n\nSachverhalt im Übrigen:\n${c.facts}\n\nDer Arbeitsvertrag liegt als\n– Anlage K2 –\nbei.\n\n${signLawyer}` },
+    body: c => `An das\n${c.courtOr("Arbeitsgericht [Ort]\n[Anschrift]")}\n\n[Ort], [Datum]\n\nKLAGE\n\nin dem Rechtsstreit\n\n${c.own}\n– Kläger/in –\n\ngegen\n\n${c.opp}\nvertreten durch [Geschäftsführung / Vorstand]\n– Beklagte –\n\nwegen: Kündigung\n\nNamens und in Vollmacht der klagenden Partei erhebe ich Klage und werde beantragen:\n\n1. Es wird festgestellt, dass das Arbeitsverhältnis der Parteien durch die Kündigung der Beklagten vom [Datum], zugegangen am [Datum], nicht aufgelöst worden ist.\n\n2. [Optional:] Die Beklagte wird verurteilt, die klagende Partei bis zum rechtskräftigen Abschluss des Verfahrens zu unveränderten Arbeitsbedingungen als [Tätigkeit] weiterzubeschäftigen.\n\nBegründung:\n\n1. Die klagende Partei ist seit dem [Datum] bei der Beklagten als [Tätigkeit] beschäftigt. Das durchschnittliche Bruttomonatsgehalt beträgt [Betrag] EUR.\n\n2. Die Beklagte beschäftigt regelmäßig mehr als zehn Arbeitnehmer im Sinne von § 23 Abs. 1 KSchG. Das Arbeitsverhältnis besteht länger als sechs Monate. Das Kündigungsschutzgesetz findet Anwendung.\n\n3. Mit Schreiben vom [Datum], zugegangen am [Datum], kündigte die Beklagte das Arbeitsverhältnis [ordentlich zum … / fristlos]. Kündigungsschreiben in Kopie als\n– Anlage K1 –\n\n4. Die Kündigung ist sozial ungerechtfertigt (§ 1 Abs. 2 KSchG). Gründe in der Person, im Verhalten oder dringende betriebliche Erfordernisse liegen nicht vor. [Ggf.: Die Sozialauswahl ist fehlerhaft.]\n\n5. [Falls Betriebsrat besteht:] Die ordnungsgemäße Anhörung des Betriebsrats (§ 102 BetrVG) wird mit Nichtwissen bestritten.\n\nSachverhalt im Übrigen:\n${c.facts}\n\nDer Arbeitsvertrag liegt als\n– Anlage K2 –\nbei.\n\n${signLawyer}` },
   { id: "174-zurueckweisung", area: "work", kind: "letter", title: "Zurückweisung einer Kündigung mangels Vollmacht", norms: "§ 174 BGB",
     note: "Die Zurückweisung muss unverzüglich erfolgen – in der Regel innerhalb weniger Tage nach Zugang.",
     body: c => `${c.letter(c.opp)}\n\nIhre Kündigung vom [Datum] – Zurückweisung nach § 174 BGB\n\nSehr geehrte Damen und Herren,\n\ndie mit Schreiben vom [Datum] ausgesprochene Kündigung, zugegangen am [Datum], weise ich hiermit gemäß § 174 Satz 1 BGB zurück.\n\nDas Kündigungsschreiben wurde von [Name des Unterzeichners] unterzeichnet. Eine Originalvollmacht war nicht beigefügt. Von der Bevollmächtigung wurde ich auch nicht in anderer Weise in Kenntnis gesetzt (§ 174 Satz 2 BGB).\n\nVorsorglich weise ich darauf hin, dass mit diesem Schreiben keine Anerkennung der Kündigung im Übrigen verbunden ist. Sämtliche Rechte, insbesondere die Erhebung einer Kündigungsschutzklage, bleiben vorbehalten.\n\n${sign}` },
@@ -121,7 +135,7 @@ export const SAMPLES = [
     note: "Bei Abrechnung nach Gegenstandswert ist vor Übernahme des Auftrags darauf hinzuweisen (§ 49b Abs. 5 BRAO).",
     body: c => `${c.letter(c.own)}\n\nIhre Angelegenheit: ${c.subject}\n\nSehr geehrte/r [Name],\n\nvielen Dank für Ihr Vertrauen. Hiermit bestätige ich die Übernahme des Mandats in der oben genannten Angelegenheit.\n\nAuftragsumfang: [außergerichtliche Vertretung / gerichtliche Vertretung erster Instanz / Prüfung und Beratung]\n\nDie Gebühren richten sich nach dem Gegenstandswert (Hinweis nach § 49b Abs. 5 BRAO) [oder: nach der Vergütungsvereinbarung vom …].\n\nFür die weitere Bearbeitung benötige ich von Ihnen:\n– [Unterlagen]\n– die unterschriebene Vollmacht (anbei)\n– [Rechtsschutzversicherung: Gesellschaft und Versicherungsnummer]\n\nBitte notieren Sie sich folgende Fristen: [Frist]\n\n${sign}\n\nAnlage: Vollmacht` },
   { id: "deckungsanfrage", area: "office", kind: "letter", title: "Deckungsanfrage an die Rechtsschutzversicherung", norms: "ARB; § 17 ARB 2010 (je nach Vertrag)",
-    body: c => `${c.letter("[Rechtsschutzversicherung]\n[Anschrift]")}\n\nDeckungsanfrage\nVersicherungsnehmer/in: ${c.ownName}\nVersicherungsnummer: [Nummer]\nGegner: ${c.oppName}\n\nSehr geehrte Damen und Herren,\n\nich vertrete Ihre/n Versicherungsnehmer/in in folgender Angelegenheit und bitte um Bestätigung des Versicherungsschutzes für die [außergerichtliche / gerichtliche erster Instanz] Interessenwahrnehmung.\n\nRechtsgebiet: [Arbeits- / Miet- / Vertragsrecht]\nEintritt des Rechtsschutzfalls: [Datum und Ereignis, z. B. Zugang der Kündigung]\nGegenstandswert: ${c.value}\n\nSachverhalt:\n${c.facts}\n\nErfolgsaussichten: [kurze Einschätzung]\n\nUnterlagen füge ich bei. Um kurzfristige Bestätigung wird gebeten, da [Frist, z. B. die Klagefrist am … abläuft].\n\n${sign}` },
+    body: c => `${c.letter(c.insurer)}\n\nDeckungsanfrage\nVersicherungsnehmer/in: ${c.ownName}\nVersicherungsnummer: ${c.insurerPolicy}\nSchadennummer: ${c.insurerClaim}\nGegner: ${c.oppName}\n\nSehr geehrte Damen und Herren,\n\nich vertrete Ihre/n Versicherungsnehmer/in in folgender Angelegenheit und bitte um Bestätigung des Versicherungsschutzes für die [außergerichtliche / gerichtliche erster Instanz] Interessenwahrnehmung.\n\nRechtsgebiet: [Arbeits- / Miet- / Vertragsrecht]\nEintritt des Rechtsschutzfalls: [Datum und Ereignis, z. B. Zugang der Kündigung]\nGegenstandswert: ${c.value}\n\nSachverhalt:\n${c.facts}\n\nErfolgsaussichten: [kurze Einschätzung]\n\nUnterlagen füge ich bei. Um kurzfristige Bestätigung wird gebeten, da [Frist, z. B. die Klagefrist am … abläuft].\n\n${sign}` },
   { id: "akteneinsicht-stpo", area: "office", kind: "application", title: "Akteneinsichtsgesuch im Strafverfahren", norms: "§ 147 StPO (Verteidigung); § 406e StPO (Verletzte)",
     body: c => `An die\nStaatsanwaltschaft [Ort]\n[Anschrift]\n\nAz.: ${c.courtRef}\n\n[Ort], [Datum]\n\nErmittlungsverfahren gegen ${c.ownName}\n\nIch zeige an, dass ich [den Beschuldigten / die Beschuldigte] verteidige. Vollmacht anbei.\n\nIch beantrage,\n\n1. mir Einsicht in die Ermittlungsakte einschließlich aller Beiakten und Beweismittelverzeichnisse zu gewähren (§ 147 Abs. 1 StPO),\n2. die Akte [elektronisch / in meine Kanzleiräume] zu übersenden.\n\nMein Mandant / meine Mandantin wird sich zur Sache derzeit nicht äußern. Ladungen und Zustellungen bitte ausschließlich über mich.\n\n${signLawyer}` },
   { id: "bestellungsanzeige", area: "office", kind: "letter", title: "Bestellungsanzeige an die Gegenseite", norms: "§ 43a BRAO; BORA",
@@ -129,3 +143,6 @@ export const SAMPLES = [
   { id: "vollmacht", area: "office", kind: "letter", title: "Vollmacht (Prozess- und Verfahrensvollmacht)", norms: "§§ 80, 81 ZPO; § 164 BGB",
     body: c => `VOLLMACHT\n\nHiermit wird\n\n[Rechtsanwältin / Rechtsanwalt, Kanzlei, Anschrift]\n\nin Sachen\n\n${c.ownName} ./. ${c.oppName}\nwegen: ${c.subject}\n\nVollmacht erteilt\n\n1. zur Prozessführung (u. a. nach §§ 81 ff. ZPO) einschließlich der Befugnis zur Erhebung und Zurücknahme von Klagen und Widerklagen,\n2. zur Vertretung in sonstigen Verfahren und bei außergerichtlichen Verhandlungen aller Art,\n3. zur Begründung und Aufhebung von Vertragsverhältnissen und zur Abgabe und Entgegennahme von einseitigen Willenserklärungen (z. B. Kündigungen),\n4. zum Abschluss von Vergleichen, zum Verzicht und zum Anerkenntnis,\n5. zur Entgegennahme von Geld, Wertsachen und Urkunden,\n6. zur Erteilung von Untervollmacht.\n\nDie Vollmacht gilt für alle Instanzen und erstreckt sich auf Neben- und Folgeverfahren aller Art.\n\n[Ort], [Datum]\n\n\n____________________________\n(Unterschrift)` },
 ];
+
+// Grouped by area in the order of SAMPLE_AREAS, so the library list reads like a table of contents.
+export const SAMPLES = [...BASE_SAMPLES, ...SAMPLES_PRIVATE, ...SAMPLES_PUBLIC].sort((a, b) => SAMPLE_AREAS.findIndex(([id]) => id === a.area) - SAMPLE_AREAS.findIndex(([id]) => id === b.area));

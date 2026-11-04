@@ -30,7 +30,7 @@ export function documentTemplate(item, language = "de", kind = "letter", recipie
   const de = language === "de";
   const own = [d.client_name, d.client_address].filter(Boolean).join("\n") || (de ? "[Name und Anschrift der eigenen Partei]" : "[Own party’s name and address]");
   const opposite = [d.opponent_name, d.opponent_address].filter(Boolean).join("\n") || (de ? "[Name und Anschrift der Gegenseite]" : "[Opposing party’s name and address]");
-  const to = recipient.trim() || (kind === "claim" ? d.court : "") || (de ? "[Empfänger und vollständige Anschrift]" : "[Recipient and full address]");
+  const to = recipient.trim() || (kind === "claim" && d.court ? d.court.split(/,\s*/).join("\n") : "") || (de ? "[Empfänger und vollständige Anschrift]" : "[Recipient and full address]");
   const date = de ? "[Ort, Datum]" : "[Place, date]";
   const ref = de ? `Unser Aktenzeichen: ${item.reference}` : `Our reference: ${item.reference}`;
   const external = [[de ? "Gericht / Behörde" : "Court / authority", d.court_reference], [de ? "Gegenseite" : "Opposing party", d.opponent_reference]].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join("\n");

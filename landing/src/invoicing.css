@@ -1,0 +1,43 @@
+/* Billing: invoices, open items, new invoice, time recording */
+.invoice-tabs{margin:4px 0 14px}
+.invoice-table td small{display:block;color:#6b7a73;font-size:12px}
+.invoice-table .invoice-cancelled td{color:#9aa49f}
+.invoice-status{display:inline-block;padding:1px 8px;border-radius:9px;font-size:12px;font-weight:600}
+.invoice-status.open{background:#fcf0dc;color:#8a5212}
+.invoice-status.paid{background:#e6f1ea;color:#2f5d4d}
+.invoice-status.cancelled{background:#eee;color:#777}
+.invoice-actions{white-space:nowrap}
+.invoice-actions .desk-link{margin-right:8px}
+.invoice-inline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;white-space:normal}
+.invoice-inline input{width:130px}
+.invoice-form h3{margin:18px 0 6px;font-size:16px}
+.invoice-form textarea{width:100%}
+.invoice-value input{max-width:220px}
+.invoice-fee{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin:6px 0;padding:8px 10px;border:1px solid #e3e8e5;border-radius:6px;background:#fbfcfb}
+.invoice-fee select{min-width:280px}
+.invoice-fee label{font-size:13px}
+.invoice-fee input{width:120px}
+.invoice-fee small{flex-basis:100%;color:#6b7a73}
+.invoice-result{margin-top:14px;max-width:760px}
+.invoice-result td small{display:block;color:#6b7a73}
+.invoice-result .num{text-align:right;white-space:nowrap}
+.invoice-result tr.sum td{font-weight:700;border-top:1px solid #cfd8d3}
+.invoice-result tr.total td{font-size:16px;background:#f3f6f4}
+
+/* Claim account */
+.claim-totals .claim-sum{border-color:#2f5d4d;background:#f3f7f4}
+.claim-account .num{text-align:right;white-space:nowrap}
+.claim-account form.admin-card button{margin-top:8px}
+
+/* Bookkeeping */
+.bookkeeping .admin-tiles div{display:flex;flex-direction:column;gap:2px}
+.bookkeeping .admin-tiles .desk-link{margin-top:6px;align-self:flex-start}
+.bookkeeping .num{text-align:right;white-space:nowrap}
+.bookkeeping td small{display:block;color:#6b7a73;font-size:12px}
+.bookkeeping tr.sum td{font-weight:700;border-top:1px solid #cfd8d3}
+.ledger-form{border-color:#2f5d4d}
+
+/* Text blocks */
+.snippet-insert{display:block;margin:8px 0;font-size:14px}
+.snippet-insert select{margin-left:8px;min-width:260px}
+.snippet-manager .admin-list small{display:block;color:#6b7a73;margin:2px 0 4px}

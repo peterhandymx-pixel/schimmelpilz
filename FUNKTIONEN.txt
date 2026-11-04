@@ -1,0 +1,351 @@
+RECHTSASSISTENTIN SCHIMMELPILZ – FUNKTIONSÜBERSICHT
+Stand: 04.11.2026, nach Ausbau zur Kanzleisoftware (lokale Version auf deinem PC)
+====================================================================
+
+Inhalt
+  1. Startseite (Landingpage)
+  2. Konto, Anmeldung, Sicherheit
+  3. Arbeitsplatz und Navigation
+  4. Akten
+  5. Adressen (CRM)
+  6. Posteingang
+  7. E-Akte
+  8. Schriftverkehr und Entwürfe
+  9. Musterbibliothek
+ 10. Fristen, Termine, Kanzleikalender
+ 11. Kostenprüfung und RVG-Tabelle
+ 12. Verfahrenswege und Gerichtsfinder
+ 13. Recherche (KI)
+ 14. Online Services
+ 15. Team, Rechte, Mandantenzugang
+ 16. Abonnement und Zahlung
+ 17. Kanzlei / Profil, Briefkopf
+ 18. ADMIN-Bereich (nur für dich)
+ 19. Datenschutz, Export, Technik
+ 20. Abrechnung (RVG, Vorschuss, Zeiterfassung)
+ 21. Forderungskonto und Zwangsvollstreckung
+ 22. Buchhaltung, Fremdgeld, Umsatzsteuer, DATEV
+ 23. Eigene Textbausteine
+ 24. Bewusst nicht enthalten
+
+
+1. STARTSEITE (LANDINGPAGE)
+--------------------------------------------------------------------
+- Scroll-Rundgang durch ein (KI-generiertes) Arbeitsgericht München
+  in 8 Stationen: Vorplatz, Pforte, Rechtsantragstelle, Flur,
+  Güteverhandlung, Kammertermin, Ihr Start.
+- Jede Station mit Erklärung, Normen und den passenden App-Funktionen.
+- Logo und Titel groß, „Entwickelt von einem ausgelernten ReFa“.
+- Laufband mit Gerichten, bei denen die Assistentin erprobt wurde.
+- Schlussbild mit dem Entwickler; Namensschild als echte Schrift,
+  bei jeder Bildschirmgröße lesbar.
+- Preise: Privat 9,90 €, Business 29,90 €, Kanzlei 49,90 € pro Monat,
+  7 Tage kostenlos testen.
+- Eigene Hintergrundmusik, leise, per Knopf an/aus.
+- Impressum und Datenschutz öffnen sich als Glasfenster über der Seite.
+- Klassische Seite (ohne Rundgang) als Alternative.
+- Online unter https://schimmelpilz.online (dort führen „Einloggen“ und
+  „Registrieren“ noch zu einer E-Mail, weil die App nur lokal läuft).
+- In der lokalen App führen die Knöpfe direkt zu Anmeldung/Registrierung;
+  wer schon angemeldet ist, kommt direkt in den Arbeitsplatz.
+
+
+2. KONTO, ANMELDUNG, SICHERHEIT
+--------------------------------------------------------------------
+- Registrierung als Verbraucher, Unternehmen oder Anwaltskanzlei.
+- Anmeldung mit E-Mail und Passwort; Schutz gegen zu viele Fehlversuche.
+- „Passwort vergessen?“ mit Link per E-Mail (lokal: Datei im Ordner
+  data\mail-outbox), 1 Stunde gültig, nur einmal verwendbar.
+- E-Mail-Adresse bestätigen und ändern.
+- Passwort ändern (danach werden andere Geräte abgemeldet).
+- Zwei-Faktor-Anmeldung mit Authenticator-App: QR-Code zum Scannen,
+  Wiederherstellungscodes.
+- Konto selbst löschen (mit Passwort und ggf. 2FA-Code).
+
+
+3. ARBEITSPLATZ UND NAVIGATION
+--------------------------------------------------------------------
+- Kacheln zu allen Bereichen, Suche über Aktenzeichen/Namen.
+- „Aktuelle Akten“: Zähler für offene Akten, fällige/überfällige
+  Termine, offene Aufgaben, Dokumente; zuletzt angelegte Akten;
+  letzte Aktivitäten.
+- Deutsch/Englisch umschaltbar.
+- Arbeitsbereich-Wechsel für Teammitglieder.
+
+
+4. AKTEN
+--------------------------------------------------------------------
+- Akte anlegen mit neuem oder vorhandenem Aktenzeichen.
+- Stammdaten: Status, Sachbearbeitung, Mandant/Partei mit Rolle,
+  Gegenseite, Anschriften, Aktenzeichen der Gegenseite, Rechtsgebiet,
+  Rechtsordnung, Verfahrensstand, Sachverhalt, Ziel, Gericht/Behörde,
+  gerichtliches Aktenzeichen, Eingangsdatum, Frist, Streitwert,
+  Währung, Vergütungsgrundlage.
+- Rechtsschutzversicherung mit Versicherungs- und Schadennummer
+  (wird in die Deckungsanfrage eingesetzt).
+- Aktenregister mit Filter (Status, aktiv/Archiv), Export CSV und Excel.
+- Archivieren, Wiederherstellen, Löschen (mit Bestätigung).
+- Digitale Akte mit Reitern: Übersicht, Beteiligte, Dokumente,
+  Entwürfe, Aufgaben, Verfahrenswege, Kosten, Verlauf.
+- Aktenexport als ZIP mit Originalen, Versionen und Prüfsummen.
+
+
+5. ADRESSEN (CRM)
+--------------------------------------------------------------------
+- Kontakte anlegen, bearbeiten, löschen; Personen und Organisationen.
+- Kontakte Akten zuordnen, mit Rolle.
+- Suche, Export.
+- Empfänger für Schriftsätze direkt aus dem Adressbuch wählen.
+
+
+6. POSTEINGANG
+--------------------------------------------------------------------
+- Dokumente hochladen (PDF, DOC, DOCX, PNG, JPG, ZIP; max. 10 MB je
+  Datei) mit Betreff, Absender, Eingangsdatum, Vermerk.
+- Ausdrücklich einer Akte zuordnen; Zuordnung später berichtigen
+  (mit Vermerk, Historie bleibt erhalten).
+- E-Mail-Postfach (IMAP) abrufen und Anhänge übernehmen.
+- Export CSV/Excel.
+
+
+7. E-AKTE
+--------------------------------------------------------------------
+- Alle Eingänge und Schriftsätze einer Akte chronologisch, nummeriert
+  wie Blätter („Bl.“).
+- Herunterladen, Text prüfen, Entwurf bearbeiten, PDF.
+- Automatische Texterkennung (lokale OCR, wenn eingerichtet), danach
+  Text prüfen und für die Recherche freigeben.
+
+
+8. SCHRIFTVERKEHR UND ENTWÜRFE
+--------------------------------------------------------------------
+- Alle Schriftsätze aller Akten, gefiltert nach Akte und Prüfstatus.
+- Liste zeigt die Betreffzeile jedes Entwurfs.
+- Editor mit Dokumentart (Anschreiben, Klage, Antrag, Widerspruch,
+  Erwiderung), Sprache, Empfänger.
+- PDF-Vorschau mit Briefkopf, Download als PDF, Word oder Text.
+- Versionen mit Verlauf; Prüfstatus Entwurf → In Prüfung →
+  Freigegeben (eigene Prüfung).
+- Versand per E-Mail nur auf ausdrückliche Anweisung, mit Nachweis.
+- Klageentwürfe setzen das in der Akte hinterlegte Gericht mit
+  Anschrift als Empfänger ein.
+- Eigene Textbausteine per Auswahl an der Cursorposition einfügen
+  (siehe Kapitel 23).
+
+
+9. MUSTERBIBLIOTHEK (105 Vorlagen)
+--------------------------------------------------------------------
+- 14 Rechtsgebiete: Arbeitsrecht (14), Mietrecht (12), Zivil- und
+  Verbraucherrecht (16), Zivilprozess (14), Vollstreckung & Insolvenz
+  (4), Datenschutz (5), Verwaltung & Sozialrecht (8), Steuerrecht (3),
+  Straf- & Bußgeldrecht (6), Verkehr & Versicherung (3), Familienrecht
+  (5), Erbrecht (3), Handels- & Gesellschaftsrecht (3), Kanzlei &
+  Mandat (9).
+- Jedes Muster mit Normen und, wo wichtig, Frist- und Formhinweis.
+- Vorschau mit den Daten einer gewählten Akte (Parteien, Anschriften,
+  Gericht, Aktenzeichen, Streitwert, Sachverhalt).
+- Kopieren, als Textdatei laden, als Entwurf in die Akte übernehmen.
+- Klagen/Anträge an Gerichte setzen das ermittelte Gericht ein.
+
+
+10. FRISTEN, TERMINE, KANZLEIKALENDER
+--------------------------------------------------------------------
+- Arten: Aufgabe, Termin (mit Uhrzeit), Frist, Notfrist, Wiedervorlage.
+- Automatische Vorfrist bei Fristen und Notfristen (Standard 7 Tage,
+  einstellbar), fällt sie auf Wochenende/Feiertag: Werktag davor.
+- Fristenkontrolle: Fristen und Notfristen lassen sich nur mit
+  Erledigungsvermerk streichen (z. B. „Schriftsatz am … per beA
+  eingereicht“); wer erledigt hat und wann, wird festgehalten.
+- Kanzleikalender mit Tages-, Wochen- und 4-Wochen-Ansicht über alle
+  Akten, farbig nach Art, Vorfristen sichtbar, Zähler für Überfälliges.
+- Filter: alle, überfällig, heute, nächste 7 Tage.
+- Kalenderdatei (.ics) für Outlook/Google/Apple: Termine mit Uhrzeit,
+  Fristen als „Frist“/„NOTFRIST“, zusätzlich jede Vorfrist als eigener
+  Eintrag; Erinnerung 1/3/7 Tage vorher.
+- Export CSV/Excel.
+- Fristenrechner nach §§ 187, 188 BGB mit Verschiebung nach § 193 BGB
+  bei Wochenenden und Feiertagen (bundesweit oder je Bundesland);
+  Ergebnis direkt als Frist übernehmen.
+
+
+11. KOSTENPRÜFUNG UND RVG-TABELLE
+--------------------------------------------------------------------
+- Rechnungen nachrechnen (Verbraucher-, Anwalts-, Gerichts-,
+  Betriebskostenrechnung): Positionen, Steuer, Abzüge, Abweichung.
+- Prüfberichte als Versionen zur Akte speichern.
+- Gebührentabelle RVG / GKG / FamGKG (Stand BGBl. 2025 I Nr. 109):
+  1,0-Wertgebühr berechnen und als Rechnungsposition übernehmen.
+
+
+12. VERFAHRENSWEGE UND GERICHTSFINDER
+--------------------------------------------------------------------
+- Arbeitsblatt zu Zuständigkeit und Verfahrensweg mit Originalquellen
+  (Rechtsweg, sachlich, örtlich, Vertretung, offene Punkte),
+  versioniert, als PDF/Word.
+- Gerichtsfinder nach dem amtlichen Orts- und Gerichtsverzeichnis:
+  Angelegenheit (Zivil, Miete, Arbeit, Sozial, Verwaltung, Familie,
+  Nachlass, Steuer, Mahnverfahren), Gerichtsstand mit Norm,
+  Postleitzahl und Ort.
+- Empfiehlt das zuständige Gericht (z. B. Amtsgericht bis 10.000 €,
+  Landgericht darüber) mit Anschrift, Telefon, XJustiz-ID.
+- Straßenauswahl, wo Straßen zu verschiedenen Gerichten gehören.
+- „Als Gericht in die Akte übernehmen“ – Klagen nennen es dann.
+- Übermittelt werden nur Sachgebiet, Postleitzahl und Ort.
+
+
+13. RECHERCHE (KI)
+--------------------------------------------------------------------
+- Fragen zur Akte an ein lokales KI-Modell (oder optional Gemini).
+- Auswahl geprüfter Dokumentstellen und Rechtsquellen als Grundlage.
+- Katalog öffentlicher Gesetze und Entscheidungen, durchsuchbar,
+  Quellen der Akte zuordnen und prüfen.
+- Antworten als PDF/Word, als Entwurf übernehmen.
+- Hinweis: Antworten sind rechtlich nicht geprüft.
+
+
+14. ONLINE SERVICES
+--------------------------------------------------------------------
+- Direktlinks: Gesetze im Internet, Rechtsprechung im Internet, RVG,
+  GKG, FamGKG, EUR-Lex, CURIA, Unternehmensregister, Justiz-
+  Onlinedienste.
+
+
+15. TEAM, RECHTE, MANDANTENZUGANG
+--------------------------------------------------------------------
+- Teammitglieder per einmaligem Einladungscode (48 Stunden gültig).
+- Rollen: Lesen oder Bearbeiten; alle Akten oder nur ausgewählte.
+- Zugriff entziehen, Rechte ändern; alles protokolliert.
+- Mandantenzugang: Mandantin/Mandant mit eigenem Konto einladen, sieht
+  nur die eine Akte (Dokumente, Entwürfe, Termine) und kann nichts
+  ändern.
+- Teammitglieder dürfen Zeiten erfassen und den Gerichtsfinder nutzen;
+  Abrechnung und Buchhaltung bleiben beim Kanzleiinhaber.
+
+
+16. ABONNEMENT UND ZAHLUNG
+--------------------------------------------------------------------
+- 7 Tage kostenlos ab Registrierung, danach Monatszugang im Voraus,
+  keine automatische Verlängerung.
+- Nach Ablauf: Lesen und Export bleiben möglich.
+- Zahlung über Clip-Zahlungslinks (sobald eingerichtet).
+- Testmodus: Zahlung wird simuliert, nichts wird abgebucht.
+
+
+17. KANZLEI / PROFIL, BRIEFKOPF
+--------------------------------------------------------------------
+- Profildaten bearbeiten.
+- Eigenen Briefkopf als PDF/Word hochladen, Schreibbereich einstellen,
+  Vorschau mit Mustertext, für alle neuen Schriftsätze aktivieren.
+
+
+18. ADMIN-BEREICH (nur patrick.blanks82@gmail.com, nur mit 2FA)
+--------------------------------------------------------------------
+- Übersicht: Benutzer, Bezahlt/Test/Abgelaufen, Neuanmeldungen,
+  Einnahmen je Monat (echt und Test getrennt), Zugänge die in 7 Tagen
+  ablaufen, letzte Buchungen.
+- Benutzer: suchen, filtern; Stammdaten ändern, E-Mail bestätigen,
+  Passwort-Link erstellen, 2FA zurücksetzen, abmelden, sperren,
+  Admin-Recht entziehen, Konto löschen.
+- Abrechnungen: Test verlängern, Tarif ändern, Gratis-Monate, Clip-
+  Zahlung erfassen, Zugang beenden, letzte Buchung stornieren,
+  CSV-Export aller Zahlungen.
+- Tools & System: Status (KI, OCR, E-Mail, Zahlung, Speicher),
+  Registrierungen/KI pausieren, Quellenkatalog aktualisieren,
+  Testmail, lokaler Postausgang.
+- Protokoll: alle Verwaltungsaktionen, durchsuchbar.
+- Jede Änderung braucht eine Begründung und wird protokolliert.
+
+
+19. DATENSCHUTZ, EXPORT, TECHNIK
+--------------------------------------------------------------------
+- Alle Daten liegen lokal (SQLite-Datenbank, Dateien im Ordner data).
+- Verschlüsselte Sicherungen (Backup-Skripte).
+- Export von Akten, Aufgaben, Posteingang als CSV/Excel/ZIP.
+- Impressum, Datenschutzerklärung, Nutzungsbedingungen in der App.
+- Start: start-local.ps1, Neustart nach Änderungen: restart-local.ps1.
+
+
+20. ABRECHNUNG (RVG, VORSCHUSS, ZEITERFASSUNG)
+--------------------------------------------------------------------
+- RVG-Rechnung je Akte nach Tabelle (BGBl. 2025 I Nr. 109), Werte bis
+  500.000 €. Gebührentatbestände mit Satz und Gegenstandswert:
+  2300 Geschäftsgebühr (0,5–2,5), 3100/3101 Verfahrensgebühr,
+  3104 Terminsgebühr, 1000/1003 Einigungsgebühr, 1008 Erhöhung,
+  3200/3202 Berufung, 3305/3308 Mahnverfahren, 3309/3310 Vollstreckung.
+- Anrechnung der Geschäftsgebühr auf die Verfahrensgebühr
+  (Vorbem. 3 Abs. 4 VV RVG: zur Hälfte, höchstens 0,75).
+- Mindestgebühr 15 € (§ 13 Abs. 2 RVG).
+- Pauschale Nr. 7002 (20 %, höchstens 20 €), weitere Auslagen
+  (Dokumentenpauschale, Fahrtkosten, Abwesenheitsgeld, Sonstiges).
+- Umsatzsteuer 19 %, 7 % oder 0 %.
+- Vorschussrechnung (§ 9 RVG); gezahlte Vorschüsse werden in der
+  nächsten Rechnung der Akte automatisch abgezogen, nur einmal.
+- Zeiterfassung je Akte (Minuten, Tätigkeit, Stundensatz) und
+  Rechnung nach Zeitaufwand; abgerechnete Zeiten sind gesperrt.
+- Fortlaufende Rechnungsnummern je Jahr (2026-0001 …).
+- PDF mit Briefkopf, Pflichtangaben nach § 10 RVG und § 14 UStG
+  (Leistungszeitraum, Steuernummer, Unterschriftsfeld).
+- Offene Posten: Zahlungen erfassen (auch Teilzahlungen), Status
+  offen/bezahlt, Stornierung mit Grund (Nummer bleibt erhalten,
+  verrechnete Vorschüsse werden wieder frei), CSV-Export.
+- Jede Zahlung wird automatisch auch in der Buchhaltung gebucht.
+
+
+21. FORDERUNGSKONTO UND ZWANGSVOLLSTRECKUNG
+--------------------------------------------------------------------
+- Je Akte: Hauptforderungen und Kosten (Mahn-, Inkasso-, Gerichts-,
+  Anwaltskosten) mit Datum.
+- Zinsen: 5 %-Punkte über Basiszins (Verbraucher, § 288 Abs. 1 BGB),
+  9 %-Punkte (Unternehmer, § 288 Abs. 2 BGB), fester Zinssatz oder
+  unverzinst; „Zinsen ab“-Datum je Position.
+- Basiszinssatz nach § 247 BGB hinterlegt bis 31.12.2026 (zuletzt
+  1,52 % ab 01.07.2026); Hinweis, wenn ein neuer Wert fehlt.
+- Zinsen taggenau (Tage/365), Wechsel des Basiszinses zum 1.1./1.7.,
+  kein Zinseszins (§ 289 BGB).
+- Zahlungen des Schuldners werden nach § 367 Abs. 1 BGB verrechnet:
+  Kosten, dann Zinsen, dann Hauptforderung (älteste zuerst).
+- Stand zu jedem Stichtag, Gesamtforderung, Zinsen je weiterem Tag.
+- Forderungsaufstellung als PDF – die Anlage für Pfändungs- und
+  Überweisungsbeschluss und Gerichtsvollzieherauftrag; Link zu den
+  amtlichen Pflichtformularen.
+
+
+22. BUCHHALTUNG, FREMDGELD, UMSATZSTEUER, DATEV
+--------------------------------------------------------------------
+- Konten: Geschäftskonto, Fremdgeld-Anderkonto, Kasse, mit Kontostand.
+- Buchungsarten: Honorareingang (mit Rechnung → gleicht sie aus),
+  sonstige Einnahme, Ausgabe (mit Vorsteuer), Privat, Umbuchung,
+  Fremdgeldeingang, Fremdgeld weitergeleitet, Fremdgeld mit Honorar
+  verrechnet.
+- Fremdgeld: immer einer Akte zugeordnet, nur auf dem Anderkonto,
+  kann je Akte nie ins Minus gehen; Warnung, wenn es länger als
+  14 Tage liegt (§ 43a Abs. 5 BRAO, § 4 BORA).
+- Buchungen werden nie geändert oder gelöscht, nur storniert
+  (Gegenbuchung, auch bei verbundenen Buchungen).
+- Umsatzsteuer-Voranmeldung nach Ist-Versteuerung (§ 20 UStG) je
+  Monat oder Quartal: Kz. 81, 86, 66, 83 zum Übertragen in ELSTER.
+- DATEV-Export als CSV im Aufbau des Buchungsstapels (Umsatz,
+  Soll/Haben, Konto, Gegenkonto, BU-Schlüssel, Belegdatum, Beleg,
+  Text); Kontonummern einstellbar, Vorgabe SKR04.
+- Auswertungen: Honorareingänge je Monat (Grafik), offene Rechnungen
+  und offene Posten, Rechnungen älter als 30 Tage, Aktenbestand nach
+  Status und Rechtsgebiet.
+
+
+23. EIGENE TEXTBAUSTEINE
+--------------------------------------------------------------------
+- In der Musterbibliothek anlegen, bearbeiten, löschen, mit Gruppe.
+- Im Schriftsatz-Editor per Auswahl an der Cursorposition einfügen.
+- Platzhalter werden mit Aktendaten gefüllt: {mandant}, {gegner},
+  {aktenzeichen}, {az_gericht}, {gericht}, {angelegenheit}, {datum}.
+- Für das ganze Kanzleiteam gemeinsam.
+
+
+24. BEWUSST NICHT ENTHALTEN (braucht Zulassung/Vertrag)
+--------------------------------------------------------------------
+- ELSTER-Übermittlung (Zertifikat nötig) – Daten werden aber für die
+  Umsatzsteuer-Voranmeldung aufbereitet.
+- Drebis (Vertrag mit Rechtsschutzversicherern).
+- beA (besonderes elektronisches Anwaltspostfach).
+- Word-Add-in (Microsoft-Store) – Word-Export gibt es.
+- Elektronisches gerichtliches Mahnverfahren (Kennziffer nötig).

@@ -90,6 +90,9 @@ export function CaseIntake({ lang, t, saving, error, onSubmit, onCancel, user, i
       <label>{c.clientAddress}<textarea key={`${audience}-address`} name="client_address" maxLength={500} rows={2} defaultValue={initialCase ? d.client_address || "" : ownAccount ? profileAddress : ""} /></label>
       <label>{c.opponentAddress}<textarea name="opponent_address" maxLength={500} rows={2} defaultValue={d.opponent_address || ""} /></label>
       <label className="span-two">{c.opponentReference}<input name="opponent_reference" maxLength={100} defaultValue={d.opponent_reference || ""} /></label>
+      <label className="span-two">{lang === "de" ? "Rechtsschutzversicherung (Name, Anschrift)" : "Legal expenses insurer (name, address)"}<input name="insurer_name" maxLength={300} defaultValue={d.insurer_name || ""} /></label>
+      <label>{lang === "de" ? "Versicherungsnummer" : "Policy number"}<input name="insurer_policy" maxLength={60} defaultValue={d.insurer_policy || ""} /></label>
+      <label>{lang === "de" ? "Schadennummer" : "Claim number"}<input name="insurer_claim" maxLength={60} defaultValue={d.insurer_claim || ""} /></label>
     </div></fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.matterHeading}</legend><div className="intake-grid">
       <label className="span-two">{c.title}<input name="title" required minLength={3} maxLength={120} placeholder={t.caseTitle} defaultValue={initialCase?.title || ""} /></label>
@@ -123,6 +126,7 @@ export function CaseFacts({ item, lang }) {
     [c.audience, c[d.audience]], [d.audience === "law_firm" ? c.client : d.audience === "business" ? c.company : c.person, d.client_name],
     [c.clientRole, option(c.roles, d.client_role)], [c.clientEmail, d.client_email], [c.clientAddress, d.client_address],
     [c.opponent, d.opponent_name], [c.opponentAddress, d.opponent_address], [c.opponentReference, d.opponent_reference],
+    [lang === "de" ? "Rechtsschutzversicherung" : "Legal expenses insurer", [d.insurer_name, d.insurer_policy && `Vers.-Nr. ${d.insurer_policy}`, d.insurer_claim && `Schaden-Nr. ${d.insurer_claim}`].filter(Boolean).join(" · ")],
     [c.legalArea, option(c.areas, d.legal_area)], [c.jurisdiction, option(c.jurisdictions, d.jurisdiction)], [c.stage, option(c.stages, d.stage)],
     [c.description, item.description], [c.objective, d.objective], [c.court, d.court], [c.courtReference, d.court_reference],
     [c.receivedOn, dateText(d.received_on)], [c.deadline, dateText(d.deadline)], [c.deadlineNote, d.deadline_note],

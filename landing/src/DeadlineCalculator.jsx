@@ -48,7 +48,7 @@ export function DeadlineCalculator({ lang, cases, caseId = "", saveTask }) {
     if (!result || !targetCase) return;
     setBusy(true); setError(""); setNotice("");
     const note = `${input.amount} ${c.units[input.unit]} ab ${dateLabel(result.start, lang)} · ${result.start_rule}, ${result.rule}${result.shifted ? ` · ${c.moved}: ${result.skipped.map(item => item.reason).join(", ")}` : ""} · ${result.state_name} · ${lang === "de" ? "Rechenhilfe, selbst geprüft?" : "calculation aid, checked yourself?"}`;
-    try { await saveTask(targetCase, { title: c.taskTitle, note: note.slice(0, 2000), due_on: result.end, priority: "high" }); setNotice(c.saved); }
+    try { await saveTask(targetCase, { title: c.taskTitle, note: note.slice(0, 2000), due_on: result.end, priority: "high", kind: "deadline" }); setNotice(c.saved); }
     catch { setError(c.saveFailed); }
     finally { setBusy(false); }
   };

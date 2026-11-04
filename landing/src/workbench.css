@@ -72,3 +72,47 @@
 .date-input-picker:hover{background:var(--sage,#dfe7de)}
 .date-input-native{position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 .export-links{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#708169}.export-links .desk-link{font-weight:600}.desk-panel-heading .export-links{margin-left:auto}
+
+/* Deadline kinds, pre-deadlines and controlled completion */
+.task-kind{display:inline-block;margin-right:7px;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:700;letter-spacing:.03em;vertical-align:1px;background:#e9eeeb;color:#3c5249}
+.task-kind.kind-deadline{background:#fbe9d0;color:#8a5212}
+.task-kind.kind-notfrist{background:#9b3d3d;color:#fff}
+.task-kind.kind-appointment{background:#e1ebf5;color:#2d5277}
+.task-kind.kind-resubmission{background:#ece6f3;color:#5b3f7d}
+.task-pre{color:#8a5212 !important}
+.task-pre.due{font-weight:700;color:#9b3d3d !important}
+.task-done{color:#2f5d4d !important}
+.task-strike{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin-top:8px;padding:8px 10px;border:1px solid #e6d3a8;border-radius:5px;background:#fffaf0}
+.task-strike label{flex:1 1 240px;font-size:13px}
+.task-strike input{width:100%}
+
+/* Office calendar */
+.office-calendar .cal-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.cal-views{display:inline-flex;border:1px solid #cfd8d3;border-radius:6px;overflow:hidden}
+.cal-views button{border:0;background:#fff;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer;color:#263e39}
+.cal-views button.active{background:#2f5d4d;color:#fff}
+.cal-range{font-size:14px;color:#4b5a54;margin-left:4px}
+.cal-overdue{color:#9b3d3d}
+.cal-grid{display:grid;gap:6px;margin-top:10px}
+.cal-grid.cal-view-day{grid-template-columns:1fr}
+.cal-grid.cal-view-week{grid-template-columns:repeat(7,minmax(0,1fr))}
+.cal-grid.cal-view-month{grid-template-columns:repeat(7,minmax(0,1fr))}
+.cal-grid .cal-day{min-height:110px;border:1px solid #dfe5e1;border-radius:6px;padding:6px;background:#fff;display:flex;flex-direction:column;gap:4px}
+.cal-grid.cal-view-month .cal-day{min-height:92px}
+.cal-grid.cal-view-day .cal-day{min-height:260px}
+.cal-day.weekend{background:#f7f9f8}
+.cal-day.past{opacity:.82}
+.cal-day.today{border:2px solid #2f5d4d}
+.cal-date{font-size:12px;font-weight:700;color:#4b5a54;text-transform:capitalize}
+.cal-entry{display:block;width:100%;text-align:left;border:0;border-left:3px solid #9fb3aa;border-radius:4px;background:#f1f5f3;padding:4px 6px;font:inherit;font-size:12px;line-height:1.25;cursor:pointer;color:#263e39}
+.cal-entry:hover{filter:brightness(.96)}
+.cal-entry .cal-kind{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.cal-entry .cal-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-entry small{display:block;color:#6b7a73;font-size:11px}
+.cal-entry.kind-notfrist{border-left-color:#9b3d3d;background:#f8e5e3}
+.cal-entry.kind-deadline{border-left-color:#c27a1a;background:#fcf0dc}
+.cal-entry.kind-pre{border-left-color:#c27a1a;border-left-style:dashed;background:#fffaf0}
+.cal-entry.kind-appointment{border-left-color:#2d5277;background:#e7eef7}
+.cal-entry.kind-resubmission{border-left-color:#5b3f7d;background:#efe9f5}
+.cal-entry.done{opacity:.55;text-decoration:line-through}
+@media (max-width:900px){.cal-grid.cal-view-week,.cal-grid.cal-view-month{grid-template-columns:1fr}.cal-grid .cal-day{min-height:0}}

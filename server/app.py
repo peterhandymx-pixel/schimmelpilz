@@ -15,7 +15,7 @@ import threading
 import subprocess
 import sys
 from contextlib import asynccontextmanager, contextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, Response as BinaryResponse
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from . import control, billing, document_ocr, admin
+from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ai_status, prepare_messages, generate_answer, AI_MODEL
 from .document_context import select_sources
@@ -107,6 +107,10 @@ class CaseDetails(BaseModel):
     opponent_name: str = Field(default="", max_length=160)
     opponent_address: str = Field(default="", max_length=500)
     opponent_reference: str = Field(default="", max_length=100)
+    # Legal expenses insurer of the client (Rechtsschutzversicherung).
+    insurer_name: str = Field(default="", max_length=300)
+    insurer_policy: str = Field(default="", max_length=60)
+    insurer_claim: str = Field(default="", max_length=60)
     legal_area: Literal["general", "consumer", "tenancy", "contract", "commercial", "employment", "family", "social", "administrative", "criminal"] = "general"
     jurisdiction: Literal["DE", "EU", "MX", "other"] = "DE"
     stage: Literal["initial", "out_of_court", "court", "appeal", "enforcement"] = "initial"
@@ -121,7 +125,7 @@ class CaseDetails(BaseModel):
     fee_basis: Literal["unknown", "statutory", "hourly", "agreement"] = "unknown"
     conflict_check: Literal["pending", "checked", "conflict"] = "pending"
 
-    @field_validator("responsible", "client_name", "client_email", "client_address", "opponent_name", "opponent_address", "opponent_reference", "objective", "court", "court_reference", "deadline_note", mode="before")
+    @field_validator("responsible", "client_name", "client_email", "client_address", "opponent_name", "opponent_address", "opponent_reference", "insurer_name", "insurer_policy", "insurer_claim", "objective", "court", "court_reference", "deadline_note", mode="before")
     @classmethod
     def strip_input(cls, value):
         return value.strip() if isinstance(value, str) else value
@@ -181,20 +185,40 @@ class CaseUpdate(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
+TASK_KINDS = ("task", "appointment", "deadline", "notfrist", "resubmission")
+# Deadlines need a reminder well before they run out; a week is the usual office rule.
+DEFAULT_PRE_DAYS = {"deadline": 7, "notfrist": 7}
+
+
 class TaskCreate(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     note: str = Field(default="", max_length=2000)
     due_on: date | None = None
     priority: Literal["normal", "high"] = "normal"
+    kind: Literal["task", "appointment", "deadline", "notfrist", "resubmission"] = "task"
+    due_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    pre_days: int | None = Field(default=None, ge=0, le=60)
 
     @field_validator("title", "note", mode="before")
     @classmethod
     def strip_input(cls, value):
         return value.strip() if isinstance(value, str) else value
 
+    @model_validator(mode="after")
+    def dated_kinds(self):
+        if self.kind != "task" and not self.due_on:
+            raise ValueError("date_required")
+        if self.kind != "appointment":
+            self.due_time = None
+        if self.pre_days is None:
+            self.pre_days = DEFAULT_PRE_DAYS.get(self.kind, 0)
+        return self
+
 
 class TaskUpdate(TaskCreate):
     completed: bool
+    # Deadline control: a deadline is only struck off with a note on how it was met (e.g. "Schriftsatz am … per beA").
+    completion_note: str = Field(default="", max_length=500)
 
 
 class ResearchInput(BaseModel):
@@ -402,6 +426,11 @@ def init_db() -> None:
             connection.execute("ALTER TABLE users ADD COLUMN profile TEXT NOT NULL DEFAULT '{}'")
         if "letterhead_id" not in user_columns:
             connection.execute("ALTER TABLE users ADD COLUMN letterhead_id TEXT")
+        task_columns = {row["name"] for row in connection.execute("PRAGMA table_info(tasks)")}
+        for column, declaration in (("kind", "TEXT NOT NULL DEFAULT 'task'"), ("due_time", "TEXT"), ("pre_days", "INTEGER NOT NULL DEFAULT 0"),
+                                    ("completed_by", "TEXT"), ("completion_note", "TEXT NOT NULL DEFAULT ''")):
+            if column not in task_columns:
+                connection.execute(f"ALTER TABLE tasks ADD COLUMN {column} {declaration}")
         research_columns = {row["name"] for row in connection.execute("PRAGMA table_info(research_runs)")}
         for column in ("sources", "document_selection", "legal_sources"):
             if column not in research_columns:
@@ -437,6 +466,10 @@ def init_db() -> None:
         auto_text.migrate(connection)
         control.migrate(connection)
         billing.migrate(connection)
+        invoices.migrate(connection)
+        claims.migrate(connection)
+        bookkeeping.migrate(connection)
+        snippets.migrate(connection)
         account.migrate(connection)
         mailbox.migrate(connection)
 
@@ -620,6 +653,20 @@ def activate_letterhead(letterhead_id: str, payload: LetterheadActivation, user:
         return public_letterhead(owned_letterhead(connection, letterhead_id, user['id']))
 
 
+def invoice_letterhead(owner):
+    """The active letter paper of the account for invoices, or plain paper with 25 mm margins."""
+    layout = LetterheadLayout(top_mm=25, bottom_mm=25).model_dump()
+    if not owner['letterhead_id']:
+        return None, layout
+    with db() as connection:
+        row = connection.execute('SELECT * FROM letterheads WHERE id=? AND user_id=?', (owner['letterhead_id'], owner['id'])).fetchone()
+    template = DATA_DIR / 'letterheads' / row['pdf_stored'] if row else None
+    # A missing letter-paper file must not block an invoice: fall back to plain paper.
+    if not template or not template.is_file():
+        return None, layout
+    return template, {**layout, **json.loads(row['layout'] or '{}')}
+
+
 def draft_letterhead(user):
     if not user['letterhead_id']:
         return None, None
@@ -765,6 +812,20 @@ def send_draft(case_id: str, draft_id: str, payload: DraftSendInput, user: dict 
     return {"sent": True, "message_id": message_id, "attachment": filename, "review_status": row["review_status"], "activity": activity}
 
 
+def pre_deadline(due_on, days):
+    """The Vorfrist: `days` before the deadline, moved back to the previous working day (weekends, nationwide holidays)."""
+    if not due_on or not days:
+        return None
+    day = date.fromisoformat(due_on) - timedelta(days=days)
+    try:
+        closed = deadlines.holidays(day.year, None)
+    except ValueError:
+        closed = {}
+    while day.weekday() >= 5 or day in closed:
+        day -= timedelta(days=1)
+    return day.isoformat()
+
+
 def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
     documents = connection.execute(
         """SELECT d.id, d.original_name, d.content_type, d.size_bytes, d.created_at, d.inbox_reassigned_at, d.inbox_correction_note,
@@ -783,7 +844,7 @@ def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
         "details": json.loads(row["details"]),
         "documents": [dict(item) for item in documents],
         "drafts": [dict(item) for item in drafts],
-        "tasks": [{**dict(item), "completed": bool(item["completed"])} for item in connection.execute("SELECT * FROM tasks WHERE case_id = ? ORDER BY created_at DESC", (row["id"],))],
+        "tasks": [{**dict(item), "completed": bool(item["completed"]), "pre_due_on": pre_deadline(item["due_on"], item["pre_days"])} for item in connection.execute("SELECT * FROM tasks WHERE case_id = ? ORDER BY created_at DESC", (row["id"],))],
         "activities": [dict(item) for item in connection.execute("SELECT * FROM activities WHERE case_id = ? ORDER BY created_at DESC", (row["id"],))],
     }
 
@@ -856,7 +917,7 @@ def update_case(case_id: str, payload: CaseUpdate, user: dict = Depends(require_
 def create_task(case_id: str, payload: TaskCreate, user: dict = Depends(require_user)) -> dict:
     get_case(case_id, user["id"])
     with db() as connection:
-        connection.execute("INSERT INTO tasks(id, case_id, title, note, due_on, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), case_id, payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, now()))
+        connection.execute("INSERT INTO tasks(id, case_id, title, note, due_on, priority, created_at, kind, due_time, pre_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), case_id, payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, now(), payload.kind, payload.due_time, payload.pre_days))
         record_activity(connection, case_id, "task_created", payload.title)
         return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
 
@@ -869,7 +930,12 @@ def update_task(case_id: str, task_id: str, payload: TaskUpdate, user: dict = De
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         completed_at = (task["completed_at"] or now()) if payload.completed else None
-        connection.execute("UPDATE tasks SET title = ?, note = ?, due_on = ?, priority = ?, completed = ?, completed_at = ? WHERE id = ? AND case_id = ?", (payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, payload.completed, completed_at, task_id, case_id))
+        striking = payload.completed and not task["completed"]
+        if striking and payload.kind in ("deadline", "notfrist") and len(payload.completion_note.strip()) < 5:
+            raise HTTPException(status_code=422, detail="completion_note_required")
+        completed_by = (user["full_name"] if striking else task["completed_by"]) if payload.completed else None
+        completion_note = (payload.completion_note.strip() if striking else task["completion_note"]) if payload.completed else ""
+        connection.execute("UPDATE tasks SET title = ?, note = ?, due_on = ?, priority = ?, completed = ?, completed_at = ?, kind = ?, due_time = ?, pre_days = ?, completed_by = ?, completion_note = ? WHERE id = ? AND case_id = ?", (payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, payload.completed, completed_at, payload.kind, payload.due_time, payload.pre_days, completed_by, completion_note, task_id, case_id))
         action = "task_completed" if payload.completed else "task_reopened" if task["completed"] else "task_updated"
         record_activity(connection, case_id, action, payload.title)
         return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
@@ -1336,8 +1402,13 @@ app.include_router(mailbox.router(db, require_user, now, lambda: UPLOAD_DIR, lam
 app.include_router(inbox.router(db, require_user, now, record_activity, lambda: UPLOAD_DIR, MAX_UPLOAD_BYTES, ALLOWED_EXTENSIONS, lambda *job: AUTO_TEXT.queue(*job)))
 app.include_router(costs.router(db, require_user, now, record_activity))
 app.include_router(case_tools.router(db, require_user, now, record_activity, row_case, lambda: DATA_DIR, lambda: UPLOAD_DIR))
-app.include_router(calendar_export.router(db, require_user, now))
+app.include_router(calendar_export.router(db, require_user, now, pre_deadline))
 app.include_router(fee_tables.router(require_user))
+app.include_router(court_lookup.router(require_user))
+app.include_router(invoices.router(db, require_user, now, record_activity, compose_pdf, invoice_letterhead))
+app.include_router(claims.router(db, require_user, now, record_activity, compose_pdf))
+app.include_router(bookkeeping.router(db, require_user, now, record_activity))
+app.include_router(snippets.router(db, require_user, now))
 app.include_router(route_plans.router(db, require_user, now, record_activity))
 app.include_router(exports.router(db, require_user, now))
 app.include_router(ocr_routes.router(db, require_user, now, record_activity, get_case, get_document, document_text, lambda: UPLOAD_DIR, EXTRACTION_LOCK, ROOT))

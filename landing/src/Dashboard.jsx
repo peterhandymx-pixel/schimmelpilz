@@ -1,11 +1,15 @@
 import {WorkspaceSelect,TeamPanel,BillingPanel} from './ControlCenter.jsx';
 import { AdminArea } from './AdminArea.jsx';
+import { OfficeCalendar } from './OfficeCalendar.jsx';
+import { Invoicing } from './Invoicing.jsx';
+import { ClaimAccount } from './ClaimAccount.jsx';
+import { Bookkeeping } from './Bookkeeping.jsx';
+import { SnippetManager } from './Snippets.jsx';
 import { RoutePlanner } from './RoutePlanner.jsx';
 import { CostReview } from './CostReview.jsx';
 import { Inbox } from './Inbox.jsx';
-import { SampleLibrary } from './SampleLibrary.jsx';
-import { useState } from "react";
-import { IconLayoutDashboard, IconFolders, IconFileText, IconEdit, IconSearch, IconPlus, IconLogout, IconUsers, IconCalendar, IconSettings, IconScale, IconArrowUpRight, IconClock, IconChevronRight, IconWorld, IconHome, IconInbox, IconReceipt, IconBooks } from "@tabler/icons-react";
+import { lazy, Suspense, useState } from "react";
+import { IconLayoutDashboard, IconFolders, IconFileText, IconEdit, IconSearch, IconPlus, IconLogout, IconUsers, IconCalendar, IconSettings, IconScale, IconArrowUpRight, IconClock, IconChevronRight, IconWorld, IconHome, IconInbox, IconReceipt, IconBooks, IconFileInvoice, IconCoins, IconBuildingBank } from "@tabler/icons-react";
 import { ContactBook } from './ContactBook.jsx';
 import { SpreadsheetLinks } from './ExportLinks.jsx';
 import { OfficeModules } from './OfficeModules.jsx';
@@ -24,6 +28,9 @@ import { EAkte } from "./EAkte.jsx";
 import { intakeCopy } from "./CaseIntake.jsx";
 import { caseMatches, dateLabel, localToday, statusLabels, taskRows } from "./workbench.js";
 
+// The sample library holds well over a hundred texts; it loads when it is opened.
+const SampleLibrary = lazy(() => import('./SampleLibrary.jsx').then(module => ({ default: module.SampleLibrary })));
+
 function ResearchDesk({ lang, cases, selectedCase, open, onDraft }) {
   const de = lang === "de";
   const groups = [
@@ -41,8 +48,8 @@ export function Dashboard({ lang, setLang, t, user, storage, view, setView, onNe
   const de = lang === "de", today = localToday();
   // Deleting is reserved for the workspace owner; the server enforces the same rule.
   const canDelete = !access || access.role === "owner";
-  const labels = de ? { team: "Team & Rechte", billing: "Abonnement", "admin-overview": "Admin · Übersicht", "admin-users": "Admin · Benutzer", "admin-billing": "Admin · Abrechnungen", "admin-tools": "Admin · Tools", "admin-audit": "Admin · Protokoll", overview: "Arbeitsplatz", activity: "Aktuelle Akten", services: "Online Services", inbox: "Posteingang", costs: "Kostenprüfung", routes: "Verfahrenswege", cases: "Akten", parties: "Adressen", documents: "E-Akte", drafts: "Schriftverkehr", samples: "Musterbibliothek", tasks: "Termine / Fristen", research: "Recherche", account: "Kanzlei / Profil" } : { team: "Team & permissions", billing: "Subscription", "admin-overview": "Admin · Overview", "admin-users": "Admin · Users", "admin-billing": "Admin · Billing", "admin-tools": "Admin · Tools", "admin-audit": "Admin · Audit log", overview: "Workspace", activity: "Recent files", services: "Online Services", inbox: "Inbox", costs: "Cost review", routes: "Procedural routes", cases: "Cases", parties: "Addresses", documents: "Electronic files", drafts: "Correspondence", samples: "Sample library", tasks: "Dates / deadlines", research: "Research", account: "Office / profile" };
-  const navigation = [["overview", IconHome], ["activity", IconLayoutDashboard], ["inbox", IconInbox], ["parties", IconUsers], ["cases", IconFolders], ["documents", IconFileText], ["drafts", IconEdit], ["samples", IconBooks], ["tasks", IconCalendar], ["costs", IconReceipt], ["routes", IconScale], ["research", IconSearch], ["services", IconWorld], ["team", IconUsers], ["billing", IconReceipt], ["account", IconSettings]];
+  const labels = de ? { team: "Team & Rechte", billing: "Abonnement", "admin-overview": "Admin · Übersicht", "admin-users": "Admin · Benutzer", "admin-billing": "Admin · Abrechnungen", "admin-tools": "Admin · Tools", "admin-audit": "Admin · Protokoll", overview: "Arbeitsplatz", activity: "Aktuelle Akten", services: "Online Services", inbox: "Posteingang", costs: "Kostenprüfung", invoicing: "Abrechnung", claims: "Forderungskonto", books: "Buchhaltung", routes: "Verfahrenswege", cases: "Akten", parties: "Adressen", documents: "E-Akte", drafts: "Schriftverkehr", samples: "Musterbibliothek", tasks: "Termine / Fristen", research: "Recherche", account: "Kanzlei / Profil" } : { team: "Team & permissions", billing: "Subscription", "admin-overview": "Admin · Overview", "admin-users": "Admin · Users", "admin-billing": "Admin · Billing", "admin-tools": "Admin · Tools", "admin-audit": "Admin · Audit log", overview: "Workspace", activity: "Recent files", services: "Online Services", inbox: "Inbox", costs: "Cost review", invoicing: "Billing", claims: "Claim account", books: "Bookkeeping", routes: "Procedural routes", cases: "Cases", parties: "Addresses", documents: "Electronic files", drafts: "Correspondence", samples: "Sample library", tasks: "Dates / deadlines", research: "Research", account: "Office / profile" };
+  const navigation = [["overview", IconHome], ["activity", IconLayoutDashboard], ["inbox", IconInbox], ["parties", IconUsers], ["cases", IconFolders], ["documents", IconFileText], ["drafts", IconEdit], ["samples", IconBooks], ["tasks", IconCalendar], ["costs", IconReceipt], ["invoicing", IconFileInvoice], ["claims", IconCoins], ["books", IconBuildingBank], ["routes", IconScale], ["research", IconSearch], ["services", IconWorld], ["team", IconUsers], ["billing", IconReceipt], ["account", IconSettings]];
   const adminNavigation = [["admin-overview", IconLayoutDashboard, "Übersicht"], ["admin-users", IconUsers, "Benutzer"], ["admin-billing", IconReceipt, "Abrechnungen"], ["admin-tools", IconSettings, "Tools & System"], ["admin-audit", IconClock, "Protokoll"]];
   const open = (id, tab = "overview") => {
     if (!id) { setQuery(""); setView(tab); return; }
@@ -68,11 +75,15 @@ export function Dashboard({ lang, setLang, t, user, storage, view, setView, onNe
         {view.startsWith("admin-") && user.is_admin && <AdminArea lang={lang} tab={view.slice(6)} user={user} onTab={tab => changeView("admin-" + tab)} />}
         {view === "inbox" && <Inbox lang={lang} cases={storage.cases} query={query} open={open} onChanged={() => storage.reload()} canDelete={canDelete} />}
         {view === "routes" && <RoutePlanner cases={storage.cases} lang={lang} onChanged={storage.reload} onDraft={workspaceProps.onDraft} preferredCaseId={storage.selectedCase?.id || ""} />}
+        {view === "books" && <Bookkeeping cases={storage.cases} />}
+        {view === "claims" && <ClaimAccount cases={storage.cases} selectedCase={storage.selectedCase} />}
+        {view === "invoicing" && <Invoicing cases={storage.cases} selectedCase={storage.selectedCase} />}
         {view === "costs" && <CostReview lang={lang} cases={storage.cases} query={query} open={open} onChanged={() => storage.reload()} onDraft={workspaceProps.onDraft} />}
         {view === "documents" && <section className="desk-panel"><EAkte cases={storage.cases} selectedCase={storage.selectedCase} lang={lang} query={query} open={open} onSelectCase={workspaceProps.onSelectCase} onFile={workspaceProps.onFile} uploading={storage.uploading} notice={workspaceProps.uploadNotice} onDraft={workspaceProps.onDraft} onRefresh={storage.reload} /></section>}
         {view === "drafts" && <section className="desk-panel"><DraftList desk cases={storage.cases} lang={lang} query={query} open={open} onDraft={workspaceProps.onDraft} onChanged={storage.reload} canDelete={canDelete} onNewCase={onNewCase} preferredCaseId={storage.selectedCase?.id || ""} /></section>}
-        {view === "samples" && <section className="desk-panel"><SampleLibrary lang={lang} cases={storage.cases} selectedCase={storage.selectedCase} query={query} onDraft={workspaceProps.onDraft} onNewCase={onNewCase} canEdit={access?.role !== "viewer"} /></section>}
-        {view === "tasks" && <><section className="desk-panel"><TaskBoard cases={storage.cases} lang={lang} query={query} open={open} saveTask={storage.saveTask} onChanged={storage.reload} canDelete={canDelete} /></section><DeadlineCalculator lang={lang} cases={storage.cases.filter(item => !item.archived_at)} saveTask={access?.role === "viewer" ? null : storage.saveTask} /></>}
+        {view === "samples" && <section className="desk-panel"><Suspense fallback={<p role="status">{de ? "Musterbibliothek wird geladen …" : "Loading sample library …"}</p>}><SampleLibrary lang={lang} cases={storage.cases} selectedCase={storage.selectedCase} query={query} onDraft={workspaceProps.onDraft} onNewCase={onNewCase} canEdit={access?.role !== "viewer"} /></Suspense></section>}
+        {view === "samples" && <SnippetManager />}
+        {view === "tasks" && <><OfficeCalendar cases={storage.cases} lang={lang} open={open} /><section className="desk-panel"><TaskBoard cases={storage.cases} lang={lang} query={query} open={open} saveTask={storage.saveTask} onChanged={storage.reload} canDelete={canDelete} /></section><DeadlineCalculator lang={lang} cases={storage.cases.filter(item => !item.archived_at)} saveTask={access?.role === "viewer" ? null : storage.saveTask} /></>}
         {view === "case" && storage.selectedCase && <CaseFile canDelete={canDelete} contacts={contacts} item={storage.selectedCase} lang={lang} storage={storage} workspace={workspaceProps} open={open} back={() => changeView("cases")} />}
         {view === "research" && <ResearchDesk lang={lang} cases={storage.cases} selectedCase={storage.selectedCase} open={open} onDraft={workspaceProps.onDraft} />}
         {view === "account" && <section className="desk-panel desk-profile"><div className="desk-panel-heading"><div><h2>{labels.account}</h2><p>{intakeCopy[lang][user.audience]}</p></div><span className="desk-avatar">{initials}</span></div><dl className="desk-particulars"><div><dt>Name</dt><dd>{user.full_name}</dd></div>{user.organisation && <div><dt>{de ? "Organisation" : "Organisation"}</dt><dd>{user.organisation}</dd></div>}<div><dt>E-Mail</dt><dd>{user.email}</dd></div><div><dt>{de ? "Anschrift" : "Address"}</dt><dd>{user.street}<br />{user.postal_code} {user.city}<br />{user.country}</dd></div><div><dt>{de ? "Telefon" : "Phone"}</dt><dd>{user.phone || "—"}</dd></div></dl>{user.profile && <dl className="desk-particulars">{Object.entries(user.profile).filter(([,value]) => value).map(([key,value]) => <div key={key}><dt>{(profileFields[lang][key] || key).replace(' *', '')}</dt><dd>{profileValue(lang, key, value)}</dd></div>)}</dl>}<LetterheadSetup lang={lang} onReady={onUserUpdated} /><AccountSettings lang={lang} user={user} onUserUpdated={onUserUpdated} onAccountDeleted={onAccountDeleted} /><p className="desk-footnote">{de ? "Teamzugänge und Aktenrechte verwalten Sie unter Team & Rechte; persönliche Profildaten bleiben getrennt." : "Manage team access and case permissions under Team & permissions; personal profiles remain separate."}</p></section>}

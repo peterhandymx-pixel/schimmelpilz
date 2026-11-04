@@ -27,7 +27,14 @@ def calendar(events,stamp,alarm_days):
         day=date.fromisoformat(item['due_on'])
         if day==date.max:
             raise HTTPException(422,'Date too far in future for calendar end')
-        lines.extend(['BEGIN:VEVENT','UID:'+item['uid']+'@schimmelpilz.local','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+day.isoformat().replace('-',''),'DTEND;VALUE=DATE:'+(day+timedelta(days=1)).isoformat().replace('-',''),'SUMMARY:'+text(item['title']),'DESCRIPTION:'+text(item['note']),'STATUS:CONFIRMED','TRANSP:TRANSPARENT'])
+        if item.get('time'):
+            # Appointments with a time: one hour, in local (floating) time.
+            start=day.isoformat().replace('-','')+'T'+item['time'].replace(':','')+'00'
+            hour,minute=map(int,item['time'].split(':'));end_hour=min(hour+1,23)
+            when=['DTSTART:'+start,'DTEND:'+day.isoformat().replace('-','')+'T%02d%02d00'%(end_hour,minute if end_hour>hour else 59)]
+        else:
+            when=['DTSTART;VALUE=DATE:'+day.isoformat().replace('-',''),'DTEND;VALUE=DATE:'+(day+timedelta(days=1)).isoformat().replace('-','')]
+        lines.extend(['BEGIN:VEVENT','UID:'+item['uid']+'@schimmelpilz.local','DTSTAMP:'+stamp,*when,'SUMMARY:'+text(item['title']),'DESCRIPTION:'+text(item['note']),'STATUS:CONFIRMED','TRANSP:'+('OPAQUE' if item.get('time') else 'TRANSPARENT')])
         if alarm_days:
             lines.extend(['BEGIN:VALARM','TRIGGER:-P'+str(alarm_days)+'D','ACTION:DISPLAY','DESCRIPTION:'+text(item['title']),'END:VALARM'])
         lines.append('END:VEVENT')
@@ -35,7 +42,11 @@ def calendar(events,stamp,alarm_days):
     return ('\r\n'.join(fold(line) for line in lines)+'\r\n').encode('utf-8')
 
 
-def router(db,require_user,now):
+KIND_DE={'appointment':'Termin','deadline':'Frist','notfrist':'NOTFRIST','resubmission':'Wiedervorlage'}
+KIND_EN={'appointment':'Appointment','deadline':'Deadline','notfrist':'STATUTORY DEADLINE','resubmission':'Follow-up'}
+
+
+def router(db,require_user,now,pre_deadline=lambda due_on,days:None):
     routes=APIRouter()
 
     @routes.get('/api/tasks/calendar.ics')
@@ -49,7 +60,13 @@ def router(db,require_user,now):
             events=[]
             for case in cases:
                 for task in connection.execute('SELECT * FROM tasks WHERE case_id=? AND completed=0 AND due_on IS NOT NULL',(case['id'],)):
-                    events.append({'uid':'task-'+task['id'],'due_on':task['due_on'],'title':case['reference']+' · '+task['title'],'note':manual+'\n'+case['title']+'\n'+task['note']})
+                    kind=task['kind'] if 'kind' in task.keys() else 'task'
+                    label=(KIND_DE if lang=='de' else KIND_EN).get(kind,'')
+                    title=case['reference']+' · '+(label+': ' if label else '')+task['title']
+                    events.append({'uid':'task-'+task['id'],'due_on':task['due_on'],'time':task['due_time'] if kind=='appointment' else None,'title':title,'note':manual+'\n'+case['title']+'\n'+task['note']})
+                    pre=pre_deadline(task['due_on'],task['pre_days']) if 'pre_days' in task.keys() else None
+                    if pre:
+                        events.append({'uid':'pre-'+task['id'],'due_on':pre,'title':case['reference']+' · '+('VORFRIST' if lang=='de' else 'PRE-DEADLINE')+': '+task['title'],'note':('Fristablauf am ' if lang=='de' else 'Deadline expires on ')+task['due_on']+'\n'+case['title']})
                 details=json.loads(case['details'])
                 if details.get('deadline') and details.get('status')!='closed':
                     events.append({'uid':'case-deadline-'+case['id'],'due_on':details['deadline'],'title':case['reference']+' · '+(details.get('deadline_note') or ('Erfasste Aktenfrist' if lang=='de' else 'Recorded case deadline')),'note':manual+'\n'+case['title']})
