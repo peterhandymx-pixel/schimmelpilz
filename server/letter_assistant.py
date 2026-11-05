@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from . import deadlines
+from . import deadlines, letter_ai
 
 MONTHS = {'januar': 1, 'jan': 1, 'februar': 2, 'feb': 2, 'maerz': 3, 'mrz': 3, 'mar': 3, 'april': 4, 'apr': 4, 'mai': 5,
           'juni': 6, 'jun': 6, 'juli': 7, 'jul': 7, 'august': 8, 'aug': 8, 'september': 9, 'sep': 9, 'sept': 9,
@@ -685,6 +685,16 @@ def evaluate(kind, fields, answers, today=None, state=None):
 class AnalyzeInput(BaseModel):
     model_config = {'extra': 'forbid'}
     text: str = Field(min_length=20, max_length=120000)
+    use_ai: bool = False
+
+
+class ExplainInput(BaseModel):
+    model_config = {'extra': 'forbid'}
+    kind: Literal[tuple(KIND_IDS)]
+    fields: dict = Field(default_factory=dict)
+    answers: dict = Field(default_factory=dict)
+    state: Literal[tuple(deadlines.STATES)] | None = None
+    text: str = Field(default='', max_length=120000)
 
 
 class EvaluateInput(BaseModel):
@@ -742,10 +752,46 @@ def router(require_user, db=None, record_activity=None, now=None, row_case=None)
     def kinds(user: dict = Depends(require_user)):
         return [{**KIND_INFO[kind], 'questions': QUESTIONS[kind]} for kind in KIND_IDS]
 
+    def ai_allowed():
+        if db is None:
+            return False
+        with db() as connection:
+            row = connection.execute('SELECT ai_enabled FROM operator_settings WHERE id=1').fetchone()
+        return bool(row and row[0])
+
     @routes.post('/api/letter-assistant/analyze')
     def analyze(payload: AnalyzeInput, user: dict = Depends(require_user)):
         kind, alternatives = classify(payload.text)
-        return {'kind': kind, 'alternatives': [KIND_INFO[item] for item in alternatives], 'fields': read_fields(payload.text), 'questions': QUESTIONS[kind['id']]}
+        fields, ai = read_fields(payload.text), None
+        # The model reads the letter; without AI (or if it fails) the rule-based reading stays.
+        if payload.use_ai and ai_allowed():
+            try:
+                ai = letter_ai.read_letter(payload.text, list(KIND_INFO.values()))
+            except Exception:  # noqa: BLE001 - any model or network failure falls back to the rules
+                ai = None
+        if ai:
+            fields = letter_ai.merge(fields, ai)
+            if ai['kind'] and ai['kind'] != kind['id']:
+                alternatives = [kind['id'], *[item for item in alternatives if item != ai['kind']]][:3]
+                kind = KIND_INFO[ai['kind']]
+        return {'kind': kind, 'alternatives': [KIND_INFO[item] for item in alternatives], 'fields': fields, 'questions': QUESTIONS[kind['id']],
+                'ai': bool(ai), 'summary': ai['summary'] if ai else '', 'demands': ai['demands'] if ai else []}
+
+    @routes.post('/api/letter-assistant/explain')
+    def explain_letter(payload: ExplainInput, user: dict = Depends(require_user)):
+        if not ai_allowed():
+            raise HTTPException(503, 'ai_paused_by_operator')
+        fields = dict(payload.fields)
+        try:
+            fields['amount'] = float(fields['amount']) if fields.get('amount') not in (None, '') else None
+        except (TypeError, ValueError):
+            fields['amount'] = None
+        # The deadline is recalculated here by the rules; the model only explains it.
+        outcome = evaluate(payload.kind, fields, payload.answers, state=payload.state)
+        try:
+            return {'text': letter_ai.explain(KIND_INFO[payload.kind]['label'], fields, payload.answers, outcome, payload.text, QUESTIONS[payload.kind])}
+        except Exception:  # noqa: BLE001
+            raise HTTPException(503, 'ai_unavailable') from None
 
     @routes.post('/api/letter-assistant/evaluate')
     def evaluate_letter(payload: EvaluateInput, user: dict = Depends(require_user)):

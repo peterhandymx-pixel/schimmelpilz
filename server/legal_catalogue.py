@@ -326,7 +326,7 @@ QUESTION_TOPICS = [
     ((r'online|internet|onlineshop|webshop|fernabsatz|bestell|versand|paket|telefon', r'widerruf|zur(ü|ue)ck|retour|r(ü|ue)ckgabe|r(ü|ue)cksend'),
      [('312g','BGB'),('355','BGB'),('356','BGB'),('357','BGB')]),
     ((r'widerrufsfrist|widerruf\w*\s.*frist|frist\w*\s.*widerruf',), [('355','BGB'),('356','BGB')]),
-    ((r'schimmel|feucht|heizung\w*\s.*(kalt|aus|defekt|kaputt)',), [('536','BGB'),('535','BGB')]),
+    ((r'schimmel|feucht|heizung\w*\s.*(kalt|aus|defekt|kaputt)',), [('536','BGB'),('536c','BGB'),('535','BGB')]),
     ((r'kaution|mietsicherheit',), [('551','BGB')]),
 ]
 QUESTION_SUFFIXES = ('ungen','ern','en','es','er','em','e','s','n')

@@ -57,3 +57,4 @@
 .la-reminder small{color:#7c877b}
 @media (max-width:760px){.la-with-preview{grid-template-columns:1fr}.la-preview{order:-1;max-width:260px}}
 .la-match{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 0;padding:10px 14px;border:1px solid #cfdcc0;border-radius:8px;background:#f4f8ee;color:#2f5326;font-size:14px}.la-match span{flex:1;min-width:200px}.la-match.chosen{background:#eaf3e1;border-color:#9dbb83}
+.la-explain .research-answer p, .la-explain .research-answer li { font-size: 15px; line-height: 1.6; color: #30443a; } .la-explain .research-answer ul, .la-explain .research-answer ol { padding-left: 22px; } .la-explain { border-color: #b8d2c1; }

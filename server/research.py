@@ -58,11 +58,13 @@ def groq_status():
     if not GROQ_API_KEY:
         return {"ready": False, "model": GROQ_MODEL, "reason": "unavailable"}
     try:
-        with urlopen(Request(GROQ_BASE_URL + "/models/" + quote(GROQ_MODEL, safe=""), headers=groq_headers(), method="GET"), timeout=5) as response:
-            json.loads(response.read(256 * 1024))
-        return {"ready": True, "model": GROQ_MODEL, "reason": "ready"}
-    except HTTPError as error:
-        return {"ready": False, "model": GROQ_MODEL, "reason": "model_missing" if error.code == 404 else "unavailable"}
+        # Model ids contain a slash (openai/gpt-oss-120b), so check the model list instead of /models/{id}.
+        with urlopen(Request(GROQ_BASE_URL + "/models", headers=groq_headers(), method="GET"), timeout=5) as response:
+            listed = {item.get("id") for item in json.loads(response.read(1024 * 1024)).get("data", []) if isinstance(item, dict)}
+        ready = GROQ_MODEL in listed
+        return {"ready": ready, "model": GROQ_MODEL, "reason": "ready" if ready else "model_missing"}
+    except HTTPError:
+        return {"ready": False, "model": GROQ_MODEL, "reason": "unavailable"}
     except (URLError, TimeoutError, OSError, ValueError):
         return {"ready": False, "model": GROQ_MODEL, "reason": "unavailable"}
 
@@ -95,7 +97,7 @@ def prepare_messages(case, history, question, language, workflow, sources=None, 
         "unverified research leads, never a binding conclusion. Explain how to check relevant primary sources. "
         "Do not guess court value thresholds, legal deadlines or fee amounts. "
         "The jurisdiction in the case is independent of the output language. Do not apply German law to a Mexico case by default. "
-        "Use plain text with short paragraphs or numbered lists; literal [L1] citation markers are required when using supplied legal passages. No HTML or other Markdown formatting. Do not include confidential input in an external URL or suggest uploading it to public services. "
+        "Format: short paragraphs, ### headings, numbered or bulleted lists and **bold** sparingly; no tables, no HTML. Literal [L1] citation markers are required when using supplied legal passages. Do not add legal preconditions (such as a prior deadline, a court decision or an expert report) that the supplied provisions do not contain; when the law applies automatically, say so. Do not include confidential input in an external URL or suggest uploading it to public services. "
         "For a draft retain internal/court/opponent references separately, use clear missing-data placeholders, "
         "and do not create an unsubstantiated lawyer signature. Do not pretend to have saved, sent or filed anything."
     )
@@ -146,13 +148,30 @@ def generate_answer(messages):
     return generate_gemini_answer(messages)
 
 
-def generate_groq_answer(messages):
+def generate_json(messages, max_tokens=1500):
+    """A JSON object from the active model, for structured tasks such as reading a letter."""
+    if AI_PROVIDER == "groq":
+        text = generate_groq_answer(messages, json_mode=True, max_tokens=max_tokens)["answer"]
+    else:
+        text = generate_answer(messages)["answer"]
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("No JSON in model response")
+    value = json.loads(text[start:end + 1])
+    if not isinstance(value, dict):
+        raise ValueError("Model response is not an object")
+    return value
+
+
+def generate_groq_answer(messages, json_mode=False, max_tokens=4096):
     if not GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY is not configured")
-    payload = {"model": GROQ_MODEL, "messages": messages, "temperature": 0.15, "max_completion_tokens": 4096}
+    payload = {"model": GROQ_MODEL, "messages": messages, "temperature": 0.1 if json_mode else 0.15, "max_completion_tokens": max_tokens}
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
     if GROQ_MODEL.startswith("openai/gpt-oss"):
         # Reasoning stays separate from the answer and is not shown.
-        payload.update(reasoning_effort="medium", include_reasoning=False)
+        payload.update(reasoning_effort="medium" if json_mode else os.getenv("GROQ_REASONING", "high"), include_reasoning=False)
     request = Request(GROQ_BASE_URL + "/chat/completions", data=json.dumps(payload).encode("utf-8"), headers=groq_headers(), method="POST")
     for delay in (*GEMINI_RETRY_DELAYS, None):
         try:
