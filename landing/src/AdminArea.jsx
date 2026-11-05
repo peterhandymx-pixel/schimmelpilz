@@ -17,6 +17,7 @@ const ACTIONS = {
 const actionName = action => ACTIONS[action] || action;
 // Logged API requests carry only method + path; name the common ones in plain words (the path stays visible below).
 const REQUESTS = [
+  [/\/dictations\/[^/]+\/take$/, { POST: "Diktat übernommen" }], [/\/dictations\/[^/]+\/release$/, { POST: "Diktat freigegeben" }], [/\/dictations\/[^/]+\/complete$/, { POST: "Diktat erledigt" }], [/\/dictations/, { POST: "Diktat aufgenommen", DELETE: "Diktat gelöscht" }],
   [/\/claim\/payments/, { POST: "Zahlung gebucht", DELETE: "Zahlung gelöscht" }], [/\/claim\/items/, { POST: "Forderung erfasst", PUT: "Forderung geändert", DELETE: "Forderung gelöscht" }],
   [/\/cost-reviews\/calculate$/, { POST: "Kostenprüfung nachgerechnet" }], [/\/cost-reviews/, { POST: "Kostenprüfung gespeichert" }],
   [/\/research$/, { POST: "KI-Recherche gestartet" }], [/\/legal-sources/, { POST: "Rechtsquelle zur Akte genommen", PUT: "Rechtsquelle geprüft" }],

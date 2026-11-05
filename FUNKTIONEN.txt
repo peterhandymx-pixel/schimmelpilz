@@ -386,7 +386,30 @@ Inhalt
 - Oberfläche auf Deutsch und Englisch.
 
 
-25. BEWUSST NICHT ENTHALTEN (braucht Zulassung/Vertrag)
+25. DIKTAT UND SCHREIBPOOL (Kanzlei)
+--------------------------------------------------------------------
+- Diktierfenster im Browser wie ein Diktiergerät: Aufnahme, Pause, Stopp,
+  Vor- und Rückspulen, Sprung an Anfang/Ende, Positionsleiste zum Klicken.
+- Korrekturen im laufenden Diktat: Überschreiben (ersetzt ab der Position)
+  oder Einfügen (schiebt den Rest nach hinten); Taste Einfg wechselt.
+- Tasten: F8 Aufnahme, F5 Wiedergabe/Pause, F4 Stopp, F6/F7 zurück/vor
+  (gedrückt halten = schnelles Spulen), Pos1/Ende.
+- Jedes Diktat hängt an einer Akte, mit Ersteller, Priorität (normal,
+  eilig, sofort) und Hinweis fürs Sekretariat. Eigene offene Diktate
+  lassen sich zurückziehen.
+- Schreibpool: Filter nach diktierender Person und Status, Sortierung nach
+  Priorität; „Diktat übernehmen“, „Zurück in den Pool“, „Als erledigt
+  markieren“ mit Vermerk.
+- Abhörplatz: F5/F4/F6/F7 wirken auch beim Tippen im Textfeld,
+  Geschwindigkeit 0,6–1,5×, Rücksprung bei Pause (0–3 s). Die Abschrift
+  lässt sich direkt als Entwurf in den Schriftverkehr der Akte speichern.
+- Aktenhistorie: aufgenommen, übernommen, zurückgegeben, erledigt (wer,
+  wann, Länge, Vermerk) werden automatisch eingetragen.
+- Teammitglieder mit eingeschränktem Aktenzugriff sehen nur Diktate ihrer
+  Akten; Leserechte können nicht aufnehmen oder übernehmen.
+
+
+26. BEWUSST NICHT ENTHALTEN (braucht Zulassung/Vertrag)
 --------------------------------------------------------------------
 - ELSTER-Übermittlung (Zertifikat nötig) – Daten werden aber für die
   Umsatzsteuer-Voranmeldung aufbereitet.
