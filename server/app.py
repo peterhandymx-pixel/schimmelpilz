@@ -26,7 +26,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets, letter_assistant, reminders, dictations, speech
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
-from .research import ai_status, prepare_messages, generate_answer, AI_MODEL
+from .research import ai_status, prepare_messages, generate_answer, AI_MODEL, plan_norms
 from . import nulegal, law_skills
 from .document_context import select_sources
 from . import legal_catalogue
@@ -1103,7 +1103,16 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
         retrieval = {'automatic':payload.use_legal_catalogue,'errors':[],'coverage':None}
         if payload.use_legal_catalogue:
             retrieval['coverage'] = legal_catalogue.catalogue_status()
-            for hit in legal_catalogue.search_question(payload.question,limit=4):
+            area = case['details'].get('legal_area')
+            planned = []
+            # The model names the provisions to open first; only ones that exist in the official catalogue survive.
+            if not ("pytest" in sys.modules and not os.getenv("PLAN_NORMS_IN_TESTS")):
+                try:
+                    planned = plan_norms(payload.question, area, list(legal_catalogue.LAWS.values()))
+                except Exception:
+                    retrieval['errors'].append({'title':'norm_planning','reason':'planning_failed'})
+            retrieval['planned'] = [f'§ {number} {law}' for number,law in planned]
+            for hit in legal_catalogue.search_question(payload.question,limit=5,area=area,planned=planned):
                 try:
                     snapshot = legal_catalogue.source(hit['key'])
                     with db() as connection:

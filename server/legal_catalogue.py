@@ -20,6 +20,8 @@ GII = 'https://www.gesetze-im-internet.de'
 RII = 'https://www.rechtsprechung-im-internet.de'
 LAWS = {'bgb':'BGB','bgbeg':'EGBGB','zpo':'ZPO','gvg':'GVG','hgb':'HGB','gmbhg':'GmbHG','inso':'InsO','kschg':'KSchG','burlg':'BUrlG','arbgg':'ArbGG','famfg':'FamFG','vwgo':'VwGO','sgg':'SGG','stgb':'StGB','stpo':'StPO','vwvfg':'VwVfG','rvg':'RVG','gkg_2004':'GKG','famgkg':'FamGKG','gg':'GG','sgb_1':'SGB I','sgb_2':'SGB II','sgb_10':'SGB X'}
 LAWS.update({'uwg_2004':'UWG','uklag':'UKlaG','prodhaftg':'ProdHaftG','bdsg_2018':'BDSG','tzbfg':'TzBfG','milog':'MiLoG','betrvg':'BetrVG','arbzg':'ArbZG','entgfg':'EntgFG','zvg':'ZVG','estg':'EStG','ustg_1980':'UStG','ao_1977':'AO'})
+# Social law in full (benefits, disability, care, pensions) and frequent everyday statutes.
+LAWS.update({'sgb_3':'SGB III','sgb_4':'SGB IV','sgb_5':'SGB V','sgb_6':'SGB VI','sgb_7':'SGB VII','sgb_8':'SGB VIII','sgb_9_2018':'SGB IX','sgb_11':'SGB XI','sgb_12':'SGB XII','sgb_14':'SGB XIV','versmedv':'VersMedV','beeg':'BEEG','bkgg_1996':'BKGG','wogg':'WoGG','baf_g':'BAföG','aufenthg_2004':'AufenthG','owig_1968':'OWiG','stvg':'StVG','stvo_2013':'StVO','woeigg':'WEG','betrkv':'BetrKV','vvg_2008':'VVG','agg':'AGG'})
 SYNC_LOCK = threading.Lock()
 FETCH_LOCK = threading.Lock()
 PROGRESS_LOCK = threading.Lock()
@@ -98,7 +100,8 @@ def parse_law(data, path):
     first = root.find('norm/metadaten')
     if first is None:
         raise ValueError('missing_metadata')
-    abbreviation = field(first, 'jurabk') or LAWS[path]
+    # The usual citation form (SGB IX, WEG) instead of the register code (SGB 9 2018, WoEigG), so lookups and citations match.
+    abbreviation = LAWS[path] or field(first, 'jurabk')
     version = '; '.join(words(item) for item in first.findall('standangabe/standkommentar'))
     full_title = field(first, 'langue')
     rows = []
@@ -368,11 +371,23 @@ def question_terms(question):
     return terms[:24]
 
 
-def search_question(question, limit=4):
-    """Statutes for a free-text question: cited provisions first, then stem/synonym matches."""
+CIVIL_AREAS = {None, '', 'general', 'consumer', 'tenancy', 'contract', 'commercial', 'family'}
+
+
+def search_question(question, limit=4, area=None, planned=()):
+    """Statutes for a free-text question: planned and cited provisions first, then stem/synonym matches.
+
+    planned are (number, law) pairs suggested by the model; only provisions that exist in the official catalogue are used,
+    so an invented paragraph simply finds nothing."""
     init_catalogue()
     picked = []
     with database() as db:
+        for number,law in planned:
+            if len(picked) >= limit:
+                break
+            row = db.execute("SELECT * FROM entries WHERE kind='law' AND title LIKE ?",(f'§ {number} {law} · %',)).fetchone()
+            if row and '(weggefallen)' not in row['title'] and all(item['key'] != row['key'] for item in picked):
+                picked.append(entry(row))
         for number,law in CITATION.findall(question):
             row = db.execute("SELECT * FROM entries WHERE kind='law' AND (title=? OR title LIKE ?)",(f'§ {number} {law}',f'§ {number} {law} · %')).fetchone()
             if row and all(item['key'] != row['key'] for item in picked):
@@ -395,7 +410,8 @@ def search_question(question, limit=4):
         title_hits = sum(1 for term in terms if any(word.startswith(term) for word in heading))
         # Title matches count double; the civil code is preferred for everyday questions.
         civil_code = item['title'].split(' · ')[0].endswith(' BGB')
-        scored.append((row['score'] - 2*title_hits + (0 if civil_code else 3),position,item))
+        preference = (0 if civil_code else 3) if area in CIVIL_AREAS else 0
+        scored.append((row['score'] - 2*title_hits + preference,position,item))
     for _,_,item in sorted(scored,key=lambda value:value[:2]):
         if len(picked) >= limit:
             break
