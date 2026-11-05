@@ -1101,7 +1101,7 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
         retrieval = {'automatic':payload.use_legal_catalogue,'errors':[],'coverage':None}
         if payload.use_legal_catalogue:
             retrieval['coverage'] = legal_catalogue.catalogue_status()
-            for hit in legal_catalogue.search(payload.question,limit=4):
+            for hit in legal_catalogue.search_question(payload.question,limit=4):
                 try:
                     snapshot = legal_catalogue.source(hit['key'])
                     with db() as connection:

@@ -56,3 +56,4 @@
 .la-reminder{display:flex;gap:8px;align-items:center;font-size:14px;color:#40523f;justify-content:center;flex-wrap:wrap}
 .la-reminder small{color:#7c877b}
 @media (max-width:760px){.la-with-preview{grid-template-columns:1fr}.la-preview{order:-1;max-width:260px}}
+.la-match{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 0;padding:10px 14px;border:1px solid #cfdcc0;border-radius:8px;background:#f4f8ee;color:#2f5326;font-size:14px}.la-match span{flex:1;min-width:200px}.la-match.chosen{background:#eaf3e1;border-color:#9dbb83}

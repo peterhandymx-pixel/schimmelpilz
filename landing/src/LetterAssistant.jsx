@@ -2,9 +2,37 @@ import { useEffect, useRef, useState } from "react";
 import { IconMailOpened, IconCamera, IconKeyboard, IconArrowLeft, IconArrowRight, IconCheck, IconAlertTriangle, IconCalendarDue, IconEdit, IconScale, IconFolder, IconLoader2, IconLifebuoy, IconExternalLink, IconBell, IconMailForward } from "@tabler/icons-react";
 import { request, readPreference, writePreference } from "./useCaseStorage.js";
 import { dateLabel, localToday, taskRows } from "./workbench.js";
+import { DateInput } from "./DateInput";
 import "./letter-assistant.css";
 
 const json = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+// Same party? Compares names without case, punctuation or legal-form spacing; never merges on a short fragment.
+const partyKey = name => (name || "").toLowerCase().replace(/[^a-z0-9äöüß]+/g, "");
+export function sameParty(a, b) {
+  const left = partyKey(a), right = partyKey(b);
+  if (left.length < 5 || right.length < 5) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+// Fills the reply draft with what the assistant already knows. Only unambiguous placeholders are
+// replaced; choices such as "[vollständig / in Höhe von …]" stay for the person to decide.
+export function fillLetterPlaceholders(body, { fields = {}, answers = {}, user = {}, today }) {
+  const date = iso => dateLabel(iso, "de");
+  let text = body.replace("[Ort], [Datum]", `${user.city || "[Ort]"}, ${date(today)}`);
+  if (fields.letter_date) {
+    text = text.replace(/((?:Ihre?|Ihr)\b[^\n]*? vom )\[Datum\]/, `$1${date(fields.letter_date)}`)
+      .replace(/(Schreiben vom )\[Datum\]/g, `$1${date(fields.letter_date)}`);
+  }
+  if (answers.received_on) text = text.replace(/(zugegangen am )\[Datum\]/g, `$1${date(answers.received_on)}`);
+  if (fields.reference) text = text.replace(/((?:Nummer|Aktenzeichen) )\[Nummer\]/g, `$1${fields.reference}`);
+  if (fields.amount) {
+    const money = Number(fields.amount).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    text = text.replace(/(über )\[Betrag\]( EUR)/g, `$1${money}$2`);
+  }
+  if (user.full_name) text = text.replace("[Name / Unterschrift]", user.full_name);
+  return text;
+}
 const FINISHED = ["done", "no_text", "failed", "ocr_unavailable", "interrupted"];
 const STATE_KEY = "schimmelpilz.state";
 const STATES = [["BW", "Baden-Württemberg"], ["BY", "Bayern"], ["BE", "Berlin"], ["BB", "Brandenburg"], ["HB", "Bremen"], ["HH", "Hamburg"], ["HE", "Hessen"], ["MV", "Mecklenburg-Vorpommern"], ["NI", "Niedersachsen"], ["NW", "Nordrhein-Westfalen"], ["RP", "Rheinland-Pfalz"], ["SL", "Saarland"], ["SN", "Sachsen"], ["ST", "Sachsen-Anhalt"], ["SH", "Schleswig-Holstein"], ["TH", "Thüringen"]];
@@ -32,6 +60,8 @@ const T = {
     prepare: "Antwort vorbereiten", prepareText: "Der Entwurf ist mit Ihren Angaben ausgefüllt. Ergänzen Sie nur noch die Stellen in [eckigen Klammern].",
     help: "Hilfe in der Nähe", form: "Antrag vorbereiten", saved: t => `Gespeichert in der Akte „${t}“`, savedDeadline: " – mit Frist und Erinnerung.", saving: "Wird in Ihrer Akte gespeichert …", saveFailed: "Das Ergebnis wird angezeigt, konnte aber nicht in der Akte gespeichert werden.",
     openCase: "Akte öffnen", another: "Weiteren Brief prüfen", reminders: "Erinnerung per E-Mail vor jeder Frist", remindersOff: "E-Mail-Versand ist auf diesem Server noch nicht eingerichtet.",
+    matchText: (ref, title) => `Sie haben bereits eine Akte mit dieser Gegenseite: ${ref} · ${title}.`, matchAttach: "Brief zu dieser Akte nehmen",
+    matchChosen: ref => `Der Brief wird zur Akte ${ref} genommen. Ihre bisherigen Angaben und Fristen dort bleiben erhalten.`, matchUndo: "Doch neue Akte anlegen",
   },
   en: {
     heroTitle: "I received a letter", heroText: "Upload the letter. We read the key details, you confirm them, answer a few questions – and get the deadline, next steps and a ready-made reply draft. Results follow German law and are shown in German.",
@@ -53,6 +83,8 @@ const T = {
     prepare: "Prepare a reply", prepareText: "The draft is filled in with your details. Only complete the parts in [square brackets].",
     help: "Help near you", form: "Prepare application", saved: t => `Saved in the file “${t}”`, savedDeadline: " – with deadline and reminder.", saving: "Saving to your file …", saveFailed: "The result is shown but could not be saved to the file.",
     openCase: "Open file", another: "Check another letter", reminders: "Email reminder before every deadline", remindersOff: "Email sending is not set up on this server yet.",
+    matchText: (ref, title) => `You already have a file with this opposing party: ${ref} · ${title}.`, matchAttach: "Add letter to this file",
+    matchChosen: ref => `The letter will be added to file ${ref}. Your existing details and deadlines there are kept.`, matchUndo: "Create a new file instead",
   },
 };
 const FIELD_TYPES = { letter_date: "date", letter_deadline: "date", amount: "number" };
@@ -94,15 +126,21 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const [answers, setAnswers] = useState({}), [questionIndex, setQuestionIndex] = useState(0);
   const [result, setResult] = useState(null), [saved, setSaved] = useState(null), [samples, setSamples] = useState([]), [helpSamples, setHelpSamples] = useState({});
   const [missed, setMissed] = useState({});
+  // true when the person chose to file this letter in an existing case they already run:
+  // that case's particulars and deadlines stay; only empty fields are filled.
+  const [attachOnly, setAttachOnly] = useState(false);
   const fileInput = useRef(null);
   const today = localToday();
+  const profileAddress = user?.street ? `${user.street}\n${user.postal_code} ${user.city}` : "";
+  const party = fields.creditor || fields.sender;
+  const matchingCase = !followCase && !caseItem && party ? (storage.cases || []).find(item => !item.archived_at && sameParty(item.details?.opponent_name, party)) : null;
 
   useEffect(() => { request("/letter-assistant/kinds").then(setKinds).catch(() => setKinds([])); }, []);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const questions = kinds.find(item => item.id === kind)?.questions || [];
   const openDeadlines = taskRows(storage.cases).filter(row => !row.completed && row.due_on && ["deadline", "notfrist"].includes(row.kind) && !row.caseItem.archived_at).slice(0, 6);
 
-  const reset = () => { setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
+  const reset = () => { setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
 
   const analyze = async letterText => {
     if (letterText.trim().length < 20) {
@@ -122,7 +160,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     try {
       if (!target) {
         target = await storage.createCase({ title: lang === "de" ? "Eingegangener Brief (in Prüfung)" : "Received letter (being checked)", description: "Über den Brief-Assistenten angelegt; die Angaben werden noch geprüft.", language: "de",
-          details: { audience: user.audience, client_name: user.organisation || user.full_name, client_email: user.email, client_role: "respondent" } });
+          details: { audience: user.audience, client_name: user.organisation || user.full_name, client_address: profileAddress, client_email: user.email, client_role: "respondent" } });
       }
       setCaseItem(target);
       const body = new FormData(); body.append("file", file);
@@ -179,9 +217,10 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       // Post from a court or authority: the sender is the court, the opponent is the party behind the letter.
       const official = /gericht|mahngericht|gerichtsvollzieher/i.test(fields.sender || "") || ["court", "enforcement"].includes(outcome.kind.stage);
       const courtLine = official ? [fields.court || fields.sender, fields.sender_address].filter(Boolean).join(", ") : "";
-      const before = target?.details || { audience: user.audience, client_name: user.organisation || user.full_name, client_email: user.email };
-      const details = {
+      const before = target?.details || { audience: user.audience, client_name: user.organisation || user.full_name, client_address: profileAddress, client_email: user.email };
+      const computed = {
         ...before,
+        client_address: before.client_address || profileAddress,
         client_role: "respondent", opponent_name: (fields.creditor || (official ? "" : fields.sender) || before.opponent_name || "").slice(0, 160),
         opponent_address: (fields.creditor || official ? before.opponent_address || "" : fields.sender_address || "").slice(0, 500),
         opponent_reference: official ? before.opponent_reference || "" : (fields.reference || "").slice(0, 100), court_reference: official ? (fields.reference || "").slice(0, 100) : (before.court_reference || ""),
@@ -190,10 +229,12 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
         dispute_value: fields.amount ? Number(fields.amount) : before.dispute_value ?? null, court: official ? courtLine.slice(0, 160) : (before.court || ""),
         objective: outcome.steps[0]?.slice(0, 2000) || "",
       };
+      // Filing into a case the person runs themselves must not overwrite its particulars.
+      const details = attachOnly ? Object.fromEntries(Object.entries(computed).map(([key, value]) => [key, before[key] === "" || before[key] == null ? value : before[key]])) : computed;
       target = target ? await storage.updateCase(target.id, { title, description, language: "de", details })
         : await storage.createCase({ title, description, language: "de", details });
       // A new letter in the same matter replaces the deadlines of the previous one.
-      if (followCase) for (const task of (target.tasks || []).filter(task => !task.completed && ["deadline", "notfrist"].includes(task.kind))) {
+      if (followCase && !attachOnly) for (const task of (target.tasks || []).filter(task => !task.completed && ["deadline", "notfrist"].includes(task.kind))) {
         target = await storage.saveTask(target.id, { title: task.title, note: task.note || "", due_on: task.due_on, priority: task.priority, kind: task.kind, due_time: task.due_time || null, pre_days: task.pre_days ?? 0, completed: true, completion_note: `Überholt durch neuen Brief: ${outcome.kind.label}` }, task.id);
       }
       const dated = [outcome.deadline && { title: outcome.deadline.label, date: outcome.deadline.date, note: `${outcome.deadline.basis} ${outcome.deadline.norm}`, strict: outcome.deadline.strict }, ...outcome.extra_deadlines.map(item => ({ title: item.label, date: item.date, note: "", strict: false }))].filter(Boolean);
@@ -208,7 +249,8 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     }
   };
 
-  const draftFrom = sample => import("./documentSamples.js").then(({ sampleContext }) => onDraft({ body: sample.body(sampleContext(saved || caseItem)), language: "de", kind: sample.kind, recipient: "" }, saved || caseItem));
+  const draftFrom = sample => import("./documentSamples.js").then(({ sampleContext }) => onDraft({ body: fillLetterPlaceholders(sample.body(sampleContext(saved || caseItem)), { fields, answers, user, today }), language: "de", kind: sample.kind, recipient: "" }, saved || caseItem));
+  const attachTo = item => { setFollowCase(item); setAttachOnly(true); };
   const complete = row => storage.saveTask(row.caseItem.id, { title: row.title, note: row.note || "", due_on: row.due_on, priority: row.priority, kind: row.kind, due_time: row.due_time || null, pre_days: row.pre_days ?? 0, completed: true, completion_note: c.doneNote }, row.id).catch(() => setError(c.offline));
   const followUp = row => { setFollowCase(row.caseItem); setError(""); window.scrollTo?.({ top: 0, behavior: "smooth" }); };
 
@@ -244,8 +286,12 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
         <p className="la-step">{c.step1}</p><h2>{c.confirmTitle}</h2><p>{c.confirmText}</p>
         {error && <p role="alert" className="la-error">{error}</p>}
         <label>{c.kind}<select value={kind} onChange={event => { setKind(event.target.value); setLegalArea(kinds.find(item => item.id === event.target.value)?.legal_area || ""); }}>{kinds.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-        <div className="la-grid">{Object.entries(c.fields).map(([id, label]) => <label key={id}>{label}<input type={FIELD_TYPES[id] || "text"} step={id === "amount" ? "0.01" : undefined} min={id === "amount" ? 0 : undefined} value={fields[id] ?? ""} onChange={event => setFields({ ...fields, [id]: event.target.value })} /></label>)}
+        <div className="la-grid">{Object.entries(c.fields).map(([id, label]) => <label key={id}>{label}{FIELD_TYPES[id] === "date"
+          ? <DateInput lang={lang} value={fields[id] || ""} onChange={event => setFields({ ...fields, [id]: event.target.value })} />
+          : <input type={FIELD_TYPES[id] || "text"} step={id === "amount" ? "0.01" : undefined} min={id === "amount" ? 0 : undefined} value={fields[id] ?? ""} onChange={event => setFields({ ...fields, [id]: event.target.value })} />}</label>)}
           <label>{c.state}<select value={state} onChange={event => setState(event.target.value)}><option value="">{c.stateNone}</option>{STATES.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label></div>
+        {matchingCase && <p className="la-match"><IconFolder size={18} /><span>{c.matchText(matchingCase.reference, matchingCase.title)}</span><button type="button" className="desk-button" onClick={() => attachTo(matchingCase)}>{c.matchAttach}</button></p>}
+        {followCase && attachOnly && <p className="la-match chosen"><IconCheck size={18} /><span>{c.matchChosen(followCase.reference)}</span><button type="button" className="desk-link" onClick={() => { setFollowCase(null); setAttachOnly(false); }}>{c.matchUndo}</button></p>}
         {text && <details className="la-text"><summary>{c.showText}</summary><pre>{text}</pre></details>}
         <div className="la-actions"><button className="desk-button solid"><IconCheck size={17} />{c.yes}</button><button type="button" className="desk-link" onClick={reset}>{c.cancel}</button></div>
       </div>
@@ -257,7 +303,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       <div className="la-progress"><span style={{ width: `${((questionIndex + 1) / questions.length) * 100}%` }} /></div>
       <h2>{question.label}</h2>{question.help && <p className="field-help">{question.help}</p>}
       {error && <p role="alert" className="la-error">{error}</p>}
-      {question.type === "date" ? <div className="la-date"><input type="date" max={question.id === "received_on" ? today : undefined} value={answers[question.id] || ""} onChange={event => answer(question.id, event.target.value)} />
+      {question.type === "date" ? <div className="la-date"><DateInput lang={lang} max={question.id === "received_on" ? today : undefined} value={answers[question.id] || ""} onChange={event => answer(question.id, event.target.value)} />
         {question.id === "received_on" && <button type="button" className="desk-link" onClick={() => answer(question.id, today)}>{c.today}</button>}</div>
         : <div className="la-options">{question.options.map(([value, label]) => <button key={value} type="button" className={answers[question.id] === value ? "la-option chosen" : "la-option"} onClick={() => answer(question.id, value)}>{label}</button>)}</div>}
       <div className="la-actions"><button className="desk-link" onClick={() => questionIndex ? setQuestionIndex(questionIndex - 1) : setStep("confirm")}><IconArrowLeft size={16} />{c.back}</button>

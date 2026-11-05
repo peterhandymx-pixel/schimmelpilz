@@ -4,9 +4,52 @@ import {request} from './useCaseStorage.js';
 import { DateInput } from "./DateInput";
 export {legalLedger} from './legalLedger.js';
 
+// AI answers arrive as light Markdown. Render headings, lists, quotes and **bold** as
+// React elements (never as raw HTML) so the strict CSP stays intact and [L1] links still work.
+function inline(text,lookup,prefix) {
+  return text.split(/(\*\*[^*]+\*\*|\[L\d+\])/g).filter(Boolean).map((part,index) => {
+    const key = `${prefix}-${index}`;
+    if (lookup[part]) return <a key={key} href={lookup[part].url} target="_blank" rel="noreferrer" title={`${lookup[part].title} · ${lookup[part].pinpoint}`}>{part}</a>;
+    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={key}>{inline(part.slice(2,-2),lookup,key)}</strong>;
+    return part;
+  });
+}
+
+export function answerBlocks(answer) {
+  const blocks = [];
+  for (const raw of answer.split('\n')) {
+    const line = raw.trimEnd();
+    if (/^\s*```/.test(line)) continue; // code fences around example letters carry no meaning here
+    const heading = /^#{1,6}\s+(.*)$/.exec(line.trim());
+    const bullet = /^\s*(?:[-*•]|\d+[.)])\s+(.*)$/.exec(line);
+    const quote = /^\s*>\s?(.*)$/.exec(line);
+    const last = blocks[blocks.length - 1];
+    if (!line.trim()) blocks.push({type:'break'});
+    else if (heading) blocks.push({type:'heading',text:heading[1]});
+    else if (bullet) {
+      const ordered = /^\s*\d/.test(line);
+      if (last?.type === 'list' && last.ordered === ordered) last.items.push(bullet[1]);
+      else blocks.push({type:'list',ordered,items:[bullet[1]]});
+    } else if (quote) {
+      if (last?.type === 'quote') last.lines.push(quote[1]); else blocks.push({type:'quote',lines:[quote[1]]});
+    } else if (last?.type === 'text') last.lines.push(line);
+    else blocks.push({type:'text',lines:[line]});
+  }
+  return blocks.filter(block => block.type !== 'break');
+}
+
 export function CitedAnswer({answer,sources = []}) {
   const lookup = Object.fromEntries(sources.map(item => [`[${item.citation_id}]`,item]));
-  return <p>{answer.split(/(\[L\d+\])/g).map((part,index) => lookup[part] ? <a key={index} href={lookup[part].url} target="_blank" rel="noreferrer" title={`${lookup[part].title} · ${lookup[part].pinpoint}`}>{part}</a> : part)}</p>;
+  return <div className="research-answer">{answerBlocks(answer).map((block,index) => {
+    const key = `b${index}`;
+    if (block.type === 'heading') return <h4 key={key}>{inline(block.text,lookup,key)}</h4>;
+    if (block.type === 'quote') return <blockquote key={key}>{inline(block.lines.join('\n'),lookup,key)}</blockquote>;
+    if (block.type === 'list') {
+      const List = block.ordered ? 'ol' : 'ul';
+      return <List key={key}>{block.items.map((item,itemIndex) => <li key={itemIndex}>{inline(item,lookup,`${key}-${itemIndex}`)}</li>)}</List>;
+    }
+    return <p key={key}>{inline(block.lines.join('\n'),lookup,key)}</p>;
+  })}</div>;
 }
 
 export function LegalAnswerSources({lang,sources = [],audit = {},report = {}}) {

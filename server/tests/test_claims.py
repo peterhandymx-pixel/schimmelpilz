@@ -43,7 +43,7 @@ class ClaimTests(test_inbox.InboxTests):
         self.assertEqual(result['principal'], str(remaining.quantize(Decimal('0.01'))))
         self.assertEqual(result['interest'], str(interest_after.quantize(Decimal('0.01'))))
         self.assertEqual(result['total'], str((remaining + interest_after).quantize(Decimal('0.01'))))
-        self.assertIn('Kosten 50.00', [entry for entry in result['entries'] if entry['day'] == '2026-04-01'][0]['text'])
+        self.assertIn('Kosten 50,00 €', [entry for entry in result['entries'] if entry['day'] == '2026-04-01'][0]['text'])
 
     def test_claim_routes_and_report(self):
         with TestClient(api.app) as client:

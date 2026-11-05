@@ -185,6 +185,22 @@ class LegalResearchTests(unittest.TestCase):
                 self.assertEqual(client.post(f'/api/cases/{mexico}/research',json={**payload,'request_id':str(uuid.uuid4())}).status_code,422)
         self.assertEqual(citation_audit('Nothing supplied [L2]',[])['unknown'],['L2'])
 
+    def test_question_search_maps_everyday_words_to_statute_headings(self):
+        def norm(number,title,text):
+            return f'<norm doknr="Q{number}"><metadaten><enbez>§ {number}</enbez><titel>{title}</titel></metadaten><textdaten><text><Content><P>{text}</P></Content></text></textdaten></norm>'
+        rent_heavy = 'Miete Miete Mieter Vermieter Miete Vermieter Miete'
+        xml = ('<?xml version="1.0"?><dokumente><norm doknr="HEADER"><metadaten><jurabk>BGB</jurabk></metadaten></norm>'
+               + norm('536','Mietminderung bei Sach- und Rechtsmängeln','Hat die Mietsache einen Mangel, ist die Miete herabgesetzt.')
+               + norm('566c','Vereinbarung zwischen Mieter und Vermieter über die Miete',rent_heavy)
+               + norm('537','(weggefallen)','Miete Mieterin mindern Schimmel')
+               + '</dokumente>').encode()
+        catalogue.store_rows(catalogue.parse_law(xml,'bgb'),'law:bgb')
+        found = [item['title'].split(' · ')[0] for item in catalogue.search_question('Darf die Mieterin wegen des Schimmels die Miete mindern?')]
+        self.assertEqual(found[0],'§ 536 BGB')
+        self.assertNotIn('§ 537 BGB',found)
+        # A cited provision always comes first, even if its wording does not match the question.
+        self.assertEqual(catalogue.search_question('Gilt 566c BGB auch bei Schimmel?')[0]['title'].split(' · ')[0],'§ 566c BGB')
+
 
 if __name__ == '__main__':
     unittest.main()

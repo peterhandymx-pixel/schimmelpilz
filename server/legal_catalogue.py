@@ -295,6 +295,89 @@ def search(query, kind='all', limit=15, court='', date_from='', date_to='', law=
     return results
 
 
+# Automatic retrieval for free-text questions. Lay questions rarely use statute wording,
+# so filler words are dropped, words are matched by stem and common everyday terms are
+# expanded to the vocabulary of statute headings (e.g. Schimmel -> Mangel, Mietminderung).
+QUESTION_STOPWORDS = set('''der die das den dem des ein eine einer eines einem einen und oder aber
+wenn weil dass ob wie was wer wo wann warum wegen mit ohne für fuer von vom zu zum zur
+im in ins an am auf aus bei bis nach über ueber unter um durch gegen seit
+ich du er sie es wir ihr mein meine meiner meinem meinen mir mich dir dich sich
+sein seine ihre ihren ihrem ist sind war waren hat habe haben hatte wird werden wurde
+kann können koennen darf dürfen duerfen muss müssen muessen soll sollen will wollen
+nicht kein keine auch noch schon nur sehr so als da dann denn doch
+eur euro jetzt bitte welche welcher welches gilt gibt mehr weniger wochen'''.split())
+QUESTION_SYNONYMS = {
+    'schimmel':['mangel','mietminderung'],'feucht':['mangel'],'kaputt':['mangel'],
+    'defekt':['mangel','mängeln'],'heizung':['mangel','mietminderung'],
+    'mindern':['minderung','mietminderung'],'minderung':['mietminderung'],
+    'kaution':['mietsicherheit','sicherheitsleistung'],
+    'eigenbedarf':['berechtigte','interessen','ordentliche','kündigung','vermieters'],
+    'kündigungsfrist':['kündigungsfristen','fristen','ordentlichen','kündigung'],
+    'erhöhen':['mieterhöhung','vergleichsmiete'],'fristlos':['außerordentliche','wichtigem','grund'],
+    'gewährleistung':['rechte','käufers','mängeln'],'widerrufen':['widerrufsrecht'],'widerruf':['widerrufsrecht'],
+    'verjährt':['verjährungsfrist','regelmäßige'],'verjährung':['verjährungsfrist'],
+    'mietwohnung':['wohnraum','mietverhältnis'],'wohnung':['wohnraum','mietverhältnis'],
+    'vermieter':['vermieters'],'arbeitgeber':['dienstverhältnis','arbeitsverhältnis'],
+    'gekauft':['käufers'],'gekaufte':['käufers'],'online':['fernabsatzverträgen'],
+}
+QUESTION_SUFFIXES = ('ungen','ern','en','es','er','em','e','s','n')
+LAW_NAMES = {part for name in LAWS.values() for part in name.lower().split()}
+CITATION = re.compile(r'(?:§+\s*)?(\d+[a-z]?)\s+(' + '|'.join(sorted({re.escape(name) for name in LAWS.values()},key=len,reverse=True)) + r')\b')
+
+
+def _fold(word):
+    # Mirrors the index tokenizer (remove_diacritics): umlauts lose their dots, ß stays.
+    return word.replace('ä','a').replace('ö','o').replace('ü','u')
+
+
+def _stem(word):
+    for suffix in QUESTION_SUFFIXES:
+        if word.endswith(suffix) and len(word)-len(suffix) >= 4:
+            return word[:-len(suffix)]
+    return word
+
+
+def question_terms(question):
+    terms = []
+    for word in re.findall(r'[^\W\d_]+',question.lower(),re.UNICODE):
+        if word in QUESTION_STOPWORDS or word in LAW_NAMES or len(word) < 3:
+            continue
+        for item in [word,*QUESTION_SYNONYMS.get(word,[])]:
+            token = _fold(_stem(item))
+            if token not in terms:
+                terms.append(token)
+    return terms[:24]
+
+
+def search_question(question, limit=4):
+    """Statutes for a free-text question: cited provisions first, then stem/synonym matches."""
+    init_catalogue()
+    picked = []
+    with database() as db:
+        for number,law in CITATION.findall(question):
+            row = db.execute("SELECT * FROM entries WHERE kind='law' AND (title=? OR title LIKE ?)",(f'§ {number} {law}',f'§ {number} {law} · %')).fetchone()
+            if row and all(item['key'] != row['key'] for item in picked):
+                picked.append(entry(row))
+        terms = question_terms(question)
+        rows = db.execute("SELECT e.*,bm25(entry_search,0,12,1) AS score FROM entry_search s JOIN entries e ON e.key=s.key WHERE entry_search MATCH ? AND e.kind='law' ORDER BY score LIMIT 200",[' OR '.join(f'"{term}"*' for term in terms)]).fetchall() if terms else []
+    scored = []
+    for position,row in enumerate(rows):
+        item = entry({key:row[key] for key in row.keys() if key != 'score'})
+        if ' · ' not in item['title'] or '(weggefallen)' in item['title']:
+            continue  # repealed or untitled provisions carry no usable text
+        heading = [_fold(word) for word in re.findall(r'[^\W\d_]+',item['title'].split(' · ',1)[-1].lower(),re.UNICODE)]
+        title_hits = sum(1 for term in terms if any(word.startswith(term) for word in heading))
+        # Title matches count double; the civil code is preferred for everyday questions.
+        civil_code = item['title'].split(' · ')[0].endswith(' BGB')
+        scored.append((row['score'] - 2*title_hits + (0 if civil_code else 3),position,item))
+    for _,_,item in sorted(scored,key=lambda value:value[:2]):
+        if len(picked) >= limit:
+            break
+        if all(existing['key'] != item['key'] for existing in picked):
+            picked.append(item)
+    return picked or search(question,limit=limit)
+
+
 def catalogue_status():
     init_catalogue()
     with database() as db:

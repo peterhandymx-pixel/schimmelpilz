@@ -24,7 +24,10 @@ WORKFLOWS = {"intake": "case-intake.md", "research": "research.md", "jurisdictio
 
 
 def ai_status():
-    return ollama_status() if AI_PROVIDER == "ollama" else gemini_status()
+    # The provider tells the UI where research context goes (local server vs. Google).
+    if AI_PROVIDER == "ollama":
+        return {**ollama_status(), "provider": "ollama"}
+    return {**gemini_status(), "provider": "gemini"}
 
 
 def gemini_status():

@@ -15,6 +15,20 @@ const ACTIONS = {
   membership_updated: "Teamrechte geändert", workspace_selected: "Arbeitsbereich gewechselt", POST: "Anfrage (POST)", PUT: "Anfrage (PUT)", DELETE: "Anfrage (DELETE)",
 };
 const actionName = action => ACTIONS[action] || action;
+// Logged API requests carry only method + path; name the common ones in plain words (the path stays visible below).
+const REQUESTS = [
+  [/\/claim\/payments/, { POST: "Zahlung gebucht", DELETE: "Zahlung gelöscht" }], [/\/claim\/items/, { POST: "Forderung erfasst", PUT: "Forderung geändert", DELETE: "Forderung gelöscht" }],
+  [/\/cost-reviews\/calculate$/, { POST: "Kostenprüfung nachgerechnet" }], [/\/cost-reviews/, { POST: "Kostenprüfung gespeichert" }],
+  [/\/research$/, { POST: "KI-Recherche gestartet" }], [/\/legal-sources/, { POST: "Rechtsquelle zur Akte genommen", PUT: "Rechtsquelle geprüft" }],
+  [/\/tasks/, { POST: "Aufgabe angelegt", PUT: "Aufgabe geändert", DELETE: "Aufgabe gelöscht" }], [/\/drafts/, { POST: "Entwurf gespeichert", PUT: "Entwurf geändert", DELETE: "Entwurf gelöscht" }],
+  [/\/documents/, { POST: "Dokument hochgeladen", PUT: "Dokument bearbeitet", DELETE: "Dokument gelöscht" }], [/\/contacts/, { POST: "Kontakt gespeichert", PUT: "Kontakt geändert", DELETE: "Kontakt gelöscht" }],
+  [/\/letter-assistant\/analyze$/, { POST: "Brief ausgewertet" }], [/\/letter-assistant\/evaluate$/, { POST: "Brief-Ergebnis berechnet" }],
+  [/^\/api\/cases$/, { POST: "Akte angelegt" }], [/^\/api\/cases\/[^/]+$/, { PUT: "Akte bearbeitet", DELETE: "Akte gelöscht" }],
+];
+const entryName = (action, target) => {
+  const match = ["POST", "PUT", "DELETE"].includes(action) && REQUESTS.find(([pattern, names]) => pattern.test((target || "").split("?")[0]) && names[action]);
+  return match ? match[1][action] : actionName(action);
+};
 const bytes = value => value > 1e9 ? `${(value / 1e9).toLocaleString("de-DE", { maximumFractionDigits: 1 })} GB` : value > 1e6 ? `${Math.round(value / 1e6).toLocaleString("de-DE")} MB` : `${Math.max(1, Math.round(value / 1e3)).toLocaleString("de-DE")} KB`;
 // The last twelve calendar months, oldest first, so the chart always has a full axis.
 const lastMonths = () => Array.from({ length: 12 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 11 + i); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
@@ -156,7 +170,7 @@ function UserDetail({ lang, id, back, currentUser }) {
       </tbody></table> : <p className="desk-empty">Noch keine Zahlungen.</p>}
     </section>
 
-    {data.audit.length > 0 && <section className="admin-card"><h3>Protokoll zu diesem Konto</h3><ol className="control-audit">{data.audit.map((a, i) => <li key={i}>{dateLabel(a.created_at, lang, true)} · {a.actor_email || "—"} · {actionName(a.action)}<small>{a.target}</small></li>)}</ol></section>}
+    {data.audit.length > 0 && <section className="admin-card"><h3>Protokoll zu diesem Konto</h3><ol className="control-audit">{data.audit.map((a, i) => <li key={i}>{dateLabel(a.created_at, lang, true)} · {a.actor_email || "—"} · {entryName(a.action, a.target)}<small>{a.target}</small></li>)}</ol></section>}
 
     {!self && <section className="admin-card admin-danger"><h3>Konto löschen</h3>
       <p>Löscht das Konto mit allen Akten, Dokumenten und Entwürfen endgültig. Zahlungsbelege bleiben für die Buchhaltung erhalten.</p>
@@ -242,7 +256,7 @@ function Audit({ lang }) {
     <Notice error={error} />
     <div className="eakte-filter"><label>Suchen<input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="E-Mail, Konto-ID, Text" /></label>
       <label>Aktion<select value={action} onChange={e => setAction(e.target.value)}><option value="">Alle</option>{actions.map(a => <option key={a} value={a}>{actionName(a)}</option>)}</select></label></div>
-    <ol className="control-audit">{entries.map(item => <li key={item.id}>{dateLabel(item.created_at, lang, true)} · {item.actor_email || "—"} · <strong>{actionName(item.action)}</strong><small>{item.target}</small></li>)}</ol>
+    <ol className="control-audit">{entries.map(item => <li key={item.id}>{dateLabel(item.created_at, lang, true)} · {item.actor_email || "—"} · <strong>{entryName(item.action, item.target)}</strong><small>{item.target}</small></li>)}</ol>
     {more && <button className="desk-button" onClick={() => load(entries[entries.length - 1].created_at)}>Ältere laden</button>}
   </>;
 }

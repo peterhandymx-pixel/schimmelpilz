@@ -80,7 +80,7 @@ class GeminiTransportTests(unittest.TestCase):
 
     def test_missing_key_is_unavailable_without_network(self):
         with patch.object(research, "GEMINI_API_KEY", ""), patch.object(research, "urlopen", side_effect=AssertionError("No request without a key")):
-            self.assertEqual(research.ai_status(), {"ready": False, "model": "gemini-test", "reason": "unavailable"})
+            self.assertEqual(research.ai_status(), {"ready": False, "model": "gemini-test", "reason": "unavailable", "provider": "gemini"})
             with self.assertRaises(ValueError):
                 research.generate_answer(MESSAGES)
 

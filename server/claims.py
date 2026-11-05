@@ -14,6 +14,14 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 CENT = Decimal('0.01')
+
+
+def euro(value, rounding=None):
+    """German money text for ledger lines: 1.234,50 €."""
+    amount = value.quantize(CENT, rounding) if rounding else value.quantize(CENT)
+    return f'{amount:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.') + ' €'
+
+
 # Basiszinssatz (§ 247 BGB) as published by the Deutsche Bundesbank. Add each new value on 1 January / 1 July.
 BASE_RATES = [
     (date(2015, 1, 1), '-0.83'), (date(2016, 7, 1), '-0.88'), (date(2023, 1, 1), '1.62'), (date(2023, 7, 1), '3.12'),
@@ -88,15 +96,15 @@ def statement(items, payments, as_of):
         for item in sorted(costs, key=lambda value: value['booked_on']):
             part = min(rest, open_amount[item['id']])
             if part > 0:
-                open_amount[item['id']] -= part; rest -= part; credited.append(f'Kosten {part.quantize(CENT)}')
+                open_amount[item['id']] -= part; rest -= part; credited.append(f'Kosten {euro(part)}')
         part = min(rest, interest_due)
         if part > 0:
-            interest_due -= part; rest -= part; credited.append(f'Zinsen {part.quantize(CENT, ROUND_HALF_UP)}')
+            interest_due -= part; rest -= part; credited.append(f'Zinsen {euro(part, ROUND_HALF_UP)}')
         for item in sorted(principal, key=lambda value: value['booked_on']):
             part = min(rest, open_amount[item['id']])
             if part > 0:
-                open_amount[item['id']] -= part; rest -= part; credited.append(f'Hauptforderung {part.quantize(CENT)}')
-        entries.append({'day': payment['paid_on'], 'text': 'Zahlung' + (f' ({payment["note"]})' if payment['note'] else '') + ' – verrechnet: ' + (', '.join(credited) or '—') + (f'; Überzahlung {rest.quantize(CENT)}' if rest > 0 else ''), 'amount': str(-(Decimal(payment['amount_minor']) / 100))})
+                open_amount[item['id']] -= part; rest -= part; credited.append(f'Hauptforderung {euro(part)}')
+        entries.append({'day': payment['paid_on'], 'text': 'Zahlung' + (f' ({payment["note"]})' if payment['note'] else '') + ' – verrechnet: ' + (', '.join(credited) or '—') + (f'; Überzahlung {euro(rest)}' if rest > 0 else ''), 'amount': str(-(Decimal(payment['amount_minor']) / 100))})
     accrue(as_of + timedelta(days=1))
     entries.sort(key=lambda value: value['day'])
     owed_principal = sum((open_amount[item['id']] for item in principal), Decimal(0))

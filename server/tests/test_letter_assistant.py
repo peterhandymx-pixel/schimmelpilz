@@ -163,3 +163,17 @@ class NewKindsTests(unittest.TestCase):
     def test_lawyer_cases_offer_legal_aid(self):
         result = la.evaluate('strafbefehl', {}, {'received_on': '2026-11-02'}, self.today)
         self.assertEqual(result['help'][0]['id'], 'beratungshilfe')
+
+    def test_rent_arrears_letter_reads_remaining_amount_and_relative_deadline(self):
+        letter = """Beispiel Vermietung GmbH, Vermieterweg 5, 10117 Berlin
+Berlin, 02.11.2026
+Betreff: Ihre Mängelanzeige / Mietrückstand
+die Miete für Oktober 2026 in Höhe von 900,00 EUR wurde nur zu 700,00 EUR gezahlt.
+Bitte überweisen Sie den Restbetrag von 200,00 EUR innerhalb von 14 Tagen nach Zugang dieses Schreibens."""
+        fields = la.read_fields(letter)
+        self.assertEqual(fields['amount'], 200.0)
+        self.assertEqual(fields['period']['amount'], 14)
+        self.assertEqual(la.classify(letter)[0]['id'], 'zahlungsaufforderung')
+        result = la.evaluate('zahlungsaufforderung', fields, {'received_on': '2026-11-04', 'owes': 'none'}, self.today)
+        self.assertEqual(result['deadline']['date'], '2026-11-18')
+        self.assertIn('forderung-zurueckweisen', result['samples'])

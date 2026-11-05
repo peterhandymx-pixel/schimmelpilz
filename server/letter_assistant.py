@@ -83,7 +83,10 @@ def parse_amount(raw):
 
 
 AMOUNT = re.compile(r'(?:(?:eur|€)\s?(\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?))|(?:(\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?)\s?(?:€|eur\b|euro\b))')
-TOTAL_WORDS = r'(gesamtbetrag|gesamtforderung|gesamtsumme|offener betrag|offene forderung|noch offen|zu zahlen|zahlbetrag|nachzahlung|summe|insgesamt|gesamt)'
+# Words that mark the sum actually demanded. Without them the largest amount wins, which is wrong for
+# letters like "Miete 900 EUR, gezahlt 700 EUR, bitte überweisen Sie den Restbetrag von 200 EUR".
+TOTAL_WORDS = (r'(gesamtbetrag|gesamtforderung|gesamtsumme|offener betrag|offenen betrag|offene forderung|noch offen|zu zahlen|zahlbetrag|nachzahlung|'
+               r'restbetrag|restforderung|differenzbetrag|fehlbetrag|rueckstand|ueberweisen sie|begleichen sie|zahlen sie|summe|insgesamt|gesamt)')
 REFERENCE = re.compile(r'(?:aktenzeichen|geschaeftszeichen|gesch\.?-?zeichen|unser zeichen|ihr zeichen|\baz\b\.?|kunden-?nummer|kunden-?nr\.?|'
                        r'rechnungs-?nummer|rechnungs-?nr\.?|vorgangs-?nummer|vorgangs-?nr\.?|vertrags-?nummer|vertrags-?nr\.?|steuernummer|'
                        r'bg-?nummer|versicherungs-?nummer|schaden-?nummer|forderungs-?nummer)\s*[:.]?\s*([a-z0-9][a-z0-9 /\-.]{2,40})')
@@ -150,7 +153,7 @@ def read_fields(text):
             letter_deadline = value
             break
     period = None
-    match = re.search(r'(?:innerhalb|binnen)\s+(?:von\s+)?(\d+|' + '|'.join(NUMBERS) + r')\s+(tag|tagen|woche|wochen|monat|monaten|monats)', folded)
+    match = re.search(r'(?:innerhalb|binnen)\s+(?:von\s+)?(\d+|' + '|'.join(NUMBERS) + r')\s+(tagen|tag|wochen|woche|monaten|monats|monat)', folded)
     if match:
         amount = int(match.group(1)) if match.group(1).isdigit() else NUMBERS[match.group(1)]
         unit = 'days' if match.group(2).startswith('tag') else 'weeks' if match.group(2).startswith('woche') else 'months'
@@ -217,7 +220,7 @@ KINDS = [
     ('betriebskosten', 'Betriebs- / Nebenkostenabrechnung', 'tenancy', 'out_of_court', lambda t: any_of(t, r'betriebskostenabrechnung', r'nebenkostenabrechnung', r'heizkostenabrechnung')),
     ('versicherung_ablehnung', 'Ablehnung durch eine Versicherung', 'contract', 'out_of_court', lambda t: 'versicherung' in t and any_of(t, r'lehnen .{0,40}ab', r'ablehnung', r'nicht eintrittspflichtig', r'keine leistung', r'leistungsfreiheit', r'deckung.{0,30}(versag|ablehn)')),
     ('inkasso', 'Forderung eines Inkassobüros', 'contract', 'out_of_court', lambda t: 'inkasso' in t),
-    ('zahlungsaufforderung', 'Rechnung / Mahnung', 'contract', 'out_of_court', lambda t: any_of(t, r'mahnung', r'zahlungserinnerung', r'zahlungsaufforderung', r'rechnung', r'offene forderung', r'zahlungsverzug')),
+    ('zahlungsaufforderung', 'Rechnung / Mahnung', 'contract', 'out_of_court', lambda t: any_of(t, r'mahnung', r'zahlungserinnerung', r'zahlungsaufforderung', r'rechnung', r'offene forderung', r'zahlungsverzug', r'rueckstand', r'restbetrag', r'ueberweisen sie')),
     ('sonstiges', 'Sonstiges Schreiben', 'general', 'initial', lambda t: True),
 ]
 KIND_IDS = [kind[0] for kind in KINDS]
@@ -592,6 +595,10 @@ def evaluate(kind, fields, answers, today=None, state=None):
         result.summary = f'{creditor} verlangt Zahlung von {money}.'
         if letter_deadline:
             result.set_deadline('Zahlungsfrist laut Schreiben', letter_deadline, 'Fristsetzung des Gläubigers', 'Keine gesetzliche Frist; danach drohen aber weitere Kosten und ein Mahnbescheid.', strict=False)
+        elif fields.get('period') and received:
+            period = fields['period']
+            result.calc('Zahlungsfrist laut Schreiben', received, period['amount'], period['unit'], 'Fristsetzung des Gläubigers',
+                        f'„{period["text"]}“ ab Eingang gerechnet. Keine gesetzliche Frist; danach drohen aber weitere Kosten und ein Mahnbescheid.', strict=False)
         if answers.get('old') == 'yes':
             result.steps.append('Die Forderung könnte verjährt sein (drei Jahre ab Jahresende, §§ 195, 199 BGB). Dann dürfen Sie die Zahlung verweigern – aber nur, wenn Sie die Einrede erheben.')
             result.samples.append('verjaehrung')
