@@ -25,6 +25,21 @@ PROMPT = {
     "en": "The client reduces the rent under section 536 BGB and sets the landlord a deadline to remedy the defect. An objection is lodged against the notice.",
 }
 available = lambda: bool(research.GROQ_API_KEY)
+# On silence Whisper "hears" the subtitle credits it was trained on. Such lines are discarded, never inserted.
+PHANTOMS = ("untertitelung des zdf", "untertitel im auftrag des zdf", "untertitel der amara", "untertitel von stephanie geiges", "vielen dank fürs zuschauen",
+            "vielen dank für's zuschauen", "danke fürs zuschauen", "bis zum nächsten mal", "copyright wdr", "swr 2020", "swr 2021", "thanks for watching", "thank you for watching")
+
+
+def clean(result: dict) -> str:
+    segments = result.get("segments")
+    if isinstance(segments, list) and segments:
+        kept = [str(item.get("text", "")) for item in segments if isinstance(item, dict) and float(item.get("no_speech_prob", 0) or 0) < 0.6]
+        text = " ".join(part.strip() for part in kept if part.strip())
+    else:
+        text = str(result.get("text", ""))
+    text = text.strip()
+    folded = text.lower().strip(" .,!")
+    return "" if not folded or any(phantom in folded for phantom in PHANTOMS) and len(folded) < 80 else text
 
 
 def multipart(fields: dict, filename: str, content_type: str, content: bytes) -> tuple[bytes, str]:
@@ -35,11 +50,11 @@ def multipart(fields: dict, filename: str, content_type: str, content: bytes) ->
 
 
 def transcribe(content: bytes, content_type: str, language: str) -> str:
-    body, boundary = multipart({"model": MODEL, "language": language, "prompt": PROMPT[language], "response_format": "json", "temperature": "0"},
+    body, boundary = multipart({"model": MODEL, "language": language, "prompt": PROMPT[language], "response_format": "verbose_json", "temperature": "0"},
                                "speech." + AUDIO_TYPES[content_type], content_type, content)
     headers = {**research.groq_headers(), "Content-Type": "multipart/form-data; boundary=" + boundary}
     with urlopen(Request(research.GROQ_BASE_URL + "/audio/transcriptions", data=body, headers=headers, method="POST"), timeout=60) as response:
-        return str(json.loads(response.read(1024 * 1024)).get("text", "")).strip()
+        return clean(json.loads(response.read(4 * 1024 * 1024)))
 
 
 def router(db, require_user):

@@ -47,6 +47,7 @@ class SpeechTests(test_inbox.InboxTests):
             self.assertIn(b'name="language"\r\n\r\nde', sent['body'])
             self.assertIn('filename="speech.webm"'.encode(), sent['body'])
             # Wrong type, too short and too large are refused before anything leaves the server.
+            self.assertIn(b'verbose_json', sent['body'])
             self.assertEqual(self.post(client, content_type='video/mp4').status_code, 415)
             self.assertEqual(self.post(client, content=b'x' * 10).status_code, 422)
             with mock.patch.object(speech, 'MAX_BYTES', 5000):
@@ -61,3 +62,10 @@ class SpeechTests(test_inbox.InboxTests):
         with mock.patch.object(research, 'GROQ_API_KEY', 'test-key'), mock.patch.object(speech, 'urlopen', reply), mock.patch.object(speech, 'LIMIT', 2), TestClient(api.app) as client:
             self.login(client, 'speech-limit@example.invalid')
             self.assertEqual([self.post(client).status_code for _ in range(3)], [200, 200, 429])
+
+
+def test_silence_phantoms_are_dropped():
+    assert speech.clean({'text': 'Untertitelung des ZDF, 2020'}) == ''
+    assert speech.clean({'text': ' Vielen Dank fürs Zuschauen! '}) == ''
+    assert speech.clean({'text': 'x', 'segments': [{'text': ' Muss die Mandantin', 'no_speech_prob': 0.05}, {'text': ' Untertitel', 'no_speech_prob': 0.9}]}) == 'Muss die Mandantin'
+    assert speech.clean({'text': 'Frist nach § 536 BGB setzen?'}) == 'Frist nach § 536 BGB setzen?'
