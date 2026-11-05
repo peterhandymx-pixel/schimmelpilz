@@ -128,3 +128,38 @@ class AssistantApiTests(test_inbox.InboxTests):
             self.assertEqual(client.post('/api/letter-assistant/evaluate', json={'kind': 'nix', 'fields': {}, 'answers': {}}).status_code, 422)
             self.assertEqual(client.post('/api/letter-assistant/evaluate', json={'kind': 'inkasso', 'fields': {'amount': 'viel'}, 'answers': {}}).status_code, 422)
             self.assertEqual(len(client.get('/api/letter-assistant/kinds').json()), len(la.KIND_IDS))
+
+
+class NewKindsTests(unittest.TestCase):
+    today = date(2026, 11, 4)
+
+    def test_enforcement_and_business_letters_are_recognised(self):
+        self.assertEqual(la.classify('Der Gerichtsvollzieher. Ladung zum Termin zur Abgabe der Vermögensauskunft, Vollstreckungsbescheid vom 1.9.2026')[0]['id'], 'gerichtsvollzieher')
+        self.assertEqual(la.classify('Pfändungs- und Überweisungsbeschluss des Amtsgerichts')[0]['id'], 'pfaendung')
+        self.assertEqual(la.classify('Finanzamt Nürnberg – Prüfungsanordnung nach § 196 AO')[0]['id'], 'betriebspruefung')
+        self.assertEqual(la.classify('Hiermit kündige ich mein Arbeitsverhältnis fristgerecht zum 31.12.2026.')[0]['id'], 'eigenkuendigung')
+        self.assertEqual(la.classify(KUENDIGUNG)[0]['id'], 'kuendigung_arbeit')
+
+    def test_p_account_within_one_month(self):
+        result = la.evaluate('pfaendung', {}, {'received_on': '2026-11-02', 'p_account': 'no', 'children': 'yes'}, self.today)
+        self.assertEqual(result['deadline']['date'], '2026-12-02')
+        self.assertIn('p-konto', result['samples'])
+        self.assertEqual([item['id'] for item in result['help']], ['schuldnerberatung'])
+
+    def test_state_holidays_move_the_deadline(self):
+        # 01.10.2026 + 4 = 05.10.2026; one month -> 05.11.2026 (Thursday). Use a period ending on Allerheiligen instead:
+        result = la.evaluate('mahnbescheid', {}, {'received_on': '2026-10-18', 'owes': 'none'}, self.today, state='BY')
+        self.assertEqual(result['deadline']['date'], '2026-11-02')  # 01.11.2026 is a Sunday and Allerheiligen
+        # 11.10.2027 + 3 weeks = Monday 01.11.2027: a working day nationwide, Allerheiligen in Bavaria.
+        nationwide = la.evaluate('kuendigung_arbeit', {}, {'received_on': '2027-10-11'}, self.today)
+        bavaria = la.evaluate('kuendigung_arbeit', {}, {'received_on': '2027-10-11'}, self.today, state='BY')
+        self.assertEqual(nationwide['deadline']['date'], '2027-11-01')
+        self.assertEqual(bavaria['deadline']['date'], '2027-11-02')
+        self.assertIn('Allerheiligen', bavaria['deadline']['basis'])
+        reformation = la.evaluate('kuendigung_arbeit', {}, {'received_on': '2026-10-10'}, self.today, state='SN')
+        self.assertEqual(reformation['deadline']['date'], '2026-11-02')  # 31.10.2026 Saturday + Reformationstag
+        self.assertIn('Sachsen', reformation['disclaimer'])
+
+    def test_lawyer_cases_offer_legal_aid(self):
+        result = la.evaluate('strafbefehl', {}, {'received_on': '2026-11-02'}, self.today)
+        self.assertEqual(result['help'][0]['id'], 'beratungshilfe')

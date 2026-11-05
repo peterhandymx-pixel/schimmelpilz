@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, Response as BinaryResponse
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets, letter_assistant
+from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets, letter_assistant, reminders
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ai_status, prepare_messages, generate_answer, AI_MODEL
 from .document_context import select_sources
@@ -68,6 +68,7 @@ LETTERHEAD_LOCK = threading.Lock()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    reminders.start(db, pre_deadline)
     yield
 
 
@@ -464,6 +465,7 @@ def init_db() -> None:
         route_plans.migrate(connection)
         ocr_routes.migrate(connection)
         auto_text.migrate(connection)
+        reminders.migrate(connection)
         control.migrate(connection)
         billing.migrate(connection)
         invoices.migrate(connection)
@@ -1421,4 +1423,5 @@ app.include_router(legal_notice.router())
 app.include_router(account.router(db, require_user, lambda: UPLOAD_DIR, lambda: DATA_DIR))
 app.include_router(deadlines.router(require_user))
 app.include_router(letter_assistant.router(require_user))
+app.include_router(reminders.router(db, require_user))
 app.include_router(deletion.router(db, require_user, record_activity, lambda: UPLOAD_DIR, lambda: DATA_DIR))

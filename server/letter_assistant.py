@@ -197,16 +197,20 @@ def area_for_authority(folded):
 
 KINDS = [
     # id, label, legal area, stage, recognition rule (folded text -> bool)
+    ('gerichtsvollzieher', 'Gerichtsvollzieher: Zahlungsaufforderung / Vermögensauskunft', 'contract', 'enforcement', lambda t: 'gerichtsvollzieher' in t and any_of(t, r'vermoegensauskunft', r'802f', r'zahlungsaufforderung', r'ladung')),
+    ('pfaendung', 'Kontopfändung / Pfändungsbeschluss', 'contract', 'enforcement', lambda t: any_of(t, r'pfaendungs-? und ueberweisungsbeschluss', r'pfaendungsbeschluss', r'kontopfaendung', r'vorlaeufiges zahlungsverbot', r'pfaendung (ihres|des) (konto|guthaben|arbeitseinkommen)')),
     ('vollstreckungsbescheid', 'Vollstreckungsbescheid', 'contract', 'court', lambda t: 'vollstreckungsbescheid' in t and not has(t, r'antrag auf erlass eines vollstreckungsbescheid')),
     ('mahnbescheid', 'Mahnbescheid vom Gericht', 'contract', 'court', lambda t: 'mahnbescheid' in t),
     ('klage', 'Klage / Post vom Gericht', 'general', 'court', lambda t: any_of(t, r'klageschrift', r'erhebt?\s.{0,30}klage', r'erhebe ich.{0,30}klage', r'verteidigungsanzeige', r'schriftliche[ns]? vorverfahren', r'klageerwiderung', r'guetetermin')),
     ('strafbefehl', 'Strafbefehl', 'criminal', 'court', lambda t: 'strafbefehl' in t),
     ('bussgeld', 'Bußgeldbescheid', 'criminal', 'out_of_court', lambda t: any_of(t, r'bussgeldbescheid')),
     ('anhoerung', 'Anhörungsbogen (Verkehr / Ordnungswidrigkeit)', 'criminal', 'out_of_court', lambda t: any_of(t, r'anhoerungsbogen', r'anhoerung im bussgeldverfahren', r'zeugenfragebogen', r'anhoerung.{0,40}ordnungswidrigkeit')),
+    ('betriebspruefung', 'Prüfungsanordnung (Betriebsprüfung)', 'administrative', 'out_of_court', lambda t: any_of(t, r'pruefungsanordnung', r'aussenpruefung', r'betriebspruefung', r'196 ao')),
     ('steuerbescheid', 'Bescheid vom Finanzamt / der Familienkasse', 'administrative', 'out_of_court', lambda t: any_of(t, r'finanzamt', r'familienkasse') and 'bescheid' in t),
     ('bescheid', 'Bescheid einer Behörde', 'administrative', 'out_of_court', lambda t: 'bescheid' in t and any_of(t, r'rechtsbehelfsbelehrung', r'widerspruch', r'behoerde', r'jobcenter', r'agentur fuer arbeit', r'landratsamt', r'stadt ', r'gemeinde', r'kasse')),
     ('abmahnung_urheber', 'Abmahnung (Urheberrecht / Wettbewerb)', 'commercial', 'out_of_court', lambda t: 'abmahnung' in t and any_of(t, r'urheber', r'filesharing', r'tauschboerse', r'unterlassungserklaerung', r'lizenz', r'markenrecht', r'wettbewerb')),
     ('abmahnung_arbeit', 'Abmahnung vom Arbeitgeber', 'employment', 'out_of_court', lambda t: 'abmahnung' in t and any_of(t, r'arbeitsverhaeltnis', r'arbeitsvertrag', r'arbeitspflicht', r'personalakte', r'arbeitgeber')),
+    ('eigenkuendigung', 'Kündigung durch einen Mitarbeiter', 'employment', 'out_of_court', lambda t: any_of(t, r'kuendige ich', r'ich kuendige', r'meine kuendigung') and any_of(t, r'arbeitsverhaeltnis', r'arbeitsvertrag', r'beschaeftigungsverhaeltnis', r'arbeitsstelle')),
     ('kuendigung_arbeit', 'Kündigung des Arbeitsverhältnisses', 'employment', 'out_of_court', lambda t: 'kuendig' in t and any_of(t, r'arbeitsverhaeltnis', r'arbeitsvertrag', r'beschaeftigungsverhaeltnis', r'arbeitgeber', r'ausbildungsverhaeltnis')),
     ('kuendigung_wohnung', 'Kündigung der Wohnung', 'tenancy', 'out_of_court', lambda t: 'kuendig' in t and any_of(t, r'mietverhaeltnis', r'mietvertrag', r'wohnung', r'mietsache', r'mieter')),
     ('mieterhoehung', 'Mieterhöhung', 'tenancy', 'out_of_court', lambda t: any_of(t, r'mieterhoehung', r'zustimmung zur erhoehung', r'erhoehung der (netto|grund|kalt)?\s?miete', r'558 bgb')),
@@ -255,7 +259,7 @@ QUESTIONS = {
     'bescheid': [RECEIVED, yesno('instructions', 'Steht am Ende des Bescheids eine „Rechtsbehelfsbelehrung“ (Hinweis, wie man Widerspruch einlegt)?'), yesno('wrong', 'Halten Sie den Bescheid für falsch?')],
     'abmahnung_urheber': [RECEIVED, yesno('signed', 'Haben Sie die beigefügte Unterlassungserklärung schon unterschrieben?')],
     'abmahnung_arbeit': [RECEIVED, yesno('disagree', 'Halten Sie die Abmahnung für ungerechtfertigt?')],
-    'kuendigung_arbeit': [RECEIVED, yesno('fight', 'Möchten Sie sich gegen die Kündigung wehren?', 'Wenn Sie unsicher sind, wählen Sie „Weiß ich nicht“. Die Frist läuft trotzdem.'),
+    'kuendigung_arbeit': [RECEIVED, yesno('fight', 'Möchten Sie sich gegen die Kündigung wehren?', 'Viele Kündigungen enden mit einer Abfindung – das geht nur, wenn Sie rechtzeitig klagen.'),
                           yesno('signed_by_boss', 'Hat der Arbeitgeber selbst (Inhaber/Geschäftsführung) unterschrieben oder lag eine Original-Vollmacht bei?'),
                           {'id': 'end_date', 'type': 'date', 'label': 'Zu welchem Datum soll das Arbeitsverhältnis enden?', 'optional': True}],
     'kuendigung_wohnung': [RECEIVED, yesno('immediate', 'Ist es eine fristlose Kündigung?'),
@@ -268,15 +272,19 @@ QUESTIONS = {
     'versicherung_ablehnung': [RECEIVED, yesno('disagree', 'Halten Sie die Ablehnung für falsch?')],
     'inkasso': [RECEIVED, OWES, yesno('old', 'Ist die Forderung älter als drei Jahre (gerechnet ab Ende des Entstehungsjahres)?')],
     'zahlungsaufforderung': [RECEIVED, OWES, yesno('old', 'Ist die Forderung älter als drei Jahre (gerechnet ab Ende des Entstehungsjahres)?')],
+    'gerichtsvollzieher': [SERVED, OWES, {'id': 'hearing_on', 'type': 'date', 'label': 'Welcher Termin zur Vermögensauskunft steht im Schreiben?', 'optional': True, 'help': 'Leer lassen, wenn kein Termin genannt ist.'}],
+    'pfaendung': [SERVED, yesno('p_account', 'Haben Sie schon ein Pfändungsschutzkonto (P-Konto)?'), yesno('children', 'Haben Sie Kinder, für die Sie Unterhalt zahlen oder Kindergeld bekommen?')],
+    'betriebspruefung': [RECEIVED, {'id': 'start_on', 'type': 'date', 'label': 'Wann soll die Prüfung beginnen?', 'optional': True}, yesno('postpone', 'Passt der Termin nicht (Urlaub, Krankheit, Jahresabschluss)?')],
+    'eigenkuendigung': [RECEIVED, yesno('original', 'Liegt die Kündigung im Original mit Unterschrift vor (nicht nur E-Mail, Fax oder Foto)?'), {'id': 'end_date', 'type': 'date', 'label': 'Zu welchem Datum will der Mitarbeiter gehen?', 'optional': True}],
     'sonstiges': [RECEIVED],
 }
 
 
 # ---------------------------------------------------------------- the result
 
-def period_end(start, amount, unit):
+def period_end(start, amount, unit, state=None):
     try:
-        return deadlines.calculate(start, amount, unit, 'event', None)
+        return deadlines.calculate(start, amount, unit, 'event', state)
     except ValueError:
         return None
 
@@ -297,8 +305,8 @@ def to_date(value):
 
 
 class Result:
-    def __init__(self, kind):
-        self.kind = kind
+    def __init__(self, kind, state=None):
+        self.kind, self.state = kind, state
         self.deadline = None
         self.extra_deadlines = []
         self.steps, self.warnings, self.samples = [], [], []
@@ -310,9 +318,10 @@ class Result:
             self.deadline = {'date': end.isoformat(), 'label': label, 'norm': norm, 'basis': basis, 'strict': strict}
 
     def calc(self, label, start, amount, unit, norm, basis, strict=True):
-        calculated = period_end(start, amount, unit) if start else None
+        calculated = period_end(start, amount, unit, self.state) if start else None
         if calculated:
-            self.set_deadline(label, date.fromisoformat(calculated['end']), norm, basis + (' Fällt das Fristende auf ein Wochenende oder einen bundesweiten Feiertag, endet sie am nächsten Werktag.' if calculated['shifted'] else ''), strict)
+            skipped = ', '.join(item['reason'] for item in calculated['skipped'])
+            self.set_deadline(label, date.fromisoformat(calculated['end']), norm, basis + (f' Das Fristende ist wegen {skipped} auf den nächsten Werktag verschoben.' if calculated['shifted'] else ''), strict)
         return calculated
 
     def as_dict(self, today):
@@ -325,7 +334,35 @@ class Result:
             urgency = 'overdue' if days < 0 else 'high' if days <= 5 else 'medium' if days <= 14 else 'low'
         return {'kind': KIND_INFO[self.kind], 'summary': self.summary, 'deadline': self.deadline, 'extra_deadlines': self.extra_deadlines,
                 'urgency': urgency, 'steps': self.steps, 'warnings': self.warnings, 'samples': self.samples, 'lawyer': self.lawyer,
-                'disclaimer': 'Orientierungshilfe, keine Rechtsberatung. Fristen sind mit bundesweiten Feiertagen berechnet; maßgeblich ist der Einzelfall.'}
+                'help': help_for(self.kind, self.lawyer), 'state': self.state,
+                'disclaimer': f'Berechnet aus Ihren Angaben mit den Feiertagen {"in " + deadlines.STATES[self.state] if self.state else "bundesweit"}.'}
+
+
+# Where to get (cheap) help, by kind of letter.
+HELP = {
+    'beratungshilfe': {'title': 'Beratungshilfe – Anwalt für 15 €', 'text': 'Bei geringem Einkommen stellt das Amtsgericht Ihres Wohnorts einen Beratungshilfeschein aus. Damit berät Sie ein Anwalt Ihrer Wahl; Sie zahlen höchstens 15 € (§§ 1, 6 BerHG, Nr. 2500 VV RVG).', 'sample': 'beratungshilfe'},
+    'verbraucherzentrale': {'title': 'Verbraucherzentrale', 'text': 'Günstige Beratung zu Verträgen, Inkasso, Versicherungen und Energie.', 'link': 'https://www.verbraucherzentrale.de/beratung'},
+    'schuldnerberatung': {'title': 'Kostenlose Schuldnerberatung', 'text': 'Hilft bei Ratenplänen, Pfändungsschutz und Verhandlungen mit Gläubigern.', 'link': 'https://www.meine-schulden.de/beratungsstellen'},
+    'mieterverein': {'title': 'Mieterverein', 'text': 'Mietrechtsberatung für Mitglieder, oft ab ca. 5 € im Monat.', 'link': 'https://www.mieterbund.de/mietervereine/'},
+    'arbeit': {'title': 'Gewerkschaft / Rechtsantragstelle', 'text': 'Gewerkschaftsmitglieder bekommen Rechtsschutz. Die Klage beim Arbeitsgericht können Sie kostenlos bei der Rechtsantragstelle aufnehmen lassen.', 'link': 'https://www.dgb-rechtsschutz.de/'},
+    'versicherungsombudsmann': {'title': 'Versicherungsombudsmann', 'text': 'Kostenlose Schlichtung bei Streit mit der Versicherung bis 10.000 €, verbindlich für den Versicherer.', 'link': 'https://www.versicherungsombudsmann.de/'},
+    'sozial': {'title': 'Sozialverband (VdK, SoVD)', 'text': 'Beratung und Vertretung im Widerspruchs- und Klageverfahren bei Sozialleistungen.', 'link': 'https://www.vdk.de/'},
+}
+HELP_BY_KIND = {
+    'mahnbescheid': ['verbraucherzentrale', 'schuldnerberatung'], 'vollstreckungsbescheid': ['schuldnerberatung', 'beratungshilfe'],
+    'gerichtsvollzieher': ['schuldnerberatung', 'beratungshilfe'], 'pfaendung': ['schuldnerberatung'], 'inkasso': ['verbraucherzentrale', 'schuldnerberatung'],
+    'zahlungsaufforderung': ['verbraucherzentrale'], 'kuendigung_arbeit': ['arbeit', 'beratungshilfe'], 'abmahnung_arbeit': ['arbeit'],
+    'kuendigung_wohnung': ['mieterverein', 'beratungshilfe'], 'mieterhoehung': ['mieterverein'], 'betriebskosten': ['mieterverein'],
+    'versicherung_ablehnung': ['versicherungsombudsmann', 'verbraucherzentrale'], 'bescheid': ['sozial', 'beratungshilfe'],
+    'klage': ['beratungshilfe'], 'strafbefehl': ['beratungshilfe'], 'abmahnung_urheber': ['verbraucherzentrale', 'beratungshilfe'],
+}
+
+
+def help_for(kind, lawyer):
+    keys = list(HELP_BY_KIND.get(kind, []))
+    if lawyer and 'beratungshilfe' not in keys:
+        keys.append('beratungshilfe')
+    return [{'id': key, **HELP[key]} for key in keys]
 
 
 def notice_date(fields, answers):
@@ -339,9 +376,9 @@ def notice_date(fields, answers):
     return received, 'Eingangsdatum'
 
 
-def evaluate(kind, fields, answers, today=None):
+def evaluate(kind, fields, answers, today=None, state=None):
     today = today or date.today()
-    result = Result(kind if kind in KIND_INFO else 'sonstiges')
+    result = Result(kind if kind in KIND_INFO else 'sonstiges', state if state in deadlines.STATES else None)
     kind = result.kind
     received = to_date(answers.get('received_on'))
     amount = fields.get('amount')
@@ -569,6 +606,60 @@ def evaluate(kind, fields, answers, today=None):
             result.steps.append('Kommt danach ein Mahnbescheid vom Gericht: unbedingt innerhalb von zwei Wochen widersprechen.')
         result.steps.append('Einen negativen Eintrag bei Auskunfteien (z. B. Schufa) darf es für eine bestrittene Forderung grundsätzlich nicht geben.')
 
+    elif kind == 'gerichtsvollzieher':
+        result.summary = 'Der Gerichtsvollzieher vollstreckt eine Forderung, für die der Gläubiger schon einen Titel hat (Urteil, Vollstreckungsbescheid).'
+        result.calc('Zahlungsfrist des Gerichtsvollziehers', received, 2, 'weeks', '§ 802f Abs. 1 ZPO', 'Zwei Wochen ab Zustellung. Danach findet der Termin zur Vermögensauskunft statt.')
+        hearing = to_date(answers.get('hearing_on'))
+        if hearing:
+            result.extra_deadlines.append({'date': hearing.isoformat(), 'label': 'Termin zur Vermögensauskunft beim Gerichtsvollzieher'})
+        result.steps = [f'Zahlen Sie {money} bis zum Fristende an den Gerichtsvollzieher – dann ist die Sache erledigt.' if owes == 'all'
+                        else 'Rufen Sie den Gerichtsvollzieher an und bieten Sie eine Ratenzahlung an. Er kann einen Zahlungsplan bewilligen und die Vollstreckung so lange aufschieben (§ 802b ZPO).',
+                        'Gehen Sie zum Termin. Wer nicht erscheint, riskiert einen Haftbefehl (§ 802g ZPO) und einen Eintrag im Schuldnerverzeichnis.',
+                        'Richten Sie ein P-Konto ein, damit Ihr Grundbetrag auf dem Konto geschützt ist.']
+        result.samples = ['ratenzahlung', 'p-konto']
+        if owes in ('none', 'part'):
+            result.steps.append('Gegen den Titel selbst hilft nur ein Rechtsbehelf beim Gericht, z. B. Einspruch gegen den Vollstreckungsbescheid, solange die Frist läuft.')
+
+    elif kind == 'pfaendung':
+        result.summary = 'Ein Gläubiger hat Ihr Konto oder Ihren Lohn pfänden lassen. Ein Grundbetrag bleibt geschützt – auf dem Konto aber nur mit P-Konto.'
+        if answers.get('p_account') != 'yes':
+            result.calc('Konto in ein P-Konto umwandeln', received, 1, 'months', '§ 850k Abs. 1 ZPO',
+                        'Wandeln Sie das Konto innerhalb eines Monats nach Zustellung um, wirkt der Schutz zurück. Die Bank muss spätestens ab dem vierten Geschäftstag umstellen.')
+            result.steps.append('Verlangen Sie bei Ihrer Bank sofort die Umwandlung in ein P-Konto. Das kostet nicht mehr als das bisherige Konto.')
+            result.samples.append('p-konto')
+        result.steps.append('Mit einer Bescheinigung nach § 903 ZPO (Schuldnerberatung, Arbeitgeber, Familienkasse, Jobcenter) wird der Freibetrag für Kinder und Kindergeld erhöht.' if answers.get('children') == 'yes'
+                            else 'Der Grundfreibetrag ist automatisch geschützt; Sozialleistungen wie Kindergeld lassen sich mit einer Bescheinigung nach § 903 ZPO zusätzlich schützen.')
+        result.steps.append('Sprechen Sie mit dem Gläubiger über Raten – dann kann er die Pfändung ruhen lassen.')
+        result.samples.append('ratenzahlung')
+
+    elif kind == 'betriebspruefung':
+        start, basis = notice_date(fields, answers)
+        result.summary = 'Das Finanzamt kündigt eine Außenprüfung (Betriebsprüfung) an.'
+        result.calc('Einspruch gegen die Prüfungsanordnung', start, 1, 'months', '§§ 196, 355 AO', f'Ein Monat ab Bekanntgabe. Berechnet ab {basis}.', strict=False)
+        begin = to_date(answers.get('start_on'))
+        if begin:
+            result.extra_deadlines.append({'date': begin.isoformat(), 'label': 'Beginn der Außenprüfung'})
+        result.steps = ['Informieren Sie Ihren Steuerberater und stellen Sie Buchhaltung, Belege und Verträge für den Prüfungszeitraum zusammen.',
+                        'Klären Sie, welche Daten digital übergeben werden (GoBD-Datenzugriff).',
+                        'Ein Arbeitsplatz für den Prüfer muss bereitstehen; Auskünfte gibt eine benannte Auskunftsperson.']
+        if answers.get('postpone') == 'yes':
+            result.steps.insert(0, 'Beantragen Sie mit Begründung eine Verlegung des Prüfungsbeginns (§ 197 Abs. 2 AO). Bei wichtigen Gründen wird das regelmäßig gewährt.')
+            result.samples.append('fristverlaengerung-steuer')
+
+    elif kind == 'eigenkuendigung':
+        end = to_date(answers.get('end_date'))
+        result.summary = 'Ein Mitarbeiter hat das Arbeitsverhältnis gekündigt.'
+        if answers.get('original') == 'no':
+            result.steps.append('Eine Kündigung per E-Mail, Fax, WhatsApp oder Foto ist unwirksam (Schriftform, § 623 BGB). Verlangen Sie das unterschriebene Original.')
+        result.steps += ['Prüfen Sie die Kündigungsfrist (Arbeitsvertrag, Tarifvertrag, sonst § 622 BGB: vier Wochen zum 15. oder Monatsende) und bestätigen Sie den Beendigungstermin schriftlich.',
+                         'Planen Sie Resturlaub und Überstunden; nicht genommener Urlaub ist auszuzahlen (§ 7 Abs. 4 BUrlG).',
+                         'Erteilen Sie ein Arbeitszeugnis (§ 109 GewO) und erstellen Sie die Arbeitsbescheinigung für die Agentur für Arbeit.']
+        if end:
+            result.set_deadline('Letzter Arbeitstag', end, '§ 622 BGB / Arbeitsvertrag', 'Beendigung des Arbeitsverhältnisses laut Kündigung.', strict=False)
+            report = end + timedelta(weeks=6)
+            result.extra_deadlines.append({'date': report.isoformat(), 'label': 'Abmeldung bei der Krankenkasse (spätestens sechs Wochen nach Ende, § 8 DEÜV)'})
+        result.samples = ['zeugnis']
+
     else:
         result.summary = 'Für diese Art von Schreiben gibt es keinen festen Ablauf. Die erkannten Daten sind in der Akte gespeichert.'
         if letter_deadline:
@@ -578,7 +669,7 @@ def evaluate(kind, fields, answers, today=None):
             if period and received:
                 result.calc('Frist laut Schreiben', received, period['amount'], period['unit'], 'Angabe im Schreiben', f'„{period["text"]}“ ab Eingang gerechnet.', strict=False)
         result.steps = ['Prüfen Sie, was der Absender von Ihnen verlangt und bis wann.', 'In der Musterbibliothek finden Sie über 100 Vorlagen für Antworten.',
-                        'Bei Unsicherheit: Verbraucherzentrale, Mieterverein, Gewerkschaft oder Anwalt fragen.']
+                        'Antworten Sie schriftlich und heben Sie eine Kopie auf.']
     return result.as_dict(today)
 
 
@@ -594,6 +685,7 @@ class EvaluateInput(BaseModel):
     kind: Literal[tuple(KIND_IDS)]
     fields: dict = Field(default_factory=dict)
     answers: dict = Field(default_factory=dict)
+    state: Literal[tuple(deadlines.STATES)] | None = None
 
 
 def router(require_user):
@@ -621,6 +713,6 @@ def router(require_user):
                 raise HTTPException(422, 'invalid_date')
         if payload.answers.get('received_on') and not to_date(payload.answers['received_on']):
             raise HTTPException(422, 'invalid_date')
-        return evaluate(payload.kind, fields, payload.answers)
+        return evaluate(payload.kind, fields, payload.answers, state=payload.state)
 
     return routes

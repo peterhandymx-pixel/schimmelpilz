@@ -341,7 +341,7 @@ Inhalt
 - Für das ganze Kanzleiteam gemeinsam.
 
 
-24. BRIEF-ASSISTENT UND EINFACHE ANSICHT (für Verbraucher)
+24. BRIEF-ASSISTENT UND EINFACHE ANSICHT (für Verbraucher und Unternehmen)
 --------------------------------------------------------------------
 - Verbraucher starten automatisch in der einfachen, geführten Ansicht;
   Kanzleien und Unternehmen im vollen Arbeitsplatz. Umschalten jederzeit
@@ -368,7 +368,22 @@ Inhalt
   § 67 OWiG, § 355 AO, § 70 VwGO/§ 84 SGG (1 Jahr ohne Belehrung),
   § 4 KSchG (+ § 38 SGB III, § 174 BGB), §§ 574, 574b BGB, § 558b BGB,
   § 556 Abs. 3 BGB. Bekanntgabe von Bescheiden: 4. Tag nach Bescheiddatum.
-- Orientierungshilfe, keine Rechtsberatung.
+- Foto vom Handy: Texterkennung (Deutsch/Englisch) liest Absender, Datum,
+  Aktenzeichen, Betrag und Frist; das Foto steht beim Prüfen daneben.
+- Bundesland wählbar: Fristen mit Landesfeiertagen (wird gemerkt).
+- Weitere Briefarten: Gerichtsvollzieher (Zahlungsfrist § 802f ZPO,
+  Termin Vermögensauskunft), Kontopfändung (P-Konto binnen eines Monats,
+  § 850k ZPO), Prüfungsanordnung/Betriebsprüfung (§§ 196, 197 AO),
+  Kündigung durch einen Mitarbeiter (Schriftform, DEÜV-Abmeldung).
+- „Hilfe in der Nähe“: Beratungshilfe (Anwalt für 15 €, mit Antrag als
+  Vorlage), Verbraucherzentrale, Schuldnerberatung, Mieterverein,
+  Gewerkschaft, Versicherungsombudsmann, Sozialverband – passend zur Briefart.
+- Offene Fristen auf der Startseite: „Erledigt“, „Neuer Brief dazu“
+  (Folgebrief landet in derselben Akte, alte Frist wird als überholt
+  abgehakt) und Hinweise, wenn eine Frist verpasst wurde.
+- E-Mail-Erinnerung: einmal zur Vorfrist, einmal am Tag vor Fristablauf,
+  eine Sammelmail pro Tag; abschaltbar unter Mein Konto.
+- Oberfläche auf Deutsch und Englisch.
 
 
 25. BEWUSST NICHT ENTHALTEN (braucht Zulassung/Vertrag)

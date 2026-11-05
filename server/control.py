@@ -92,7 +92,7 @@ def principal(c,user,request):
                 if review:target=review['case_id']
             if target not in allowed:raise HTTPException(403,'case_not_granted')
         else:raise HTTPException(403,'case_scoped_member_use_case_workspace')
-    elif not path.startswith(('/api/cases','/api/contacts','/api/inbox','/api/tasks/','/api/cost-reviews','/api/fee-tables','/api/deadlines/','/api/legal/','/api/research/status','/api/exports/','/api/courts/','/api/snippets','/api/letter-assistant/')):
+    elif not path.startswith(('/api/cases','/api/contacts','/api/inbox','/api/tasks/','/api/cost-reviews','/api/fee-tables','/api/deadlines/','/api/legal/','/api/research/status','/api/exports/','/api/courts/','/api/snippets','/api/letter-assistant/','/api/reminders/')):
         raise HTTPException(403,'personal_account_endpoint')
     owner_row=c.execute('SELECT letterhead_id FROM users WHERE id=?',(owner,)).fetchone()
     return {**user,'id':owner,'actor_id':actor,'workspace_role':member['role'],'allowed_cases':allowed,'letterhead_id':owner_row['letterhead_id']}
