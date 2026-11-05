@@ -22,7 +22,7 @@ export function SchimmelpilzFigure({ pose = "wave", talking = false, size = 150,
 }
 
 // Speech bubble that writes its text like someone talking; click or reduced motion shows it at once.
-function useTyped(text) {
+export function useTyped(text) {
   const [shown, setShown] = useState(0);
   useEffect(() => {
     const quiet = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;

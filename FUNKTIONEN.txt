@@ -384,6 +384,10 @@ Inhalt
 - E-Mail-Erinnerung: einmal zur Vorfrist, einmal am Tag vor Fristablauf,
   eine Sammelmail pro Tag; abschaltbar unter Mein Konto.
 - Oberfläche auf Deutsch und Englisch.
+- Rundgang beim ersten Anmelden (Privatpersonen): Frau Schimmelpilz zeigt
+  Schritt für Schritt Brief-Assistent, Vorgänge, Fristen, Unterlagen,
+  Schreiben, Vorlagen und Konto; jederzeit wieder über „Rundgang mit
+  Frau Schimmelpilz“ in der Seitenleiste.
 - Frau Schimmelpilz führt als Comicfigur durch den Ablauf: fragt, ob Post
   gekommen ist, legt die Akte an, liest den Brief, stellt die Fragen und
   meldet die Frist – mit Ablaufleiste wie in der Kanzlei (Post annehmen,
