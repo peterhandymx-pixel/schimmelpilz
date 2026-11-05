@@ -32,3 +32,14 @@
   .tour-card p { font-size: 15px; min-height: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .tour-spot, .tour-guide, .tour-figure { transition: none; animation: none; } }
+.tour-help { position: relative; }
+.tour-help-list { list-style: none; margin: 6px 12px; padding: 6px; border: 1px solid #dce3d7; border-radius: 8px; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.08); display: grid; gap: 2px; }
+.tour-help-list button { width: 100%; display: flex; gap: 8px; align-items: center; text-align: left; font: inherit; font-size: 13px; padding: 7px 8px; border: 0; border-radius: 6px; background: none; color: #263e31; cursor: pointer; }
+.tour-help-list button:hover { background: #eef6f0; } .tour-help-list .done { color: #0b5a46; }
+.tour-offer { position: fixed; right: 20px; bottom: 20px; z-index: 1500; display: flex; gap: 12px; align-items: flex-end; max-width: 380px; background: #fff; border: 2px solid #263e31; border-radius: 16px; padding: 12px 14px; box-shadow: 4px 4px 0 #263e31; animation: tour-hop .5s ease; }
+.tour-offer img { width: 70px; flex: none; }
+.tour-offer strong { font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: #a27d49; }
+.tour-offer p { margin: 4px 0 10px; font-size: 14px; line-height: 1.45; color: #1f2d26; }
+.tour-offer span { display: flex; gap: 8px; flex-wrap: wrap; } .tour-offer .sp-reply { padding: 7px 12px; font-size: 13px; }
+.tour-offer-close { position: absolute; top: 6px; right: 6px; background: none; border: 0; cursor: pointer; color: #6f7d6e; }
+@media (max-width: 640px) { .tour-offer { left: 12px; right: 12px; bottom: 12px; max-width: none; } }

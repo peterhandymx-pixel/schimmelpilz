@@ -388,6 +388,9 @@ Inhalt
   Schritt für Schritt Brief-Assistent, Vorgänge, Fristen, Unterlagen,
   Schreiben, Vorlagen und Konto; jederzeit wieder über „Rundgang mit
   Frau Schimmelpilz“ in der Seitenleiste.
+- Kanzleien und Unternehmen: kurzer fachlicher Rundgang „Erste Schritte“
+  beim ersten Anmelden; „Diktat & Schreibpool“ (Kanzlei) wird beim ersten
+  Öffnen einmal angeboten; alle Rundgänge unter „Hilfe & Rundgänge“.
 - Frau Schimmelpilz führt als Comicfigur durch den Ablauf: fragt, ob Post
   gekommen ist, legt die Akte an, liest den Brief, stellt die Fragen und
   meldet die Frist – mit Ablaufleiste wie in der Kanzlei (Post annehmen,
