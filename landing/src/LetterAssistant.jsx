@@ -177,6 +177,25 @@ const FIELD_TYPES = { letter_date: "date", letter_deadline: "date", amount: "num
 
 const PROVISIONAL_TITLES = ["Eingegangener Brief (in Prüfung)", "Received letter (being checked)"];
 
+// The case description gets a short entry, never the raw letter: an uploaded original is referenced
+// (it is shown in the E-Akte), typed text is tidied and cut at a sentence boundary.
+export function letterNote(text, fileName) {
+  if (fileName) return `Original: ${fileName} (in der E-Akte unter „Ansehen“)`;
+  const clean = (text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  if (clean.length <= 900) return `Brieftext (eingefügt): ${clean}`;
+  const cut = clean.slice(0, 900), end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  return `Brieftext (eingefügt, Anfang): ${end > 300 ? cut.slice(0, end + 1) : cut.slice(0, cut.lastIndexOf(" "))} […]`;
+}
+// Keeps the description within its limit by dropping the oldest whole entries, never cutting mid-sentence.
+export function clipDescription(value, limit = 4000) {
+  if (value.length <= limit) return value;
+  const parts = value.split(/\n\n(?=— )/);
+  while (parts.length > 1 && parts.join("\n\n").length > limit - 40) parts.shift();
+  const kept = parts.join("\n\n");
+  return kept.length <= limit ? `[… ältere Einträge gekürzt]\n\n${kept}` : kept.slice(0, limit - 1) + "…";
+}
+
 // Reads the text of an uploaded letter once the automatic text recognition has finished (at most about two minutes).
 async function readUploadedText(caseId, documentId, onProgress) {
   for (let attempt = 0; attempt < 60; attempt++) {
@@ -227,7 +246,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const [sent, setSent] = useState(false);
   const [caseQuery, setCaseQuery] = useState("");
   // id of the letter uploaded into the provisional case, so it can move to an existing case.
-  const [uploadedDoc, setUploadedDoc] = useState("");
+  const [uploadedDoc, setUploadedDoc] = useState(""), [uploadedName, setUploadedName] = useState("");
   const fileInput = useRef(null);
   const today = localToday();
   const profileAddress = user?.street ? `${user.street}\n${user.postal_code} ${user.city}` : "";
@@ -243,7 +262,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const questions = kinds.find(item => item.id === kind)?.questions || [];
   const openDeadlines = taskRows(storage.cases).filter(row => !row.completed && row.due_on && ["deadline", "notfrist"].includes(row.kind) && !row.caseItem.archived_at).slice(0, 6);
 
-  const reset = () => { setSent(false); setPost((storage.cases || []).some(item => !item.archived_at) ? "matter" : "yes"); setCaseQuery(""); setAiSummary(""); setExplanation(null); setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDoc(""); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
+  const reset = () => { setSent(false); setPost((storage.cases || []).some(item => !item.archived_at) ? "matter" : "yes"); setCaseQuery(""); setAiSummary(""); setExplanation(null); setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDoc(""); setUploadedName(""); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
 
   const analyze = async letterText => {
     if (letterText.trim().length < 20) {
@@ -259,6 +278,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     if (!file) return;
     setError(""); setStep("reading"); setProgress(c.uploading);
     if (file.type.startsWith("image/")) setPreview(URL.createObjectURL(file));
+    setUploadedName(file.name);
     let target = followCase;
     try {
       if (!target) {
@@ -324,8 +344,9 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       }
       const party = fields.creditor || fields.sender;
       const title = followCase ? followCase.title : `${outcome.kind.label}${party ? ` – ${party}` : ""}`.slice(0, 120);
-      const entry = `${outcome.kind.label}${given.received_on ? ` (eingegangen ${dateLabel(given.received_on, "de")})` : ""}: ${outcome.summary}${text ? `\n\nBrieftext (Auszug):\n${text.slice(0, 1800)}` : ""}`;
-      const description = (followCase ? `${followCase.description}\n\n— Neuer Brief —\n${entry}` : `${entry}\n\nAngelegt mit dem Brief-Assistenten.`).slice(-4000);
+      const source = letterNote(text, uploadedName);
+      const entry = `${outcome.kind.label}${given.received_on ? ` (eingegangen ${dateLabel(given.received_on, "de")})` : ""}: ${aiSummary || outcome.summary}${source ? `\n${source}` : ""}`;
+      const description = clipDescription(followCase ? `${followCase.description}\n\n— Neuer Brief —\n${entry}` : `${entry}\n\nAngelegt mit dem Brief-Assistenten.`);
       // Post from a court or authority: the sender is the court, the opponent is the party behind the letter.
       const official = /gericht|mahngericht|gerichtsvollzieher/i.test(fields.sender || "") || ["court", "enforcement"].includes(outcome.kind.stage);
       const courtLine = official ? [fields.court || fields.sender, fields.sender_address].filter(Boolean).join(", ") : "";
@@ -366,7 +387,8 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const fileOwn = async existing => {
     setError("");
     try {
-      const note = `— Eigenes Schreiben${fields.letter_date ? ` vom ${dateLabel(fields.letter_date, "de")}` : ""} —\n${aiSummary || ""}${text ? `\n\nText (Auszug):\n${text.slice(0, 1500)}` : ""}`;
+      const source = letterNote(text, uploadedName);
+      const note = `— Eigenes Schreiben${fields.letter_date ? ` vom ${dateLabel(fields.letter_date, "de")}` : ""} —\n${aiSummary || ""}${source ? `\n${source}` : ""}`;
       let target = existing || followCase;
       if (target && provisional && uploadedDoc) {
         target = await request("/letter-assistant/move-letter", json("POST", { from_case_id: caseItem.id, document_id: uploadedDoc, to_case_id: target.id }));
@@ -374,7 +396,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       }
       const details = target ? target.details : { audience: user.audience, client_name: user.organisation || user.full_name, client_address: profileAddress, client_email: user.email };
       const filled = { ...details, court: details.court || fields.court || "", court_reference: details.court_reference || fields.reference || "", opponent_name: details.opponent_name || fields.creditor || "" };
-      if (target) target = await storage.updateCase(target.id, { title: target.title, description: `${target.description || ""}\n\n${note}`.slice(-4000), language: "de", details: filled });
+      if (target) target = await storage.updateCase(target.id, { title: target.title, description: clipDescription(`${target.description || ""}\n\n${note}`), language: "de", details: filled });
       else if (caseItem) target = await storage.updateCase(caseItem.id, { title: g.ownTitle(fields.court, fields.reference).slice(0, 120), description: note.slice(0, 4000), language: "de", details: filled });
       else target = await storage.createCase({ title: g.ownTitle(fields.court, fields.reference).slice(0, 120), description: note.slice(0, 4000), language: "de", details: filled });
       setCaseItem(target); setSaved(target); setStep("ownDone"); storage.reload?.();
