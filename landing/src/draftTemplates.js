@@ -25,12 +25,17 @@ export function draftSubject(body = "") {
   return (lines.find(line => /^[A-ZÄÖÜ]{5,}$/.test(line)) || "").slice(0, 120);
 }
 
-export function documentTemplate(item, language = "de", kind = "letter", recipient = "") {
+// jurisdiction: the court suggestion from /cases/{id}/court-suggestion ({ok, court, basis} or {ok:false, message}).
+export function documentTemplate(item, language = "de", kind = "letter", recipient = "", jurisdiction = null) {
   const d = item.details || {};
   const de = language === "de";
   const own = [d.client_name, d.client_address].filter(Boolean).join("\n") || (de ? "[Name und Anschrift der eigenen Partei]" : "[Own party’s name and address]");
   const opposite = [d.opponent_name, d.opponent_address].filter(Boolean).join("\n") || (de ? "[Name und Anschrift der Gegenseite]" : "[Opposing party’s name and address]");
-  const to = recipient.trim() || (kind === "claim" && d.court ? d.court.split(/,\s*/).join("\n") : "") || (de ? "[Empfänger und vollständige Anschrift]" : "[Recipient and full address]");
+  const missingCourt = kind === "claim" && jurisdiction && !jurisdiction.ok ? `[GERICHT FEHLT – ${jurisdiction.message}]` : "";
+  const to = recipient.trim() || (kind === "claim" && d.court ? d.court.split(/,\s*/).join("\n") : "") || missingCourt || (de ? "[Empfänger und vollständige Anschrift]" : "[Recipient and full address]");
+  const competence = jurisdiction?.ok && (!d.court || d.court.startsWith(jurisdiction.name))
+    ? `Das angerufene Gericht ist zuständig. ${jurisdiction.basis}\n[Zuständigkeit im Einzelfall prüfen, etwa besondere Gerichtsstände (§§ 20 ff. ZPO) oder eine Gerichtsstandsvereinbarung.]`
+    : "[Sachliche und örtliche Zuständigkeit, Verfahrensart, Vertretung und Form prüfen und begründen.]";
   const date = de ? "[Ort, Datum]" : "[Place, date]";
   const ref = de ? `Unser Aktenzeichen: ${item.reference}` : `Our reference: ${item.reference}`;
   const external = [[de ? "Gericht / Behörde" : "Court / authority", d.court_reference], [de ? "Gegenseite" : "Opposing party", d.opponent_reference]].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join("\n");
@@ -43,7 +48,7 @@ export function documentTemplate(item, language = "de", kind = "letter", recipie
     const claimant = d.client_role === "respondent" ? (de ? "[Klagende Partei – eigene Partei ist als Beklagte erfasst; Rollen prüfen]" : "[Claimant – own party recorded as respondent; verify roles]") : own;
     const value = d.dispute_value == null ? (de ? "[Wert ergänzen / klären]" : "[Complete / establish value]") : `${Number(d.dispute_value).toLocaleString(de ? "de-DE" : "en-GB", { minimumFractionDigits: 2 })} ${d.currency || "EUR"}`;
     return de
-      ? `${header}\n\nKLAGEENTWURF\nwegen: ${item.title}\n\nKlagende Partei:\n${claimant}\n\nBeklagte Partei:\n${opposite}\n\nStreitwert: ${value}\n\nI. Anträge\n[Bestimmten Klageantrag mit beantragter Rechtsfolge formulieren. Streitwert ist nicht automatisch die Klageforderung.]\n[Etwaige weitere Anträge nach Prüfung ergänzen.]\n\nII. Sachverhalt\n${facts}\n\nIII. Beweismittel\n[Zu jeder streitigen Tatsache Beweismittel, Zeugen oder Anlage zuordnen.]\n\nIV. Rechtliche Begründung\n[Anspruchsgrundlage, Voraussetzungen, Einwendungen und geprüfte Fundstellen ergänzen.]\n\nV. Zuständigkeit und Verfahrensangaben\n[Sachliche und örtliche Zuständigkeit, Verfahrensart, Vertretung und Form prüfen und begründen.]\n[Vorherige Streitschlichtung / Mediation und weitere erforderliche Angaben ergänzen.]\n\nAuftragsziel aus der Akte:\n${objective}\n\n${attachments}\n\n[Name / Unterschrift]`
+      ? `${header}\n\nKLAGEENTWURF\nwegen: ${item.title}\n\nKlagende Partei:\n${claimant}\n\nBeklagte Partei:\n${opposite}\n\nStreitwert: ${value}\n\nI. Anträge\n[Bestimmten Klageantrag mit beantragter Rechtsfolge formulieren. Streitwert ist nicht automatisch die Klageforderung.]\n[Etwaige weitere Anträge nach Prüfung ergänzen.]\n\nII. Sachverhalt\n${facts}\n\nIII. Beweismittel\n[Zu jeder streitigen Tatsache Beweismittel, Zeugen oder Anlage zuordnen.]\n\nIV. Rechtliche Begründung\n[Anspruchsgrundlage, Voraussetzungen, Einwendungen und geprüfte Fundstellen ergänzen.]\n\nV. Zuständigkeit und Verfahrensangaben\n${competence}\n[Vorherige Streitschlichtung / Mediation und weitere erforderliche Angaben ergänzen.]\n\nAuftragsziel aus der Akte:\n${objective}\n\n${attachments}\n\n[Name / Unterschrift]`
       : `${header}\n\nCLAIM DRAFT\nSubject: ${item.title}\n\nClaimant:\n${claimant}\n\nDefendant:\n${opposite}\n\nValue in dispute: ${value}\n\nI. Relief sought\n[State the specific relief sought. Matter value is not automatically the sum claimed.]\n[Add other requests after review.]\n\nII. Facts\n${facts}\n\nIII. Evidence\n[Identify evidence, witnesses or an attachment for each disputed fact.]\n\nIV. Legal grounds\n[Complete the legal basis, requirements, defences and verified references.]\n\nV. Jurisdiction and procedure\n[Verify and explain subject-matter and territorial jurisdiction, procedure, representation and form.]\n[Add prior conciliation / mediation and other required particulars.]\n\nInstructions from the case file:\n${objective}\n\n${attachments}\n\n[Name / signature]`;
   }
   const titles = de ? { letter: "Anschreiben", application: "Antrag", objection: "Widerspruch", response: "Stellungnahme / Erwiderung" } : { letter: "Correspondence", application: "Application", objection: "Objection", response: "Written response / defence" };

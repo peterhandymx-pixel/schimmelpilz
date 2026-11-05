@@ -5,7 +5,7 @@ import { CaseIntake, intakeCopy } from "./CaseIntake.jsx";
 import { FeatureOverview } from "./FeatureOverview.jsx";
 import { PricingOverview } from './PricingOverview.jsx';
 import { documentTemplate, draftCopy } from "./draftTemplates.js";
-import { useCaseStorage, readPreference, writePreference } from "./useCaseStorage.js";
+import { useCaseStorage, readPreference, writePreference, request } from "./useCaseStorage.js";
 import { AuthForm, authCopy } from "./AuthForm.jsx";
 import { DraftPdfPreview } from './DraftPdfPreview.jsx';
 import { DraftReview } from './DraftReview.jsx';
@@ -246,11 +246,27 @@ export function App() {
     setDraftBody(initialBody);
     setDraftError(""); setModal("draft");
   };
-  const changeDraftSettings = (kind, language, recipient) => {
+  // A claim goes to a court: the app determines it (court type by value and area, place by the relevant address)
+  // and records it in the case, so the draft never starts with an empty court.
+  const withCourt = async (item, kind, recipient) => {
+    if (kind !== "claim" || recipient.trim() || !item) return { item, jurisdiction: null };
+    try {
+      const jurisdiction = await request(`/cases/${item.id}/court-suggestion`);
+      if (jurisdiction.ok && !item.details?.court) {
+        const updated = await storage.updateCase(item.id, { title: item.title, description: item.description, language: item.language || "de", details: { ...item.details, court: jurisdiction.court.slice(0, 160) } });
+        showToast(lang === "de" ? `Zuständiges Gericht ermittelt: ${jurisdiction.name}` : `Competent court determined: ${jurisdiction.name}`);
+        return { item: updated, jurisdiction };
+      }
+      return { item, jurisdiction };
+    } catch { return { item, jurisdiction: null }; }
+  };
+  const changeDraftSettings = async (kind, language, recipient) => {
     setDraftKind(kind); setDraftLanguage(language); setDraftRecipient(recipient);
     if (storage.selectedCase && draftBody === generatedDraft.current) {
-      const body = documentTemplate(storage.selectedCase, language, kind, recipient);
-      generatedDraft.current = body; setDraftBody(body);
+      const draftBefore = draftBody;
+      const { item, jurisdiction } = await withCourt(storage.selectedCase, kind, recipient);
+      const body = documentTemplate(item, language, kind, recipient, jurisdiction);
+      if (generatedDraft.current === draftBefore) { generatedDraft.current = body; setDraftBody(body); }
     }
   };
   // A text block goes in at the cursor of the draft editor (or at the end).
@@ -259,8 +275,9 @@ export function App() {
     const at = editor?.selectionStart || draftBody.length;
     setDraftBody(draftBody.slice(0, at) + text + draftBody.slice(at));
   };
-  const insertDraftTemplate = () => {
-    const body = documentTemplate(storage.selectedCase, draftLanguage, draftKind, draftRecipient);
+  const insertDraftTemplate = async () => {
+    const { item, jurisdiction } = await withCourt(storage.selectedCase, draftKind, draftRecipient);
+    const body = documentTemplate(item, draftLanguage, draftKind, draftRecipient, jurisdiction);
     generatedDraft.current = body; setDraftBody(body);
   };
   const saveDraft = async () => {

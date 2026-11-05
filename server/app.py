@@ -1422,6 +1422,13 @@ app.include_router(case_tools.router(db, require_user, now, record_activity, row
 app.include_router(calendar_export.router(db, require_user, now, pre_deadline))
 app.include_router(fee_tables.router(require_user))
 app.include_router(court_lookup.router(require_user))
+
+
+@app.get("/api/cases/{case_id}/court-suggestion")
+def court_suggestion(case_id: str, area: Literal["", "contract", "tenancy", "employment", "social", "administrative"] = "", user: dict = Depends(require_user)):
+    """Competent first-instance court for a claim in this case (court type by value/area, place by the relevant address)."""
+    case = get_case(case_id, user["id"])
+    return court_lookup.suggest(case["details"], area or None)
 app.include_router(invoices.router(db, require_user, now, record_activity, compose_pdf, invoice_letterhead))
 app.include_router(claims.router(db, require_user, now, record_activity, compose_pdf))
 app.include_router(bookkeeping.router(db, require_user, now, record_activity))

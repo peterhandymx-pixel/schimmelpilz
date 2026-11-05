@@ -1,11 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { request } from "./useCaseStorage.js";
 import { IconCopy, IconDownload, IconEdit, IconPlus } from "@tabler/icons-react";
 import { SAMPLES, SAMPLE_AREAS, sampleContext } from "./documentSamples.js";
 import { draftCopy } from "./draftTemplates.js";
 import { matches } from "./workbench.js";
 
 // Library of German sample documents: pick one, preview it with a case's data, then copy, download or open it as a draft.
-export function SampleLibrary({ lang, cases, selectedCase, query = "", onDraft, onNewCase, canEdit = true }) {
+// Which court a sample is addressed to: none, or the procedure area its fallback text names.
+function courtNeed(sample) {
+  let needed = false, area = "";
+  const probe = { ...sampleContext(null), courtOr: fallback => { needed = true; area = /Sozialgericht/.test(fallback) ? "social" : /Arbeitsgericht/.test(fallback) ? "employment" : /Verwaltungsgericht/.test(fallback) ? "administrative" : ""; return fallback; } };
+  Object.defineProperty(probe, "court", { get: () => { needed = true; return "[Gericht, Anschrift]"; } });
+  try { sample.body(probe); } catch { return null; }
+  return needed ? { area } : null;
+}
+
+export function SampleLibrary({ lang, cases, selectedCase, query = "", onDraft, onNewCase, onCaseUpdate, canEdit = true }) {
   const de = lang === "de";
   const active = cases.filter(item => !item.archived_at);
   const [area, setArea] = useState("all"), [chosen, setChosen] = useState(SAMPLES[0].id), [notice, setNotice] = useState("");
@@ -14,6 +24,21 @@ export function SampleLibrary({ lang, cases, selectedCase, query = "", onDraft, 
   const shown = SAMPLES.filter(sample => (area === "all" || sample.area === area) && matches(query, sample.title, sample.norms));
   const sample = SAMPLES.find(item => item.id === chosen) || SAMPLES[0];
   const body = useMemo(() => sample.body(sampleContext(target)), [sample, target]);
+  // A court-addressed sample in a case without a court: determine the competent court and record it in the case.
+  const [courtNote, setCourtNote] = useState(null);
+  useEffect(() => {
+    setCourtNote(null);
+    const need = courtNeed(sample);
+    if (!need || !target || target.details?.court || !canEdit) return;
+    let alive = true;
+    request(`/cases/${target.id}/court-suggestion${need.area ? `?area=${need.area}` : ""}`).then(async found => {
+      if (!alive) return;
+      if (!found.ok) { setCourtNote({ warn: true, text: found.message }); return; }
+      await onCaseUpdate?.(target, { ...target.details, court: found.court.slice(0, 160) });
+      if (alive) setCourtNote({ warn: false, text: `${de ? "Zuständiges Gericht ermittelt und in die Akte eingetragen" : "Competent court determined and recorded"}: ${found.name}. ${found.basis}` });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [sample.id, target?.id, target?.details?.court]);
   const kindName = draftCopy[lang].types.find(([id]) => id === sample.kind)?.[1];
   const areaName = id => SAMPLE_AREAS.find(([key]) => key === id)?.[1];
   const copy = async () => { try { await navigator.clipboard.writeText(body); setNotice(de ? "Text in die Zwischenablage kopiert." : "Copied to clipboard."); } catch { setNotice(de ? "Kopieren nicht möglich – Text bitte markieren und kopieren." : "Copy failed – select the text and copy it manually."); } };
@@ -48,6 +73,7 @@ export function SampleLibrary({ lang, cases, selectedCase, query = "", onDraft, 
           <button className="desk-button" onClick={copy}><IconCopy size={17} />{de ? "Kopieren" : "Copy"}</button>
           <button className="desk-button" onClick={download}><IconDownload size={17} />{de ? "Als Textdatei" : "As text file"}</button>
         </div>
+        {courtNote && <p className={courtNote.warn ? "storage-error" : "storage-notice"} role="status">{courtNote.text}</p>}
         {notice && <p className="storage-notice" role="status">{notice}</p>}
         <pre className="sample-text">{body}</pre>
         <p className="field-help">{de ? "Muster sind Ausgangspunkte, keine Rechtsberatung. Platzhalter in [Klammern] ergänzen; Normen, Fristen, Zuständigkeit und Form für den Einzelfall prüfen." : "Samples are starting points, not legal advice. Complete [placeholders]; check norms, deadlines, jurisdiction and form for the individual case."}</p>

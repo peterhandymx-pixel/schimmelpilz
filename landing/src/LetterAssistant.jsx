@@ -11,8 +11,10 @@ import { CitedAnswer, CaseLawList, CitationCheck, SkillNote } from "./LegalSourc
 const G = {
   de: {
     track: ["Post annehmen", "Akte anlegen", "Brief lesen", "Angaben prüfen", "Fragen klären", "Frist notieren", "Antwort vorbereiten"],
-    hello: name => `Hallo${name ? ` ${name}` : ""}, ich bin Frau Schimmelpilz, Ihre Rechtsassistentin.\nHaben Sie Post bekommen?`,
-    yesPost: "Ja, ich habe einen Brief bekommen", noPost: "Nein – was steht bei mir an?", backPost: "Doch, ich habe einen Brief",
+    hello: name => `Hallo${name ? ` ${name}` : ""}, ich bin Frau Schimmelpilz, Ihre Rechtsassistentin.\nGeht es um Post, die Sie bekommen haben – oder um ein Schreiben, das Sie verschickt haben?`,
+    yesPost: "Ich habe einen Brief bekommen", sentPost: "Ich habe etwas verschickt", noPost: "Nichts davon – was steht bei mir an?",
+    bringSent: "Gut, dann lege ich Ihr Schreiben zur Akte. Laden Sie es hoch oder fügen Sie den Text ein – Fristen muss ich dafür nicht berechnen.",
+    ownSent: summary => `Ich habe Ihr Schreiben gelesen. ${summary}\nIch lege es zur Akte, damit alles beisammen ist.`, backPost: "Doch, ich habe einen Brief",
     bring: "Prima, dann her damit! Fotografieren Sie den Brief oder tippen Sie ihn ab. Ich lege eine Akte an, lese ihn genau durch und sage Ihnen, was zu tun ist – und bis wann.",
     follow: title => `Ein neuer Brief zur Akte „${title}“? Her damit – ich lege ihn dazu.`,
     openList: n => `Dann schauen wir in Ihre Akten: ${n === 1 ? "eine offene Frist" : `${n} offene Fristen`}. Ist da inzwischen etwas passiert?`,
@@ -48,8 +50,10 @@ const G = {
   },
   en: {
     track: ["Receive post", "Open file", "Read letter", "Check details", "Questions", "Note deadline", "Prepare reply"],
-    hello: name => `Hello${name ? ` ${name}` : ""}, I'm Ms Schimmelpilz, your legal assistant.\nDid you receive a letter?`,
-    yesPost: "Yes, I received a letter", noPost: "No – what is pending?", backPost: "Actually, I have a letter",
+    hello: name => `Hello${name ? ` ${name}` : ""}, I'm Ms Schimmelpilz, your legal assistant.\nIs this about post you received – or a letter you sent?`,
+    yesPost: "I received a letter", sentPost: "I sent something", noPost: "Neither – what is pending?",
+    bringSent: "Good, I'll file your letter. Upload it or paste the text – no deadline to calculate for it.",
+    ownSent: summary => `I've read your letter. ${summary}\nI'll put it in the file so everything is together.`, backPost: "Actually, I have a letter",
     bring: "Great, let's have it! Take a photo of the letter or type it in. I'll open a file, read it carefully and tell you what to do – and by when.",
     follow: title => `A new letter for "${title}"? Let's have it – I'll add it to the file.`,
     openList: n => `Then let's look at your files: ${n === 1 ? "one open deadline" : `${n} open deadlines`}. Has anything happened since?`,
@@ -219,6 +223,8 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const [attachOnly, setAttachOnly] = useState(false);
   // The assistant first asks whether post has arrived: ask | yes | no.
   const [post, setPost] = useState("ask");
+  // true when the person said the letter is one they sent; the AI's reading only double-checks it.
+  const [sent, setSent] = useState(false);
   const [caseQuery, setCaseQuery] = useState("");
   // id of the letter uploaded into the provisional case, so it can move to an existing case.
   const [uploadedDoc, setUploadedDoc] = useState("");
@@ -237,7 +243,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const questions = kinds.find(item => item.id === kind)?.questions || [];
   const openDeadlines = taskRows(storage.cases).filter(row => !row.completed && row.due_on && ["deadline", "notfrist"].includes(row.kind) && !row.caseItem.archived_at).slice(0, 6);
 
-  const reset = () => { setPost((storage.cases || []).some(item => !item.archived_at) ? "matter" : "yes"); setCaseQuery(""); setAiSummary(""); setExplanation(null); setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDoc(""); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
+  const reset = () => { setSent(false); setPost((storage.cases || []).some(item => !item.archived_at) ? "matter" : "yes"); setCaseQuery(""); setAiSummary(""); setExplanation(null); setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDoc(""); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
 
   const analyze = async letterText => {
     if (letterText.trim().length < 20) {
@@ -246,7 +252,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     }
     const analysis = await request("/letter-assistant/analyze", json("POST", { text: letterText.slice(0, 120000), use_ai: aiOn }));
     setKind(analysis.kind.id); setLegalArea(analysis.kind.legal_area); setFields(analysis.fields); setAiSummary(analysis.ai ? analysis.summary : "");
-    setStep(analysis.direction === "outgoing" ? "own" : "confirm");
+    setStep(sent || analysis.direction === "outgoing" ? "own" : "confirm");
   };
 
   const startWithFile = async file => {
@@ -386,7 +392,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const needle = caseQuery.trim().toLowerCase();
   const caseHits = activeCases.filter(item => !needle || [item.reference, item.title, item.details?.court_reference, item.details?.opponent_reference, item.details?.opponent_name, item.details?.client_name]
     .some(value => (value || "").toLowerCase().includes(needle))).slice(0, 6);
-  const gotPost = () => { setCaseQuery(""); setPost(activeCases.length ? "matter" : "yes"); };
+  const gotPost = (outgoing = false) => { setSent(outgoing); setCaseQuery(""); setPost(activeCases.length ? "matter" : "yes"); };
   const pickCase = item => { setFollowCase(item); setAttachOnly(true); setPost("yes"); };
   const readingStage = progress === c.uploading ? 0 : text || progress === c.analysing ? 2 : 1;
   // The assistant's reaction to the result: alarmed for short deadlines, relaxed when there is time.
@@ -406,15 +412,16 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       <OfficeTrack steps={g.track} current={0} />
       {followCase ? <AssistantSays pose="file" mood="smile" text={g.follow(followCase.title)} />
         : post === "ask" ? <AssistantSays pose="wave" mood="grin" text={g.hello(firstName)}>
-          <button className="sp-reply primary" onClick={gotPost}><IconMailOpened size={17} />{g.yesPost}</button>
+          <button className="sp-reply primary" onClick={() => gotPost(false)}><IconMailOpened size={17} />{g.yesPost}</button>
+          <button className="sp-reply" onClick={() => gotPost(true)}><IconMailForward size={17} />{g.sentPost}</button>
           <button className="sp-reply" onClick={() => setPost("no")}>{g.noPost}</button></AssistantSays>
         : post === "no" ? <AssistantSays pose={openDeadlines.length ? "file" : "cheer"} mood={openDeadlines.length ? "focus" : "grin"} text={openDeadlines.length ? g.openList(openDeadlines.length) : g.calm}>
-          <button className="sp-reply primary" onClick={gotPost}><IconMailOpened size={17} />{g.backPost}</button></AssistantSays>
+          <button className="sp-reply primary" onClick={() => gotPost(false)}><IconMailOpened size={17} />{g.backPost}</button></AssistantSays>
         : post === "matter" ? <AssistantSays pose="think" mood="think" text={g.matter}>
           <button className="sp-reply primary" onClick={() => setPost("yes")}>{g.matterNew}</button>
           <button className="sp-reply" onClick={() => setPost("pick")}><IconFolder size={17} />{g.matterOld}</button></AssistantSays>
         : post === "pick" ? <AssistantSays pose="file" mood="focus" text={g.pick} />
-        : <AssistantSays pose="point" mood="grin" text={g.bring} />}
+        : <AssistantSays pose="point" mood="grin" text={sent ? g.bringSent : g.bring} />}
       {!followCase && post === "pick" && <div className="la-card la-pick">
         <label>{g.pickLabel}<input autoFocus value={caseQuery} onChange={event => setCaseQuery(event.target.value)} placeholder="SCH-2026-… / 26-1234567-0-1 / Name" /></label>
         {caseHits.length ? <ul className="la-followups">{caseHits.map(item => <li key={item.id}><button className="desk-link la-followup-title" onClick={() => pickCase(item)}>
@@ -448,7 +455,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     {step === "evaluating" && <><OfficeTrack steps={g.track} current={5} busy /><AssistantSays pose="read" mood="focus" text={g.calculating} /></>}
 
     {step === "own" && <><OfficeTrack steps={g.track} current={2} />
-      <AssistantSays pose="think" mood="focus" text={g.own(aiSummary)}>
+      <AssistantSays pose={sent ? "file" : "think"} mood="focus" text={sent ? g.ownSent(aiSummary) : g.own(aiSummary)}>
         {(followCase || matchingCase) && <button className="sp-reply primary" onClick={() => fileOwn(followCase || matchingCase)}><IconFolder size={17} />{g.ownMatch((followCase || matchingCase).reference, (followCase || matchingCase).title)}</button>}
         {!followCase && <button className={followCase || matchingCase ? "sp-reply" : "sp-reply primary"} onClick={() => fileOwn(null)}>{g.ownNew}</button>}
         <button className="sp-reply" onClick={() => setStep("confirm")}>{g.ownIncoming}</button>

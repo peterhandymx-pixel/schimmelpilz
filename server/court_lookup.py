@@ -98,3 +98,64 @@ def router(require_user):
             raise HTTPException(503, 'directory_unavailable') from None
 
     return routes
+
+
+# ---------------------------------------------------------------- competent court for a draft
+
+AMTSGERICHT_LIMIT = 10_000  # § 23 Nr. 1 GVG (Fassung ab 01.01.2026)
+LIMIT_TEXT = '10.000 €'
+PROCEDURE_AREAS = {'employment': 'arbeit', 'social': 'sozial', 'administrative': 'verwaltung'}
+ADDRESS = re.compile(r'\b(\d{5})\s+([A-Za-zÄÖÜäöüß][^\n,;]*)')
+
+
+def _place(address):
+    match = ADDRESS.search(address or '')
+    return (match.group(1), match.group(2).strip()) if match else (None, None)
+
+
+def _format(court):
+    lines = court['street'] or court['postal']
+    return ', '.join([court['name'], *lines])
+
+
+def suggest(details, legal_area=None):
+    """The court a claim in this case goes to: which court type, which place, and why.
+
+    Returns {'ok': True, 'court': 'Name, Straße, PLZ Ort', 'basis': '…', ...} or {'ok': False, 'missing': …, 'message': …}.
+    """
+    area = PROCEDURE_AREAS.get(legal_area or details.get('legal_area') or '', 'zivil')
+    client, opponent = details.get('client_address') or '', details.get('opponent_address') or ''
+    value = details.get('dispute_value')
+    tenancy = (legal_area or details.get('legal_area')) == 'tenancy'
+    if area == 'sozial':
+        address, who, local = client, 'der klagenden Partei', 'Wohnsitz der klagenden Partei (§ 57 Abs. 1 SGG)'
+    elif area == 'zivil' and tenancy:
+        address, who, local = details.get('property_address') or client, 'der Mietwohnung', 'Ort der Wohnung, ausschließlich (§ 29a Abs. 1 ZPO)'
+    else:
+        address, who, local = opponent, 'der Gegenseite', {'arbeit': 'Sitz bzw. Wohnsitz der beklagten Partei (§ 46 Abs. 2 ArbGG, §§ 12, 13, 17 ZPO); alternativ Arbeitsort (§ 48 Abs. 1a ArbGG)',
+                                                           'verwaltung': 'Sitz der Behörde als Ausgangspunkt; § 52 VwGO im Einzelfall prüfen (z. B. Wohnsitz bei Bundesbehörden, Ort des Grundstücks)'}.get(area, 'allgemeiner Gerichtsstand der beklagten Partei (§§ 12, 13, 17 ZPO)')
+    postal, place = _place(address)
+    if not postal:
+        return {'ok': False, 'missing': 'opponent_address' if address is opponent else 'client_address',
+                'message': f'Das zuständige Gericht kann nicht bestimmt werden: Die Anschrift {who} (mit Postleitzahl) fehlt in der Akte.'}
+    if area == 'zivil':
+        if tenancy:
+            prefix, subject = 'Amtsgericht', 'Wohnraummiete: Amtsgericht ohne Rücksicht auf den Streitwert, ausschließlich (§ 23 Nr. 2 a GVG)'
+        elif value is None:
+            prefix, subject = 'Amtsgericht', f'Streitwert nicht erfasst; Amtsgericht angenommen – über {LIMIT_TEXT} ist das Landgericht zuständig (§ 23 Nr. 1, § 71 Abs. 1 GVG)'
+        elif float(value) > AMTSGERICHT_LIMIT:
+            prefix, subject = 'Landgericht', f'Streitwert über {LIMIT_TEXT} (§ 71 Abs. 1, § 23 Nr. 1 GVG); Anwaltszwang (§ 78 ZPO)'
+        else:
+            prefix, subject = 'Amtsgericht', f'Streitwert bis {LIMIT_TEXT} (§ 23 Nr. 1 GVG)'
+    else:
+        prefix, subject = {'arbeit': ('Arbeitsgericht', 'Rechtsweg zu den Arbeitsgerichten (§ 2 ArbGG)'), 'sozial': ('Sozialgericht', 'Rechtsweg zu den Sozialgerichten (§ 51 SGG)'),
+                           'verwaltung': ('Verwaltungsgericht', 'Verwaltungsrechtsweg (§ 40 VwGO), erste Instanz (§ 45 VwGO)')}[area]
+    try:
+        found = lookup(area, postal, place)
+    except DirectoryUnavailable:
+        return {'ok': False, 'missing': None, 'message': 'Das Gerichtsverzeichnis ist gerade nicht erreichbar. Bitte später erneut versuchen.'}
+    court = next((item for item in found['courts'] if item['name'].startswith(prefix)), None)
+    if not court:
+        return {'ok': False, 'missing': None, 'message': f'Für {postal} {place} wurde kein {prefix} gefunden.' + (' Das Verzeichnis braucht eine genauere Anschrift (Straße).' if found.get('choices') else '')}
+    return {'ok': True, 'court': _format(court), 'name': court['name'], 'area': area, 'place': f'{postal} {place}',
+            'basis': f"Sachlich: {subject}. Örtlich: {local}; maßgeblicher Ort {postal} {place}.", 'source': found.get('source', '')}
