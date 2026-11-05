@@ -26,6 +26,21 @@ def available():
     return bool(node_path() and (ROOT/'server/ocr/node_modules/tesseract.js/package.json').is_file() and all((model_dir()/(lang+'.traineddata.gz')).is_file() for lang in MODELS))
 
 
+PHOTO_TARGET=2400  # longest side after upscaling; text needs roughly 20 px x-height for Tesseract
+
+
+def prepare_photo(image):
+    """Phone photos: upscale small ones, even out shadows and paper tint, sharpen. Returns a grayscale image."""
+    from PIL import Image,ImageChops,ImageFilter,ImageOps
+    gray=ImageOps.grayscale(image)
+    scale=PHOTO_TARGET/max(gray.size)
+    if scale>1:gray=gray.resize((round(gray.width*scale),round(gray.height*scale)),Image.LANCZOS)
+    background=gray.filter(ImageFilter.GaussianBlur(radius=max(gray.size)/40))
+    # Ink is darker than its surroundings: keep only that difference, so shadows and paper tint vanish.
+    flat=ImageOps.invert(ImageChops.subtract(background,gray))
+    return ImageOps.autocontrast(flat,cutoff=1).filter(ImageFilter.UnsharpMask(radius=2,percent=120,threshold=3))
+
+
 def recognize(path,start_page,count,language):
     if not available():raise ValueError('ocr_unavailable')
     if language not in {'deu','eng','deu+eng'} or not 1<=start_page<=80 or not 1<=count<=12 or start_page+count-1>80:raise ValueError('invalid_range')
@@ -61,11 +76,19 @@ def recognize(path,start_page,count,language):
             with Image.open(path) as image:
                 if image.width*image.height>MAX_PIXELS:raise ValueError('size_limit')
                 corrected=ImageOps.exif_transpose(image);rgba=corrected.convert('RGBA');background=Image.new('RGB',rgba.size,'white');background.paste(rgba,mask=rgba.getchannel('A'))
-                target=folder/'image.png';background.save(target);background.close();rgba.close();corrected.close()
-            pages=[{'unit_no':1,'path':str(target)}];total=1;kind='image'
+                target=folder/'image.png';background.save(target)
+                # The photo is read twice, as taken and prepared; the more confident reading is kept.
+                prepared=prepare_photo(background);alternative=folder/'image-prepared.png';prepared.save(alternative)
+                small=max(corrected.size)<1200
+                prepared.close();background.close();rgba.close();corrected.close()
+            pages=[{'unit_no':1,'path':str(target)},{'unit_no':2,'path':str(alternative)}];total=1;kind='image'
         job={'pages':pages,'language':language,'model_dir':str(model_dir().resolve())}
-        worker=subprocess.run([node_path(),str(ROOT/'server/ocr/worker.mjs')],input=json.dumps(job),text=True,encoding='utf-8',capture_output=True,timeout=90,check=True,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+        worker=subprocess.run([node_path(),str(ROOT/'server/ocr/worker.mjs')],input=json.dumps(job),text=True,encoding='utf-8',capture_output=True,timeout=180,check=True,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
         data=json.loads(worker.stdout)
+        if kind=='image':
+            if len(data['units'])!=2:raise ValueError('ocr_failed')
+            best=max(data['units'],key=lambda unit:float(unit['confidence']))
+            data['units']=[{**best,'unit_no':1}];pages=pages[:1]
         remaining=120000;units=[];truncated=start_page!=1 or len(pages)<total
         if len(data['units'])!=len(pages):raise ValueError('ocr_failed')
         for item,expected in zip(data['units'],pages):
@@ -73,7 +96,7 @@ def recognize(path,start_page,count,language):
             text=item['text'].replace('\x00','').strip();kept=text[:min(12000,remaining)]
             truncated|=len(kept)<len(text);remaining-=len(kept)
             units.append({'unit_no':item['unit_no'],'text':kept,'confidence':max(0,min(100,float(item['confidence'])))})
-        return {'units':units,'truncated':truncated,'unit_kind':kind,'total_pages':total,'engine':data['engine'],'language':language,'models':{lang:MODELS[lang] for lang in language.split('+')}}
+        return {'units':units,'truncated':truncated,'unit_kind':kind,'low_resolution':kind=='image' and small,'total_pages':total,'engine':data['engine'],'language':language,'models':{lang:MODELS[lang] for lang in language.split('+')}}
 
 
 if __name__=='__main__':

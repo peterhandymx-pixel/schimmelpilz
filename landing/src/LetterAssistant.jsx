@@ -37,6 +37,8 @@ const G = {
     ownMatch: (ref, title) => `Zur Akte ${ref} · ${title} legen`, ownNew: "Neue Akte dafür anlegen", ownIncoming: "Nein, das habe ich bekommen",
     ownDone: title => `Erledigt – Ihr Schreiben liegt jetzt in der Akte „${title}“. Kommt eine Antwort, laden Sie sie einfach hier hoch.`,
     ownTitle: (court, ref) => `Eigenes Schreiben${court ? ` an ${court}` : ""}${ref ? ` (${ref})` : ""}`,
+    addPage: "Weitere Seite hinzufügen", pageOf: (i, n) => `Seite ${i} von ${n} wird gelesen …`, pages: n => `${n} Seiten gelesen und zusammen ausgewertet.`,
+    lowRes: (w, h) => `Achtung: Das Foto ist sehr klein (${w} × ${h} Pixel) – vermutlich beim Teilen verkleinert. Ich habe es so gut wie möglich gelesen, aber Zahlen und Daten können falsch sein. Bitte prüfen Sie jede Angabe – oder laden Sie das Originalfoto aus der Galerie hoch.`,
     matter: "Gut. Gehört der Brief zu einer neuen Sache – oder zu einer Akte, die wir schon haben?",
     matterNew: "Neue Sache", matterOld: "Bestehende Akte",
     pick: "Zu welcher Akte? Nennen Sie mir das Aktenzeichen – unseres, das vom Gericht oder das der Gegenseite. Sie können auch nach dem Namen suchen.",
@@ -76,6 +78,8 @@ const G = {
     ownMatch: (ref, title) => `Add to file ${ref} · ${title}`, ownNew: "Open a new file for it", ownIncoming: "No, I received it",
     ownDone: title => `Done – your letter is now in the file "${title}". When a reply arrives, just upload it here.`,
     ownTitle: (court, ref) => `Own letter${court ? ` to ${court}` : ""}${ref ? ` (${ref})` : ""}`,
+    addPage: "Add another page", pageOf: (i, n) => `Reading page ${i} of ${n} …`, pages: n => `${n} pages read and analysed together.`,
+    lowRes: (w, h) => `Note: the photo is very small (${w} × ${h} pixels), probably shrunk when shared. I read it as well as I could, but numbers and dates may be wrong. Please check every detail – or upload the original photo from your gallery.`,
     matter: "Good. Is the letter about a new matter – or about a file we already have?",
     matterNew: "New matter", matterOld: "Existing file",
     pick: "Which file? Tell me the reference – ours, the court's or the other side's. You can also search by name.",
@@ -128,7 +132,7 @@ const euro = value => Number(value).toLocaleString("de-DE", { style: "currency",
 const T = {
   de: {
     heroTitle: "Ich habe einen Brief bekommen", heroText: "Laden Sie den Brief hoch. Wir lesen die wichtigsten Angaben heraus, Sie bestätigen sie, beantworten ein paar Fragen – und erhalten die Frist, die nächsten Schritte und einen fertigen Antwortentwurf.",
-    upload: "Foto oder PDF hochladen", uploadHint: "Handyfoto genügt. JPG, PNG oder PDF bis 10 MB.", type: "Text abtippen oder einfügen", typeHint: "Wenn Sie den Brief als E-Mail oder Text haben.",
+    upload: "Foto oder PDF hochladen", uploadHint: "Handyfoto genügt. Mehrere Seiten: alle Fotos auf einmal auswählen. JPG, PNG oder PDF bis 10 MB.", type: "Text abtippen oder einfügen", typeHint: "Wenn Sie den Brief als E-Mail oder Text haben.",
     letterText: "Text des Briefs", letterPlaceholder: "Absender, Datum, Betreff und den Text des Briefs hier einfügen …", analyse: "Auswerten", cancel: "Abbrechen",
     open: "Offene Fristen", openHint: "Was ist inzwischen passiert?", done: "Erledigt", doneNote: "Über den Brief-Assistenten als erledigt markiert", newLetter: "Neuer Brief dazu", nothing: "Nichts gemacht",
     missedStrict: "Bei einer verpassten gerichtlichen Frist hilft oft die Wiedereinsetzung in den vorigen Stand – Antrag binnen zwei Wochen nach Wegfall des Hindernisses (§§ 233, 234 ZPO). Holen Sie sofort anwaltliche Hilfe; bei einer Mahnbescheid-Frist ist der Widerspruch oft noch möglich, solange kein Vollstreckungsbescheid erlassen ist.",
@@ -151,7 +155,7 @@ const T = {
   },
   en: {
     heroTitle: "I received a letter", heroText: "Upload the letter. We read the key details, you confirm them, answer a few questions – and get the deadline, next steps and a ready-made reply draft. Results follow German law and are shown in German.",
-    upload: "Upload photo or PDF", uploadHint: "A phone photo is fine. JPG, PNG or PDF up to 10 MB.", type: "Type or paste the text", typeHint: "If you have the letter as an email or text.",
+    upload: "Upload photo or PDF", uploadHint: "A phone photo is fine. Several pages: select all photos at once. JPG, PNG or PDF up to 10 MB.", type: "Type or paste the text", typeHint: "If you have the letter as an email or text.",
     letterText: "Letter text", letterPlaceholder: "Paste sender, date, subject and the letter text here …", analyse: "Analyse", cancel: "Cancel",
     open: "Open deadlines", openHint: "What has happened since?", done: "Done", doneNote: "Marked as done in the letter assistant", newLetter: "New letter on this", nothing: "Did nothing",
     missedStrict: "For a missed court deadline, reinstatement is often possible – apply within two weeks after the obstacle ends (§§ 233, 234 ZPO). Get a lawyer now; against a payment order (Mahnbescheid) an objection usually still works until an enforcement order is issued.",
@@ -246,7 +250,12 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const [sent, setSent] = useState(false);
   const [caseQuery, setCaseQuery] = useState("");
   // id of the letter uploaded into the provisional case, so it can move to an existing case.
-  const [uploadedDoc, setUploadedDoc] = useState(""), [uploadedName, setUploadedName] = useState("");
+  const [uploadedDocs, setUploadedDocs] = useState([]), [uploadedName, setUploadedName] = useState("");
+  const uploadedDoc = uploadedDocs[0] || "";
+  const pageInput = useRef(null);
+  const [pageCount, setPageCount] = useState(0);
+  // Pixel size of an uploaded photo when it is too small to be read reliably.
+  const [lowRes, setLowRes] = useState(null);
   const fileInput = useRef(null);
   const today = localToday();
   const profileAddress = user?.street ? `${user.street}\n${user.postal_code} ${user.city}` : "";
@@ -262,7 +271,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const questions = kinds.find(item => item.id === kind)?.questions || [];
   const openDeadlines = taskRows(storage.cases).filter(row => !row.completed && row.due_on && ["deadline", "notfrist"].includes(row.kind) && !row.caseItem.archived_at).slice(0, 6);
 
-  const reset = () => { setSent(false); setPost((storage.cases || []).some(item => !item.archived_at) ? "matter" : "yes"); setCaseQuery(""); setAiSummary(""); setExplanation(null); setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDoc(""); setUploadedName(""); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
+  const reset = () => { setSent(false); setPost((storage.cases || []).some(item => !item.archived_at) ? "matter" : "yes"); setCaseQuery(""); setAiSummary(""); setExplanation(null); setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDocs([]); setUploadedName(""); setLowRes(null); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
 
   const analyze = async letterText => {
     if (letterText.trim().length < 20) {
@@ -274,11 +283,38 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     setStep(sent || analysis.direction === "outgoing" ? "own" : "confirm");
   };
 
-  const startWithFile = async file => {
-    if (!file) return;
+  // WebP and other browser-readable photo formats become JPEG before upload; the server reads JPG, PNG and PDF.
+  const asUploadable = async file => {
+    if (!file.type.startsWith("image/") || /image\/(jpeg|png)/.test(file.type) || !window.createImageBitmap) return file;
+    try {
+      const bitmap = await createImageBitmap(file), canvas = document.createElement("canvas");
+      canvas.width = bitmap.width; canvas.height = bitmap.height; canvas.getContext("2d").drawImage(bitmap, 0, 0); bitmap.close?.();
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.95));
+      return blob ? new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }) : file;
+    } catch { return file; }
+  };
+  // Several photos (or PDFs) are pages of one letter: all go into the same case and are read in order.
+  const readPages = async (target, files, offset = 0, total = files.length) => {
+    const texts = [];
+    for (const [index, file] of files.entries()) {
+      if (file.type.startsWith("image/") && window.createImageBitmap) createImageBitmap(file).then(bitmap => { if (Math.max(bitmap.width, bitmap.height) < 1200) setLowRes([bitmap.width, bitmap.height]); bitmap.close?.(); }).catch(() => {});
+      setProgress(total > 1 ? c.uploading.replace("Brief", `Seite ${offset + index + 1}`) : c.uploading);
+      const body = new FormData(); body.append("file", await asUploadable(file));
+      const document = await request(`/cases/${target.id}/documents`, { method: "POST", body });
+      if (!followCase || target.id !== followCase.id) setUploadedDocs(current => [...current, document.id]);
+      const pageText = await readUploadedText(target.id, document.id, attempt => setProgress(total > 1 ? g.pageOf(offset + index + 1, total) : attempt < 5 ? c.reading : c.readingLong));
+      texts.push(total > 1 ? `[Seite ${offset + index + 1}]\n${pageText}` : pageText);
+    }
+    return texts.join("\n\n");
+  };
+
+  const startWithFile = async fileList => {
+    const files = [...(fileList || [])].slice(0, 12);
+    if (!files.length) return;
+    const file = files[0];
     setError(""); setStep("reading"); setProgress(c.uploading);
     if (file.type.startsWith("image/")) setPreview(URL.createObjectURL(file));
-    setUploadedName(file.name);
+    setUploadedName(files.length > 1 ? `${files.length} Seiten (${files.map(item => item.name).join(", ")})`.slice(0, 200) : file.name); setLowRes(null); setPageCount(files.length);
     let target = followCase;
     try {
       if (!target) {
@@ -286,17 +322,29 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
           details: { audience: user.audience, client_name: user.organisation || user.full_name, client_address: profileAddress, client_email: user.email, client_role: "respondent" } });
       }
       setCaseItem(target);
-      const body = new FormData(); body.append("file", file);
-      const document = await request(`/cases/${target.id}/documents`, { method: "POST", body });
-      if (!followCase) setUploadedDoc(document.id);
-      setProgress(c.reading);
-      const letterText = await readUploadedText(target.id, document.id, attempt => setProgress(attempt < 5 ? c.reading : c.readingLong));
+      const letterText = await readPages(target, files);
       setText(letterText);
       await analyze(letterText);
     } catch (problem) {
       setError(problem.status === 415 ? c.badType : problem.status === 413 ? c.tooBig : c.failed);
       setStep(target ? "confirm" : "start");
     }
+  };
+
+  const addPages = async fileList => {
+    const files = [...(fileList || [])].slice(0, 12);
+    const target = caseItem || followCase;
+    if (!files.length || !target) return;
+    const back = step;
+    setError(""); setStep("reading");
+    try {
+      const more = await readPages(target, files, pageCount, pageCount + files.length);
+      const combined = pageCount === 1 && !/^\[Seite 1\]/.test(text) ? `[Seite 1]\n${text}\n\n${more}` : `${text}\n\n${more}`;
+      setPageCount(pageCount + files.length);
+      setUploadedName(current => `${pageCount + files.length} Seiten${current ? ` (${current.replace(/^\d+ Seiten \(|\)$/g, "")}, ${files.map(item => item.name).join(", ")})` : ""}`.slice(0, 200));
+      setText(combined);
+      await analyze(combined);
+    } catch { setError(c.failed); setStep(back); }
   };
 
   const startWithText = async () => {
@@ -339,8 +387,8 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       let target = attachOnly ? followCase : caseItem || followCase;
       // An uploaded letter sits in a provisional case until now; it moves into the chosen existing case.
       if (attachOnly && provisional && caseItem.id !== followCase.id) {
-        target = await request("/letter-assistant/move-letter", json("POST", { from_case_id: caseItem.id, document_id: uploadedDoc, to_case_id: followCase.id }));
-        setUploadedDoc("");
+        for (const documentId of uploadedDocs) target = await request("/letter-assistant/move-letter", json("POST", { from_case_id: caseItem.id, document_id: documentId, to_case_id: followCase.id }));
+        setUploadedDocs([]);
       }
       const party = fields.creditor || fields.sender;
       const title = followCase ? followCase.title : `${outcome.kind.label}${party ? ` – ${party}` : ""}`.slice(0, 120);
@@ -391,8 +439,9 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       const note = `— Eigenes Schreiben${fields.letter_date ? ` vom ${dateLabel(fields.letter_date, "de")}` : ""} —\n${aiSummary || ""}${source ? `\n${source}` : ""}`;
       let target = existing || followCase;
       if (target && provisional && uploadedDoc) {
-        target = await request("/letter-assistant/move-letter", json("POST", { from_case_id: caseItem.id, document_id: uploadedDoc, to_case_id: target.id }));
-        setUploadedDoc("");
+        const destination = target.id;
+        for (const documentId of uploadedDocs) target = await request("/letter-assistant/move-letter", json("POST", { from_case_id: caseItem.id, document_id: documentId, to_case_id: destination }));
+        setUploadedDocs([]);
       }
       const details = target ? target.details : { audience: user.audience, client_name: user.organisation || user.full_name, client_address: profileAddress, client_email: user.email };
       const filled = { ...details, court: details.court || fields.court || "", court_reference: details.court_reference || fields.reference || "", opponent_name: details.opponent_name || fields.creditor || "" };
@@ -456,7 +505,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
         <button className="la-choice" onClick={() => fileInput.current?.click()}><IconCamera size={30} stroke={1.4} /><strong>{c.upload}</strong><small>{c.uploadHint}</small></button>
         <button className="la-choice" onClick={() => setTyping(true)}><IconKeyboard size={30} stroke={1.4} /><strong>{c.type}</strong><small>{c.typeHint}</small></button>
       </div>}
-      <input ref={fileInput} type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.docx" capture="environment" onChange={event => { startWithFile(event.target.files?.[0]); event.target.value = ""; }} />
+      <input ref={fileInput} type="file" hidden multiple accept=".pdf,.png,.jpg,.jpeg,.docx,image/*" onChange={event => { startWithFile(event.target.files); event.target.value = ""; }} />
       {typing && <div className="la-card"><label>{c.letterText}<textarea rows={10} value={pasted} onChange={event => setPasted(event.target.value)} placeholder={c.letterPlaceholder} /></label>
         <div className="la-actions"><button className="desk-button solid" disabled={pasted.trim().length < 20} onClick={startWithText}>{c.analyse}<IconArrowRight size={17} /></button><button className="desk-link" onClick={() => setTyping(false)}>{c.cancel}</button></div></div>}
       {followCase && <p className="la-more"><button className="desk-link" onClick={() => { setFollowCase(null); setAttachOnly(false); setPost(activeCases.length ? "matter" : "yes"); }}>{c.cancel}</button></p>}
@@ -491,6 +540,10 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     {step === "confirm" && <OfficeTrack steps={g.track} current={3} />}
     {step === "confirm" && (error === c.unreadable ? <AssistantSays pose="think" mood="worried" text={g.unreadable} />
       : <AssistantSays pose="file" mood="smile" text={(aiSummary ? g.aiRead(aiSummary) : g.found(kinds.find(item => item.id === kind)?.label || kind, party, fields.amount ? euro(fields.amount) : "")) + (matchingCase ? g.match(party) : "")} />)}
+    {(step === "confirm" || step === "own") && lowRes && <p className="la-warning" role="alert"><IconAlertTriangle size={18} />{g.lowRes(lowRes[0], lowRes[1])}</p>}
+    {(step === "confirm" || step === "own") && (caseItem || followCase) && uploadedName && <p className="la-pages">{pageCount > 1 && <span>{g.pages(pageCount)}</span>}
+      <button type="button" className="desk-button" onClick={() => pageInput.current?.click()}><IconCamera size={16} />{g.addPage}</button>
+      <input ref={pageInput} type="file" hidden multiple accept=".pdf,.png,.jpg,.jpeg,image/*" onChange={event => { addPages(event.target.files); event.target.value = ""; }} /></p>}
     {step === "confirm" && <form className={preview ? "la-card la-with-preview" : "la-card"} onSubmit={confirm}>
       <div>
         <p className="la-step">{c.step1}</p>
