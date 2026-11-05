@@ -202,5 +202,17 @@ class LegalResearchTests(unittest.TestCase):
         self.assertEqual(catalogue.search_question('Gilt 566c BGB auch bei Schimmel?')[0]['title'].split(' · ')[0],'§ 566c BGB')
 
 
+    def test_question_search_puts_online_withdrawal_provisions_first(self):
+        def norm(number,title,text):
+            return f'<norm doknr="W{number}"><metadaten><enbez>§ {number}</enbez><titel>{title}</titel></metadaten><textdaten><text><Content><P>{text}</P></Content></text></textdaten></norm>'
+        xml = ('<?xml version="1.0"?><dokumente><norm doknr="HEADER"><metadaten><jurabk>BGB</jurabk></metadaten></norm>'
+               + norm('312g','Widerrufsrecht','Dem Verbraucher steht bei Fernabsatzverträgen ein Widerrufsrecht zu.')
+               + norm('355','Widerrufsrecht bei Verbraucherverträgen','Die Widerrufsfrist beträgt 14 Tage.')
+               + norm('485','Widerrufsrecht','Widerrufsrecht Widerrufsrecht Teilzeit-Wohnrecht online zurück')
+               + '</dokumente>').encode()
+        catalogue.store_rows(catalogue.parse_law(xml,'bgb'),'law:bgb')
+        found = [item['title'].split(' · ')[0] for item in catalogue.search_question('Ich habe online einen Fernseher bestellt. Kann ich ihn zurückschicken?')]
+        self.assertEqual(found[:2],['§ 312g BGB','§ 355 BGB'])
+
 if __name__ == '__main__':
     unittest.main()

@@ -320,6 +320,15 @@ QUESTION_SYNONYMS = {
     'vermieter':['vermieters'],'arbeitgeber':['dienstverhältnis','arbeitsverhältnis'],
     'gekauft':['käufers'],'gekaufte':['käufers'],'online':['fernabsatzverträgen'],
 }
+# Everyday situations whose governing provisions no word match finds reliably:
+# (all patterns must occur in the question) -> provisions put first, in this order.
+QUESTION_TOPICS = [
+    ((r'online|internet|onlineshop|webshop|fernabsatz|bestell|versand|paket|telefon', r'widerruf|zur(ü|ue)ck|retour|r(ü|ue)ckgabe|r(ü|ue)cksend'),
+     [('312g','BGB'),('355','BGB'),('356','BGB'),('357','BGB')]),
+    ((r'widerrufsfrist|widerruf\w*\s.*frist|frist\w*\s.*widerruf',), [('355','BGB'),('356','BGB')]),
+    ((r'schimmel|feucht|heizung\w*\s.*(kalt|aus|defekt|kaputt)',), [('536','BGB'),('535','BGB')]),
+    ((r'kaution|mietsicherheit',), [('551','BGB')]),
+]
 QUESTION_SUFFIXES = ('ungen','ern','en','es','er','em','e','s','n')
 LAW_NAMES = {part for name in LAWS.values() for part in name.lower().split()}
 CITATION = re.compile(r'(?:§+\s*)?(\d+[a-z]?)\s+(' + '|'.join(sorted({re.escape(name) for name in LAWS.values()},key=len,reverse=True)) + r')\b')
@@ -358,6 +367,13 @@ def search_question(question, limit=4):
             row = db.execute("SELECT * FROM entries WHERE kind='law' AND (title=? OR title LIKE ?)",(f'§ {number} {law}',f'§ {number} {law} · %')).fetchone()
             if row and all(item['key'] != row['key'] for item in picked):
                 picked.append(entry(row))
+        lowered = question.lower()
+        for patterns,provisions in QUESTION_TOPICS:
+            if all(re.search(pattern,lowered) for pattern in patterns):
+                for number,law in provisions:
+                    row = db.execute("SELECT * FROM entries WHERE kind='law' AND title LIKE ?",(f'§ {number} {law} · %',)).fetchone()
+                    if row and '(weggefallen)' not in row['title'] and all(item['key'] != row['key'] for item in picked):
+                        picked.append(entry(row))
         terms = question_terms(question)
         rows = db.execute("SELECT e.*,bm25(entry_search,0,12,1) AS score FROM entry_search s JOIN entries e ON e.key=s.key WHERE entry_search MATCH ? AND e.kind='law' ORDER BY score LIMIT 200",[' OR '.join(f'"{term}"*' for term in terms)]).fetchall() if terms else []
     scored = []

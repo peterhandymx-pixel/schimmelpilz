@@ -177,3 +177,35 @@ Bitte überweisen Sie den Restbetrag von 200,00 EUR innerhalb von 14 Tagen nach 
         result = la.evaluate('zahlungsaufforderung', fields, {'received_on': '2026-11-04', 'owes': 'none'}, self.today)
         self.assertEqual(result['deadline']['date'], '2026-11-18')
         self.assertIn('forderung-zurueckweisen', result['samples'])
+
+
+class MoveLetterTests(test_inbox.InboxTests):
+    test_unassigned_persistence_then_exact_file_and_text_review_in_case = None
+    test_ownership_validation_stale_updates_and_single_assignment = None
+    test_rejected_uploads_leave_no_files_and_auth_guard_applies = None
+    test_atomic_assignment_rollback_and_failed_upload_cleanup = None
+    test_correction_guards_and_atomic_rollback = None
+    test_correction_preserves_snapshots_blocks_old_sources_and_can_assign_back = None
+
+    def test_uploaded_letter_moves_into_existing_case_and_provisional_case_is_archived(self):
+        from server.tests.test_document_research import synthetic_pdf
+        with TestClient(api.app) as client:
+            self.login(client, 'move-letter@example.invalid')
+            existing = self.case(client)
+            provisional = client.post('/api/cases', json={'title': la.PROVISIONAL_TITLES[0], 'description': 'Only synthetic testing, no real client data.'}).json()['id']
+            document = client.post(f'/api/cases/{provisional}/documents', files={'file': ('Brief.pdf', synthetic_pdf(), 'application/pdf')}).json()
+            moved = client.post('/api/letter-assistant/move-letter', json={'from_case_id': provisional, 'document_id': document['id'], 'to_case_id': existing})
+            self.assertEqual(moved.status_code, 200, moved.text)
+            self.assertIn(document['id'], [item['id'] for item in moved.json()['documents']])
+            self.assertTrue(client.get(f'/api/cases/{provisional}').json()['archived_at'])
+            self.assertEqual(client.get(f'/api/cases/{existing}/documents/{document["id"]}/text').status_code, 200)
+            # The same letter cannot be moved twice, and a case with own content is never archived.
+            again = client.post('/api/letter-assistant/move-letter', json={'from_case_id': provisional, 'document_id': document['id'], 'to_case_id': existing})
+            self.assertEqual(again.status_code, 404)
+            busy = client.post('/api/cases', json={'title': la.PROVISIONAL_TITLES[0], 'description': 'Only synthetic testing, no real client data.'}).json()['id']
+            first = client.post(f'/api/cases/{busy}/documents', files={'file': ('A.pdf', synthetic_pdf(), 'application/pdf')}).json()
+            client.post(f'/api/cases/{busy}/documents', files={'file': ('B.pdf', synthetic_pdf(), 'application/pdf')})
+            client.post('/api/letter-assistant/move-letter', json={'from_case_id': busy, 'document_id': first['id'], 'to_case_id': existing})
+            self.assertFalse(client.get(f'/api/cases/{busy}').json()['archived_at'])
+            self.login(client, 'other-move@example.invalid')
+            self.assertEqual(client.post('/api/letter-assistant/move-letter', json={'from_case_id': busy, 'document_id': first['id'], 'to_case_id': existing}).status_code, 404)

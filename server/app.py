@@ -1422,6 +1422,6 @@ app.include_router(admin.router(db,require_user,now,lambda:UPLOAD_DIR,lambda:DAT
 app.include_router(legal_notice.router())
 app.include_router(account.router(db, require_user, lambda: UPLOAD_DIR, lambda: DATA_DIR))
 app.include_router(deadlines.router(require_user))
-app.include_router(letter_assistant.router(require_user))
+app.include_router(letter_assistant.router(require_user, db, record_activity, now, row_case))
 app.include_router(reminders.router(db, require_user))
 app.include_router(deletion.router(db, require_user, record_activity, lambda: UPLOAD_DIR, lambda: DATA_DIR))

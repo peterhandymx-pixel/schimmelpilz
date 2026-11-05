@@ -89,6 +89,8 @@ const T = {
 };
 const FIELD_TYPES = { letter_date: "date", letter_deadline: "date", amount: "number" };
 
+const PROVISIONAL_TITLES = ["Eingegangener Brief (in Prüfung)", "Received letter (being checked)"];
+
 // Reads the text of an uploaded letter once the automatic text recognition has finished (at most about two minutes).
 async function readUploadedText(caseId, documentId, onProgress) {
   for (let attempt = 0; attempt < 60; attempt++) {
@@ -129,18 +131,21 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   // true when the person chose to file this letter in an existing case they already run:
   // that case's particulars and deadlines stay; only empty fields are filled.
   const [attachOnly, setAttachOnly] = useState(false);
+  // id of the letter uploaded into the provisional case, so it can move to an existing case.
+  const [uploadedDoc, setUploadedDoc] = useState("");
   const fileInput = useRef(null);
   const today = localToday();
   const profileAddress = user?.street ? `${user.street}\n${user.postal_code} ${user.city}` : "";
   const party = fields.creditor || fields.sender;
-  const matchingCase = !followCase && !caseItem && party ? (storage.cases || []).find(item => !item.archived_at && sameParty(item.details?.opponent_name, party)) : null;
+  const provisional = Boolean(caseItem && uploadedDoc && PROVISIONAL_TITLES.includes(caseItem.title));
+  const matchingCase = !followCase && (!caseItem || provisional) && party ? (storage.cases || []).find(item => !item.archived_at && item.id !== caseItem?.id && sameParty(item.details?.opponent_name, party)) : null;
 
   useEffect(() => { request("/letter-assistant/kinds").then(setKinds).catch(() => setKinds([])); }, []);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const questions = kinds.find(item => item.id === kind)?.questions || [];
   const openDeadlines = taskRows(storage.cases).filter(row => !row.completed && row.due_on && ["deadline", "notfrist"].includes(row.kind) && !row.caseItem.archived_at).slice(0, 6);
 
-  const reset = () => { setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
+  const reset = () => { setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDoc(""); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
 
   const analyze = async letterText => {
     if (letterText.trim().length < 20) {
@@ -159,12 +164,13 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     let target = followCase;
     try {
       if (!target) {
-        target = await storage.createCase({ title: lang === "de" ? "Eingegangener Brief (in Prüfung)" : "Received letter (being checked)", description: "Über den Brief-Assistenten angelegt; die Angaben werden noch geprüft.", language: "de",
+        target = await storage.createCase({ title: PROVISIONAL_TITLES[lang === "de" ? 0 : 1], description: "Über den Brief-Assistenten angelegt; die Angaben werden noch geprüft.", language: "de",
           details: { audience: user.audience, client_name: user.organisation || user.full_name, client_address: profileAddress, client_email: user.email, client_role: "respondent" } });
       }
       setCaseItem(target);
       const body = new FormData(); body.append("file", file);
       const document = await request(`/cases/${target.id}/documents`, { method: "POST", body });
+      if (!followCase) setUploadedDoc(document.id);
       setProgress(c.reading);
       const letterText = await readUploadedText(target.id, document.id, attempt => setProgress(attempt < 5 ? c.reading : c.readingLong));
       setText(letterText);
@@ -209,7 +215,12 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   // Files the result in the person's case: title, opponent, dates and a deadline with reminder.
   const save = async (outcome, given) => {
     try {
-      let target = caseItem || followCase;
+      let target = attachOnly ? followCase : caseItem || followCase;
+      // An uploaded letter sits in a provisional case until now; it moves into the chosen existing case.
+      if (attachOnly && provisional && caseItem.id !== followCase.id) {
+        target = await request("/letter-assistant/move-letter", json("POST", { from_case_id: caseItem.id, document_id: uploadedDoc, to_case_id: followCase.id }));
+        setUploadedDoc("");
+      }
       const party = fields.creditor || fields.sender;
       const title = followCase ? followCase.title : `${outcome.kind.label}${party ? ` – ${party}` : ""}`.slice(0, 120);
       const entry = `${outcome.kind.label}${given.received_on ? ` (eingegangen ${dateLabel(given.received_on, "de")})` : ""}: ${outcome.summary}${text ? `\n\nBrieftext (Auszug):\n${text.slice(0, 1800)}` : ""}`;
@@ -244,6 +255,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
         target = await storage.saveTask(target.id, { title: item.title.slice(0, 200), note: item.note.slice(0, 2000), due_on: item.date, priority: "high", kind: item.strict ? "notfrist" : "deadline", pre_days: Math.max(0, Math.min(7, daysLeft - 1)) });
       }
       setCaseItem(target); setSaved(target);
+      storage.reload?.();
     } catch {
       setError(c.saveFailed);
     }

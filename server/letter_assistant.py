@@ -695,8 +695,48 @@ class EvaluateInput(BaseModel):
     state: Literal[tuple(deadlines.STATES)] | None = None
 
 
-def router(require_user):
+class MoveInput(BaseModel):
+    model_config = {'extra': 'forbid'}
+    from_case_id: str = Field(min_length=1, max_length=64)
+    document_id: str = Field(min_length=1, max_length=64)
+    to_case_id: str = Field(min_length=1, max_length=64)
+
+
+# Title the assistant gives the provisional case it opens for an upload before the letter is read.
+PROVISIONAL_TITLES = ('Eingegangener Brief (in Prüfung)', 'Received letter (being checked)')
+
+
+def router(require_user, db=None, record_activity=None, now=None, row_case=None):
     routes = APIRouter()
+
+    if db is not None:
+        @routes.post('/api/letter-assistant/move-letter')
+        def move_letter(payload: MoveInput, user: dict = Depends(require_user)):
+            """Files an uploaded letter in an existing case and retires the provisional case it was read in."""
+            allowed = user.get('allowed_cases')
+            if allowed is not None and (payload.from_case_id not in allowed or payload.to_case_id not in allowed):
+                raise HTTPException(404, 'Case not found')
+            if payload.from_case_id == payload.to_case_id:
+                raise HTTPException(409, 'same_case')
+            with db() as connection:
+                connection.execute('BEGIN IMMEDIATE')
+                source = connection.execute('SELECT * FROM cases WHERE id=? AND user_id=?', (payload.from_case_id, user['id'])).fetchone()
+                target = connection.execute('SELECT * FROM cases WHERE id=? AND user_id=?', (payload.to_case_id, user['id'])).fetchone()
+                if not source or not target:
+                    raise HTTPException(404, 'Case not found')
+                document = connection.execute('SELECT * FROM documents WHERE id=? AND case_id=?', (payload.document_id, payload.from_case_id)).fetchone()
+                if not document:
+                    raise HTTPException(404, 'Document not found')
+                connection.execute('UPDATE documents SET case_id=? WHERE id=?', (payload.to_case_id, payload.document_id))
+                record_activity(connection, payload.to_case_id, 'document_uploaded', document['original_name'])
+                record_activity(connection, payload.from_case_id, 'document_moved', f"{document['original_name']} → {target['reference']}")
+                # Only the empty provisional case is archived; a case with any other content stays as it is.
+                left = connection.execute("""SELECT (SELECT COUNT(*) FROM documents WHERE case_id=:c) + (SELECT COUNT(*) FROM tasks WHERE case_id=:c)
+                    + (SELECT COUNT(*) FROM drafts WHERE case_id=:c)""", {'c': payload.from_case_id}).fetchone()[0]
+                if not left and source['title'] in PROVISIONAL_TITLES and not source['archived_at']:
+                    connection.execute('UPDATE cases SET archived_at=?,archive_version=archive_version+1 WHERE id=?', (now(), payload.from_case_id))
+                    record_activity(connection, payload.from_case_id, 'case_archived')
+                return row_case(connection.execute('SELECT * FROM cases WHERE id=?', (payload.to_case_id,)).fetchone(), connection)
 
     @routes.get('/api/letter-assistant/kinds')
     def kinds(user: dict = Depends(require_user)):
