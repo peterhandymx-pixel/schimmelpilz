@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconFileText, IconRefresh, IconCircleFilled, IconArrowUp, IconArrowUpRight, IconPaperclip, IconScale, IconLoader2 } from "@tabler/icons-react";
 import figureUrl from "./assets/frau-schimmelpilz.webp";
 import "./research-gemini.css";
+import { VoiceButton } from "./VoiceInput.jsx";
 import { request } from "./useCaseStorage.js";
 import { DocumentLinks } from "./ExportLinks.jsx";
 import { legalWorkflows } from "./legalWorkflows.js";
@@ -150,11 +151,13 @@ export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onD
           <select className="rc-pill" aria-label={de ? "Arbeitsmodus" : "Work mode"} value={workflow} onChange={event => setWorkflow(event.target.value)} disabled={busy}>{legalWorkflows[lang].map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select>
           <button type="button" className={`rc-pill ${panel === "docs" ? "on" : ""}`} onClick={() => toggle("docs")} disabled={!selectedCase}><IconPaperclip size={15} />{de ? "Dokumente" : "Documents"}{documentIds.length ? ` (${documentIds.length})` : ""}</button>
           <button type="button" className={`rc-pill ${panel === "sources" ? "on" : ""}`} onClick={() => toggle("sources")} disabled={!selectedCase}><IconScale size={15} />{de ? "Rechtsquellen" : "Legal sources"}{legalIds.length ? ` (${legalIds.length})` : automatic ? (de ? " · automatisch" : " · automatic") : ""}</button>
+          {status?.speech && <VoiceButton lang={lang} className="rc-voice" disabled={!selectedCase || busy} onError={setError}
+            onText={text => { setError(""); setQuestion(current => (current.trim() ? current.trimEnd() + " " : "") + text); setTimeout(() => { if (composerRef.current) { grow(composerRef.current); composerRef.current.focus(); } }, 0); }} />}
           <button type="submit" className="rc-send" disabled={!canSend} aria-label={de ? "Frage senden" : "Send question"}>{busy ? <IconLoader2 size={20} className="la-spin" /> : <IconArrowUp size={20} />}</button>
         </div>
       </div>
       {error && <p className="storage-error" role="alert">{error}</p>}
-      <p className="rc-note">{de ? "Frau Schimmelpilz kann Fehler machen – Antworten sind Arbeitshilfen, rechtlich nicht geprüft. Zitate werden automatisch geprüft. " : "Ms Schimmelpilz can make mistakes – answers are working aids, not legal review. Citations are checked automatically. "}{providerNote} {de ? "Verlauf wird in der Akte gespeichert." : "History is stored with the case."}</p>
+      <p className="rc-note">{de ? "Frau Schimmelpilz kann Fehler machen – Antworten sind Arbeitshilfen, rechtlich nicht geprüft. Zitate werden automatisch geprüft. " : "Ms Schimmelpilz can make mistakes – answers are working aids, not legal review. Citations are checked automatically. "}{providerNote} {status?.speech ? (de ? "Spracheingaben gehen zur Umwandlung in Text an Groq und werden nicht gespeichert. " : "Voice input is sent to Groq for transcription and not stored. ") : ""}{de ? "Verlauf wird in der Akte gespeichert." : "History is stored with the case."}</p>
     </form>
   </section>;
 }
