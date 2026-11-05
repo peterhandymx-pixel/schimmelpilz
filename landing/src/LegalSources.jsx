@@ -53,6 +53,14 @@ export function CitedAnswer({answer,sources = [],caseLaw = []}) {
   })}</div>;
 }
 
+// The expert working instructions (AI-Skills-German-Law) the answer was written with.
+export function SkillNote({lang = 'de', skill}) {
+  const de = lang === 'de';
+  if (!skill) return null;
+  return <p className="skill-note">{de ? 'Fachanleitung: ' : 'Expert guide: '}<a href={skill.url} target="_blank" rel="noreferrer">{skill.title}</a>
+    <small> · {de ? 'AI-Skills-German-Law, Rechtsstand Oktober 2026 – Arbeitshilfe, keine geprüfte Quelle' : 'AI-Skills-German-Law, legal state October 2026 – working aid, not a verified source'}</small></p>;
+}
+
 // Leading decisions supplied with an answer (from nu:legal), each linked to its full text.
 export function CaseLawList({lang = 'de', items = []}) {
   const de = lang === 'de';

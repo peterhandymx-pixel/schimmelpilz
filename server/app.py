@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets, letter_assistant, reminders, dictations
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ai_status, prepare_messages, generate_answer, AI_MODEL
-from . import nulegal
+from . import nulegal, law_skills
 from .document_context import select_sources
 from . import legal_catalogue
 from . import draft_review
@@ -1130,10 +1130,14 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
             titles = list(dict.fromkeys(item['title'] for item in legal_passages))
             case_law = nulegal.case_law_for(titles, legal_catalogue.everyday_keywords(payload.question))
         retrieval['case_law'] = case_law
+        # The matching expert skill (AI-Skills-German-Law) as working instructions for this question.
+        chosen = law_skills.select(payload.question, [item['title'] for item in legal_passages], case['details'].get('legal_area')) if case['details'].get('jurisdiction','DE') == 'DE' else None
+        skill = {**law_skills.label(chosen), 'text': law_skills.instructions(chosen)} if chosen else None
+        retrieval['skill'] = {key: value for key, value in skill.items() if key != 'text'} if skill else None
         with db() as connection:
             connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, AI_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False)))
         try:
-            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages, case_law))
+            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages, case_law, skill))
         except (URLError, OSError, TimeoutError, ValueError) as error:
             code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_unavailable"
             with db() as connection:

@@ -319,6 +319,10 @@ QUESTION_SYNONYMS = {
     'mietwohnung':['wohnraum','mietverhältnis'],'wohnung':['wohnraum','mietverhältnis'],
     'vermieter':['vermieters'],'arbeitgeber':['dienstverhältnis','arbeitsverhältnis'],
     'gekauft':['käufers'],'gekaufte':['käufers'],'online':['fernabsatzverträgen'],
+    'gekündigt':['kündigung','kündigungsschutz'],'kündigt':['kündigung'],'chef':['arbeitgeber'],'entlassen':['kündigung','kündigungsschutz'],
+    'anwaltsgebühr':['rechtsanwaltsvergütung','gebühren','rvg'],'anwaltskosten':['rechtsanwaltsvergütung','gebühren','rvg'],'anwaltsrechnung':['rechtsanwaltsvergütung','rvg'],
+    'abgemahnt':['abmahnung'],'mahnbescheid':['mahnverfahren'],'inkasso':['verzug','mahnung'],'bußgeld':['ordnungswidrigkeit'],'geblitzt':['ordnungswidrigkeit'],
+    'nebenkosten':['betriebskosten'],'nebenkostenabrechnung':['betriebskostenabrechnung'],
 }
 # Everyday situations whose governing provisions no word match finds reliably:
 # (all patterns must occur in the question) -> provisions put first, in this order.

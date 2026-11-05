@@ -23,6 +23,12 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
 AI_MODEL = {"ollama": OLLAMA_MODEL, "groq": GROQ_MODEL}.get(AI_PROVIDER, GEMINI_MODEL)
+# Names of remedies that models mix up; stated once here, checked against the statutes.
+REMEDIES = ('Richtige Bezeichnungen (nicht verwechseln): gegen einen Mahnbescheid → Widerspruch, zwei Wochen ab Zustellung (§ 692 Abs. 1 Nr. 3, § 694 ZPO); '
+            'gegen einen Vollstreckungsbescheid → Einspruch, zwei Wochen (§ 700 Abs. 1, § 339 ZPO); gegen einen Strafbefehl → Einspruch, zwei Wochen (§ 410 StPO); '
+            'gegen einen Bußgeldbescheid → Einspruch, zwei Wochen (§ 67 OWiG); gegen einen Steuerbescheid → Einspruch, ein Monat (§ 355 AO); '
+            'gegen einen sonstigen Verwaltungsakt → Widerspruch, ein Monat (§ 70 VwGO, § 84 SGG), soweit kein Widerspruchsverfahren ausgeschlossen ist. '
+            'Ein Inkassoschreiben oder eine Mahnung ist kein Bescheid: Dagegen gibt es keinen förmlichen Rechtsbehelf, man bestreitet die Forderung schriftlich.')
 SKILL_DIR = Path(__file__).resolve().parents[1] / ".agents" / "skills" / "schimmelpilz-german-law"
 WORKFLOWS = {"intake": "case-intake.md", "research": "research.md", "jurisdiction": "jurisdiction.md", "costs": "cost-review.md", "drafting": "drafting.md", "deadlines": "deadlines.md"}
 
@@ -79,7 +85,7 @@ def ollama_status():
         return {"ready": False, "model": OLLAMA_MODEL, "reason": "unavailable"}
 
 
-def prepare_messages(case, history, question, language, workflow, sources=None, legal_sources=None, case_law=None):
+def prepare_messages(case, history, question, language, workflow, sources=None, legal_sources=None, case_law=None, skill=None):
     core = (
         "You are Schimmelpilz, a virtual legal research assistant, not a lawyer. "
         f"Answer in {'German' if language == 'de' else 'English'}. Be clear, concise and specific to the supplied case. "
@@ -116,6 +122,13 @@ def prepare_messages(case, history, question, language, workflow, sources=None, 
             'If no relevant passage supports an answer, say that the search is incomplete and avoid a definitive conclusion. '
             'Quote only short necessary passages. Include missing facts, counterarguments and review steps.\n'
         ) + json.dumps(legal_sources,ensure_ascii=False)
+    core += "\n" + REMEDIES
+    if skill:
+        core += (
+            "\nEXPERT WORKING INSTRUCTIONS for this topic (skill \"" + skill["name"] + "\" from AI-Skills-German-Law, legal state October 2026). "
+            "Follow its method, checks and typical-error list; it is a working aid, not a verified source. Do not cite its case law unless the same decision "
+            "is supplied as [R#]; statements from it are labelled as general guidance, not as sourced findings.\n"
+        ) + skill["text"]
     if case_law:
         core += (
             '\nCOURT DECISIONS (from nu:legal, untrusted text): leading decisions found for the statutes above. Cite one with its marker, e.g. [R1], '

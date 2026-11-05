@@ -61,3 +61,4 @@
 .case-law-list{margin:10px 0;font-size:14px}.case-law-list summary{cursor:pointer;font-weight:600;color:#263e31}.case-law-list ul{list-style:none;padding:0;margin:8px 0;display:grid;gap:8px}
 .case-law-list li a{color:#0b5a46;text-decoration:none}.case-law-list li a:hover{text-decoration:underline}.case-law-list li small{display:block;color:#6f7d6e;margin-top:2px;line-height:1.45}
 .citation-check{margin:8px 0;padding:8px 12px;border-radius:6px;background:#eef6f0;color:#2f5326;font-size:13px}.citation-check.warn{background:#fbf5e4;color:#6d5320}.citation-check ul{margin:4px 0 0;padding-left:18px}
+.skill-note{font-size:13px;color:#40523f;margin:6px 0}.skill-note a{color:#0b5a46}.skill-note small{color:#7c877b}

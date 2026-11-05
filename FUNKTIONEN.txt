@@ -394,6 +394,8 @@ Inhalt
   und erklärt das Ergebnis in Klartext; die Frist berechnen feste Regeln.
 - Vor dem Lesen: neue Sache oder bestehende Akte (Suche nach eigenem,
   gerichtlichem oder gegnerischem Aktenzeichen und Namen).
+- Fachanleitung je Thema aus AI-Skills-German-Law (319 Skills, Rechtsstand
+  Oktober 2026), z. B. Mietminderung, Mahnverfahren, Kündigungsschutz.
 - Passende Rechtsprechung (nu:legal) und Prüfung jedes zitierten Paragrafen
   und Aktenzeichens; nach außen gehen nur Fachbegriffe und Zitate.
 
