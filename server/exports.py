@@ -40,9 +40,9 @@ ISO_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 STATUS = {'de': {'active': 'In Bearbeitung', 'waiting': 'Wartet', 'closed': 'Abgeschlossen'},
           'en': {'active': 'In progress', 'waiting': 'Waiting', 'closed': 'Closed'}}
 AREA = {'de': {'general': 'Allgemein', 'consumer': 'Verbraucherrecht', 'tenancy': 'Mietrecht', 'contract': 'Vertragsrecht', 'commercial': 'Handelsrecht',
-               'employment': 'Arbeitsrecht', 'family': 'Familienrecht', 'social': 'Sozialrecht', 'administrative': 'Verwaltungsrecht', 'criminal': 'Strafrecht'},
+               'employment': 'Arbeitsrecht', 'family': 'Familienrecht', 'social': 'Sozialrecht', 'administrative': 'Verwaltungsrecht', 'tax': 'Steuerrecht', 'criminal': 'Strafrecht'},
         'en': {'general': 'General', 'consumer': 'Consumer law', 'tenancy': 'Tenancy law', 'contract': 'Contract law', 'commercial': 'Commercial law',
-               'employment': 'Employment law', 'family': 'Family law', 'social': 'Social law', 'administrative': 'Administrative law', 'criminal': 'Criminal law'}}
+               'employment': 'Employment law', 'family': 'Family law', 'social': 'Social law', 'administrative': 'Administrative law', 'tax': 'Tax law', 'criminal': 'Criminal law'}}
 KIND = {'de': {'client': 'Mandant', 'opponent': 'Gegner', 'law_firm': 'Anwaltskanzlei', 'court': 'Gericht', 'authority': 'Behörde', 'company': 'Unternehmen', 'person': 'Privatperson', 'other': 'Sonstige'},
         'en': {'client': 'Client', 'opponent': 'Opponent', 'law_firm': 'Law firm', 'court': 'Court', 'authority': 'Authority', 'company': 'Company', 'person': 'Individual', 'other': 'Other'}}
 ROLE = {'de': {'client': 'Mandant / eigene Partei', 'opponent': 'Gegenseite', 'counsel': 'Rechtsvertretung', 'court': 'Gericht', 'authority': 'Behörde', 'other': 'Weitere Beteiligte'},

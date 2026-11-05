@@ -113,7 +113,7 @@ class CaseDetails(BaseModel):
     insurer_name: str = Field(default="", max_length=300)
     insurer_policy: str = Field(default="", max_length=60)
     insurer_claim: str = Field(default="", max_length=60)
-    legal_area: Literal["general", "consumer", "tenancy", "contract", "commercial", "employment", "family", "social", "administrative", "criminal"] = "general"
+    legal_area: Literal["general", "consumer", "tenancy", "contract", "commercial", "employment", "family", "social", "administrative", "tax", "criminal"] = "general"
     jurisdiction: Literal["DE", "EU", "MX", "other"] = "DE"
     stage: Literal["initial", "out_of_court", "court", "appeal", "enforcement"] = "initial"
     objective: str = Field(default="", max_length=2000)
@@ -1425,7 +1425,7 @@ app.include_router(court_lookup.router(require_user))
 
 
 @app.get("/api/cases/{case_id}/court-suggestion")
-def court_suggestion(case_id: str, area: Literal["", "contract", "tenancy", "employment", "social", "administrative"] = "", user: dict = Depends(require_user)):
+def court_suggestion(case_id: str, area: Literal["", "contract", "tenancy", "employment", "social", "administrative", "tax", "family", "criminal"] = "", user: dict = Depends(require_user)):
     """Competent first-instance court for a claim in this case (court type by value/area, place by the relevant address)."""
     case = get_case(case_id, user["id"])
     return court_lookup.suggest(case["details"], area or None)

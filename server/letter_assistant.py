@@ -208,8 +208,8 @@ KINDS = [
     ('strafbefehl', 'Strafbefehl', 'criminal', 'court', lambda t: 'strafbefehl' in t),
     ('bussgeld', 'Bußgeldbescheid', 'criminal', 'out_of_court', lambda t: any_of(t, r'bussgeldbescheid')),
     ('anhoerung', 'Anhörungsbogen (Verkehr / Ordnungswidrigkeit)', 'criminal', 'out_of_court', lambda t: any_of(t, r'anhoerungsbogen', r'anhoerung im bussgeldverfahren', r'zeugenfragebogen', r'anhoerung.{0,40}ordnungswidrigkeit')),
-    ('betriebspruefung', 'Prüfungsanordnung (Betriebsprüfung)', 'administrative', 'out_of_court', lambda t: any_of(t, r'pruefungsanordnung', r'aussenpruefung', r'betriebspruefung', r'196 ao')),
-    ('steuerbescheid', 'Bescheid vom Finanzamt / der Familienkasse', 'administrative', 'out_of_court', lambda t: any_of(t, r'finanzamt', r'familienkasse') and 'bescheid' in t),
+    ('betriebspruefung', 'Prüfungsanordnung (Betriebsprüfung)', 'tax', 'out_of_court', lambda t: any_of(t, r'pruefungsanordnung', r'aussenpruefung', r'betriebspruefung', r'196 ao')),
+    ('steuerbescheid', 'Bescheid vom Finanzamt / der Familienkasse', 'tax', 'out_of_court', lambda t: any_of(t, r'finanzamt', r'familienkasse') and 'bescheid' in t),
     ('bescheid', 'Bescheid einer Behörde', 'administrative', 'out_of_court', lambda t: 'bescheid' in t and any_of(t, r'rechtsbehelfsbelehrung', r'widerspruch', r'behoerde', r'jobcenter', r'agentur fuer arbeit', r'landratsamt', r'stadt ', r'gemeinde', r'kasse')),
     ('abmahnung_urheber', 'Abmahnung (Urheberrecht / Wettbewerb)', 'commercial', 'out_of_court', lambda t: 'abmahnung' in t and any_of(t, r'urheber', r'filesharing', r'tauschboerse', r'unterlassungserklaerung', r'lizenz', r'markenrecht', r'wettbewerb')),
     ('abmahnung_arbeit', 'Abmahnung vom Arbeitgeber', 'employment', 'out_of_court', lambda t: 'abmahnung' in t and any_of(t, r'arbeitsverhaeltnis', r'arbeitsvertrag', r'arbeitspflicht', r'personalakte', r'arbeitgeber')),
@@ -491,10 +491,10 @@ def evaluate(kind, fields, answers, today=None, state=None):
         social = fields.get('legal_area') == 'social' or area_for_authority(fold(f"{fields.get('sender', '')} {fields.get('sender_address', '')}")) == 'social'
         result.summary = f'Bescheid von {fields.get("sender") or "einer Behörde"}.'
         if answers.get('instructions') == 'no':
-            result.calc('Widerspruch (ohne Rechtsbehelfsbelehrung)', start, 1, 'years', '§ 58 Abs. 2 VwGO, § 66 Abs. 2 SGG',
+            result.calc('Widerspruch (ohne Rechtsbehelfsbelehrung)', start, 1, 'years', '§ 66 Abs. 2 SGG' if social else '§ 58 Abs. 2 VwGO',
                         f'Fehlt die Belehrung oder ist sie falsch, gilt ein Jahr ab Bekanntgabe. Berechnet ab {basis}. Sicherer ist es, trotzdem innerhalb eines Monats zu handeln.')
         else:
-            result.calc('Widerspruch', start, 1, 'months', '§ 70 Abs. 1 VwGO, § 84 Abs. 1 SGG', f'Ein Monat ab Bekanntgabe. Berechnet ab {basis}.')
+            result.calc('Widerspruch', start, 1, 'months', '§ 84 Abs. 1 SGG' if social else '§ 70 Abs. 1 VwGO', f'Ein Monat ab Bekanntgabe. Berechnet ab {basis}.')
         if answers.get('wrong') != 'no':
             result.steps = ['Legen Sie schriftlich Widerspruch bei der Stelle ein, die den Bescheid erlassen hat (Anschrift steht in der Rechtsbehelfsbelehrung). Eine Begründung kann nachgereicht werden.',
                             'Beantragen Sie Akteneinsicht, wenn Sie nicht wissen, worauf die Entscheidung beruht.']
@@ -773,7 +773,9 @@ def router(require_user, db=None, record_activity=None, now=None, row_case=None)
             fields = letter_ai.merge(fields, ai)
             if ai['kind'] and ai['kind'] != kind['id']:
                 alternatives = [kind['id'], *[item for item in alternatives if item != ai['kind']]][:3]
-                kind = KIND_INFO[ai['kind']]
+                kind = dict(KIND_INFO[ai['kind']])
+                if kind['id'] == 'bescheid':
+                    kind['legal_area'] = area_for_authority(fold(payload.text))
         return {'kind': kind, 'alternatives': [KIND_INFO[item] for item in alternatives], 'fields': fields, 'questions': QUESTIONS[kind['id']],
                 'ai': bool(ai), 'summary': ai['summary'] if ai else '', 'demands': ai['demands'] if ai else [],
                 'direction': ai['direction'] if ai else 'incoming'}

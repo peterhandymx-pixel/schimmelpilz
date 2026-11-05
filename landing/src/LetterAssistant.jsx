@@ -405,7 +405,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
         client_role: "respondent", opponent_name: (fields.creditor || (official ? "" : fields.sender) || before.opponent_name || "").slice(0, 160),
         opponent_address: (fields.creditor || official ? before.opponent_address || "" : fields.sender_address || "").slice(0, 500),
         opponent_reference: official ? before.opponent_reference || "" : (fields.reference || "").slice(0, 100), court_reference: official ? (fields.reference || "").slice(0, 100) : (before.court_reference || ""),
-        legal_area: outcome.kind.legal_area, stage: outcome.kind.stage, received_on: given.received_on || null, deadline: outcome.deadline?.date || null,
+        legal_area: legalArea || outcome.kind.legal_area, stage: outcome.kind.stage, received_on: given.received_on || null, deadline: outcome.deadline?.date || null,
         deadline_note: outcome.deadline ? `${outcome.deadline.label} (${outcome.deadline.norm})`.slice(0, 300) : "",
         dispute_value: fields.amount ? Number(fields.amount) : before.dispute_value ?? null, court: official ? courtLine.slice(0, 160) : (before.court || ""),
         objective: outcome.steps[0]?.slice(0, 2000) || "",
@@ -548,7 +548,9 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       <div>
         <p className="la-step">{c.step1}</p>
         {error && error !== c.unreadable && <p role="alert" className="la-error">{error}</p>}
-        <label>{c.kind}<select value={kind} onChange={event => { setKind(event.target.value); setLegalArea(kinds.find(item => item.id === event.target.value)?.legal_area || ""); }}>{kinds.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <label>{c.kind}<select value={kind} onChange={event => { const next = event.target.value; setKind(next);
+          // A "Bescheid" keeps the area found from the authority (social vs. administrative); the list only has the default.
+          setLegalArea(current => next === "bescheid" && ["social", "administrative"].includes(current) ? current : kinds.find(item => item.id === next)?.legal_area || ""); }}>{kinds.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <div className="la-grid">{Object.entries(c.fields).map(([id, label]) => <label key={id}>{label}{FIELD_TYPES[id] === "date"
           ? <DateInput lang={lang} value={fields[id] || ""} onChange={event => setFields({ ...fields, [id]: event.target.value })} />
           : <input type={FIELD_TYPES[id] || "text"} step={id === "amount" ? "0.01" : undefined} min={id === "amount" ? 0 : undefined} value={fields[id] ?? ""} onChange={event => setFields({ ...fields, [id]: event.target.value })} />}</label>)}

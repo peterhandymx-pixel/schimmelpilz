@@ -30,7 +30,7 @@ KIND_SKILLS = {
 AREA_DOMAINS = {
     "tenancy": {"mietrecht", "wohnungseigentumsrecht"}, "employment": {"arbeitsrecht"}, "contract": {"vertragsrecht", "prozessrecht"},
     "consumer": {"vertragsrecht", "reise-fluggastrecht"}, "commercial": {"handelsrecht", "gesellschaftsrecht", "vertragsrecht"},
-    "family": {"familienrecht", "erbrecht"}, "social": {"sozialrecht"}, "administrative": {"verwaltungsrecht"}, "criminal": {"strafrecht", "verkehrsrecht"},
+    "family": {"familienrecht", "erbrecht"}, "social": {"sozialrecht"}, "administrative": {"verwaltungsrecht"}, "tax": {"steuerrecht"}, "criminal": {"strafrecht", "verkehrsrecht"},
 }
 NORM = re.compile(r"§+\s*(\d+[a-z]?)(?:\s+(?:Abs\.|S\.|Satz|Nr\.)\s*\S+)*\s+([A-Z][A-Za-z]{1,9})")
 STOP = {"und", "oder", "der", "die", "das", "des", "für", "fuer", "bei", "nach", "use", "when", "rechtsstand", "oktober", "prüfung", "pruefung"}

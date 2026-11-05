@@ -105,7 +105,7 @@ function Statistics() {
   useEffect(() => { request(`/ledger/statistics?year=${year}`).then(setData).catch(() => setData(null)); }, [year]);
   if (!data) return null;
   const max = Math.max(1, ...data.fees_by_month.map(m => m.net_minor));
-  const AREAS = { general: "Allgemein", consumer: "Verbraucher", tenancy: "Miete", contract: "Vertrag/Zivil", commercial: "Handel/Gesellschaft", employment: "Arbeit", family: "Familie", social: "Sozial", administrative: "Verwaltung", criminal: "Straf" };
+  const AREAS = { general: "Allgemein", consumer: "Verbraucher", tenancy: "Miete", contract: "Vertrag/Zivil", commercial: "Handel/Gesellschaft", employment: "Arbeit", family: "Familie", social: "Sozial", administrative: "Verwaltung", tax: "Steuer", criminal: "Straf" };
   const STATES = { active: "In Bearbeitung", waiting: "Wartet", closed: "Abgeschlossen", archived: "Archiv" };
   return <>
     <div className="eakte-filter"><label>Jahr<input type="number" min={2020} max={2100} value={year} onChange={e => setYear(Number(e.target.value))} /></label></div>

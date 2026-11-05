@@ -9,10 +9,14 @@ import { matches } from "./workbench.js";
 // Which court a sample is addressed to: none, or the procedure area its fallback text names.
 function courtNeed(sample) {
   let needed = false, area = "";
-  const probe = { ...sampleContext(null), courtOr: fallback => { needed = true; area = /Sozialgericht/.test(fallback) ? "social" : /Arbeitsgericht/.test(fallback) ? "employment" : /Verwaltungsgericht/.test(fallback) ? "administrative" : ""; return fallback; } };
+  let special = false;
+  const probe = { ...sampleContext(null), courtOr: fallback => { needed = true;
+    // Central dunning courts and probate courts depend on facts the case does not hold: never guessed.
+    if (/Mahngericht|Nachlassgericht/.test(fallback)) special = true;
+    area = /Verwaltungsgericht \/ Sozialgericht/.test(fallback) ? "" : /Sozialgericht/.test(fallback) ? "social" : /Arbeitsgericht/.test(fallback) ? "employment" : /Verwaltungsgericht/.test(fallback) ? "administrative" : /Finanzgericht/.test(fallback) ? "tax" : /Familiengericht/.test(fallback) ? "family" : ""; return fallback; } };
   Object.defineProperty(probe, "court", { get: () => { needed = true; return "[Gericht, Anschrift]"; } });
   try { sample.body(probe); } catch { return null; }
-  return needed ? { area } : null;
+  return needed && !special ? { area } : null;
 }
 
 export function SampleLibrary({ lang, cases, selectedCase, query = "", onDraft, onNewCase, onCaseUpdate, canEdit = true }) {

@@ -90,3 +90,20 @@ class LetterDirectionTests(test_inbox.InboxTests):
         self.assertIn('Synthetic Person', seen['system'])
         self.assertEqual(letter_ai.merge({'creditor': 'auf den Schriftsatz', 'court': 'Sozialgericht Köln', 'sender': 'X'},
                                          {'fields': {'creditor': '', 'court': '', 'sender': ''}}), {'creditor': '', 'court': '', 'sender': 'X'})
+
+
+class AuthorityAreaTests(test_inbox.InboxTests):
+    test_unassigned_persistence_then_exact_file_and_text_review_in_case = None
+    test_ownership_validation_stale_updates_and_single_assignment = None
+    test_rejected_uploads_leave_no_files_and_auth_guard_applies = None
+    test_atomic_assignment_rollback_and_failed_upload_cleanup = None
+    test_correction_guards_and_atomic_rollback = None
+    test_correction_preserves_snapshots_blocks_old_sources_and_can_assign_back = None
+
+    def test_social_authority_decision_stays_social_when_the_model_picks_the_kind(self):
+        text = 'Versorgungsamt Köln\nBescheid über die Feststellung des Grades der Behinderung nach dem SGB IX\nRechtsbehelfsbelehrung: Widerspruch innerhalb eines Monats.'
+        with TestClient(api.app) as client:
+            self.login(client, 'authority@example.invalid')
+            with patch.object(research, 'generate_json', return_value={'kind': 'bescheid', 'sender': 'Versorgungsamt Köln', 'summary': 'GdB-Bescheid.'}):
+                read = client.post('/api/letter-assistant/analyze', json={'text': text, 'use_ai': True}).json()
+        self.assertEqual((read['kind']['id'], read['kind']['legal_area']), ('bescheid', 'social'))

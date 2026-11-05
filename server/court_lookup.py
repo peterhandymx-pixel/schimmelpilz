@@ -104,7 +104,7 @@ def router(require_user):
 
 AMTSGERICHT_LIMIT = 10_000  # § 23 Nr. 1 GVG (Fassung ab 01.01.2026)
 LIMIT_TEXT = '10.000 €'
-PROCEDURE_AREAS = {'employment': 'arbeit', 'social': 'sozial', 'administrative': 'verwaltung'}
+PROCEDURE_AREAS = {'employment': 'arbeit', 'social': 'sozial', 'administrative': 'verwaltung', 'tax': 'finanz', 'family': 'familie'}
 ADDRESS = re.compile(r'\b(\d{5})\s+([A-Za-zÄÖÜäöüß][^\n,;]*)')
 
 
@@ -123,12 +123,21 @@ def suggest(details, legal_area=None):
 
     Returns {'ok': True, 'court': 'Name, Straße, PLZ Ort', 'basis': '…', ...} or {'ok': False, 'missing': …, 'message': …}.
     """
-    area = PROCEDURE_AREAS.get(legal_area or details.get('legal_area') or '', 'zivil')
+    chosen = legal_area or details.get('legal_area') or ''
+    if chosen == 'criminal':
+        # Penalty orders and fines are not challenged by a claim but by objection (Einspruch).
+        return {'ok': False, 'missing': None, 'message': 'In Straf- und Bußgeldsachen gibt es keine Klage: Gegen einen Strafbefehl wird binnen zwei Wochen Einspruch beim Amtsgericht eingelegt, '
+                'das ihn erlassen hat (§ 410 StPO); gegen einen Bußgeldbescheid binnen zwei Wochen Einspruch bei der Behörde, die ihn erlassen hat (§ 67 OWiG). Bitte die Vorlage „Einspruch“ verwenden.'}
+    area = PROCEDURE_AREAS.get(chosen, 'zivil')
     client, opponent = details.get('client_address') or '', details.get('opponent_address') or ''
     value = details.get('dispute_value')
     tenancy = (legal_area or details.get('legal_area')) == 'tenancy'
     if area == 'sozial':
         address, who, local = client, 'der klagenden Partei', 'Wohnsitz der klagenden Partei (§ 57 Abs. 1 SGG)'
+    elif area == 'finanz':
+        address, who, local = opponent, 'des Finanzamts', 'Bezirk des Finanzamts, das den Bescheid erlassen hat (§ 38 Abs. 1 FGO)'
+    elif area == 'familie':
+        address, who, local = client, 'der eigenen Partei', 'gewöhnlicher Aufenthalt der Beteiligten bzw. des Kindes (§§ 122, 152, 232 FamFG) – im Einzelfall prüfen'
     elif area == 'zivil' and tenancy:
         address, who, local = details.get('property_address') or client, 'der Mietwohnung', 'Ort der Wohnung, ausschließlich (§ 29a Abs. 1 ZPO)'
     else:
@@ -149,6 +158,7 @@ def suggest(details, legal_area=None):
             prefix, subject = 'Amtsgericht', f'Streitwert bis {LIMIT_TEXT} (§ 23 Nr. 1 GVG)'
     else:
         prefix, subject = {'arbeit': ('Arbeitsgericht', 'Rechtsweg zu den Arbeitsgerichten (§ 2 ArbGG)'), 'sozial': ('Sozialgericht', 'Rechtsweg zu den Sozialgerichten (§ 51 SGG)'),
+                           'finanz': ('Finanzgericht', 'Finanzrechtsweg (§ 33 FGO), erste Instanz (§ 35 FGO)'), 'familie': ('Amtsgericht', 'Familiensache: Amtsgericht – Familiengericht (§ 23a Abs. 1 Nr. 1 GVG, § 111 FamFG)'),
                            'verwaltung': ('Verwaltungsgericht', 'Verwaltungsrechtsweg (§ 40 VwGO), erste Instanz (§ 45 VwGO)')}[area]
     try:
         found = lookup(area, postal, place)
