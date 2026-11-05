@@ -1109,8 +1109,8 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
             if not ("pytest" in sys.modules and not os.getenv("PLAN_NORMS_IN_TESTS")):
                 try:
                     planned = plan_norms(payload.question, area, list(legal_catalogue.LAWS.values()))
-                except Exception:
-                    retrieval['errors'].append({'title':'norm_planning','reason':'planning_failed'})
+                except Exception as error:
+                    retrieval['errors'].append({'title':'norm_planning','reason':'planning_failed','detail':type(error).__name__ + (f' {error.code}' if hasattr(error,'code') else '')})
             retrieval['planned'] = [f'§ {number} {law}' for number,law in planned]
             for hit in legal_catalogue.search_question(payload.question,limit=5,area=area,planned=planned):
                 try:

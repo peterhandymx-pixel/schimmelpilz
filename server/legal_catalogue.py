@@ -399,6 +399,8 @@ def search_question(question, limit=4, area=None, planned=()):
                     row = db.execute("SELECT * FROM entries WHERE kind='law' AND title LIKE ?",(f'§ {number} {law} · %',)).fetchone()
                     if row and '(weggefallen)' not in row['title'] and all(item['key'] != row['key'] for item in picked):
                         picked.append(entry(row))
+        if len(picked) >= 2 and planned:
+            return picked  # the planned provisions answer the question; keyword hits would only add noise
         terms = question_terms(question)
         rows = db.execute("SELECT e.*,bm25(entry_search,0,12,1) AS score FROM entry_search s JOIN entries e ON e.key=s.key WHERE entry_search MATCH ? AND e.kind='law' ORDER BY score LIMIT 200",[' OR '.join(f'"{term}"*' for term in terms)]).fetchall() if terms else []
     scored = []
