@@ -384,6 +384,11 @@ Inhalt
 - E-Mail-Erinnerung: einmal zur Vorfrist, einmal am Tag vor Fristablauf,
   eine Sammelmail pro Tag; abschaltbar unter Mein Konto.
 - Oberfläche auf Deutsch und Englisch.
+- Frau Schimmelpilz führt als Comicfigur durch den Ablauf: fragt, ob Post
+  gekommen ist, legt die Akte an, liest den Brief, stellt die Fragen und
+  meldet die Frist – mit Ablaufleiste wie in der Kanzlei (Post annehmen,
+  Akte anlegen, Brief lesen, Angaben prüfen, Fragen klären, Frist notieren,
+  Antwort vorbereiten).
 
 
 25. DIKTAT UND SCHREIBPOOL (Kanzlei)

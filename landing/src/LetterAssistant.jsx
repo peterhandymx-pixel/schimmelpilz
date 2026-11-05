@@ -4,6 +4,57 @@ import { request, readPreference, writePreference } from "./useCaseStorage.js";
 import { dateLabel, localToday, taskRows } from "./workbench.js";
 import { DateInput } from "./DateInput";
 import "./letter-assistant.css";
+import { AssistantSays, OfficeTrack } from "./Schimmelpilz.jsx";
+
+// What the comic assistant says at each step, in the order a law office handles incoming post.
+const G = {
+  de: {
+    track: ["Post annehmen", "Akte anlegen", "Brief lesen", "Angaben prüfen", "Fragen klären", "Frist notieren", "Antwort vorbereiten"],
+    hello: name => `Hallo${name ? ` ${name}` : ""}, ich bin Frau Schimmelpilz, Ihre Rechtsassistentin.\nHaben Sie Post bekommen?`,
+    yesPost: "Ja, ich habe einen Brief bekommen", noPost: "Nein – was steht bei mir an?", backPost: "Doch, ich habe einen Brief",
+    bring: "Prima, dann her damit! Fotografieren Sie den Brief oder tippen Sie ihn ab. Ich lege eine Akte an, lese ihn genau durch und sage Ihnen, was zu tun ist – und bis wann.",
+    follow: title => `Ein neuer Brief zur Akte „${title}“? Her damit – ich lege ihn dazu.`,
+    openList: n => `Dann schauen wir in Ihre Akten: ${n === 1 ? "eine offene Frist" : `${n} offene Fristen`}. Ist da inzwischen etwas passiert?`,
+    calm: "Alles ruhig – keine offenen Fristen. Sobald Post kommt, bin ich da.",
+    reading: ["Ich lege eine neue Akte an …", "Ich lese den Brief …", "Wer schreibt, was wird verlangt, gibt es eine Frist?"],
+    readingSay: stage => stage === 0 ? "Einen Moment, ich nehme den Brief an und lege eine Akte an." : stage === 1 ? "Jetzt lese ich den Brief – Wort für Wort, wie in der Kanzlei." : "Fast fertig – ich sortiere, was im Brief steht.",
+    readingNote: "Bei Fotos dauert das Lesen etwas länger.",
+    found: (kind, party, amount) => `Ich habe den Brief gelesen. Das ist: ${kind}${party ? ` von ${party}` : ""}${amount ? `, es geht um ${amount}` : ""}.\nBitte schauen Sie kurz über meine Notizen – stimmt alles?`,
+    unreadable: "Hm, den Text kann ich leider nicht entziffern. Tragen Sie die wichtigsten Angaben bitte selbst ein – ich helfe danach weiter.",
+    match: party => `\nÜbrigens: Zu ${party} haben Sie schon eine Akte. Soll ich den Brief dazulegen?`,
+    asking: (i, n) => `Frage ${i} von ${n}`,
+    calculating: "Einen Moment – ich rechne die Frist aus, mit Wochenenden und Feiertagen.",
+    urgent: (label, date, days) => `Achtung! ${label}: ${date} – ${days}. Das gehen wir am besten sofort an. Unten steht, was zu tun ist.`,
+    soon: (label, date, days) => `${label}: ${date} – ${days}. Das ist gut zu schaffen, aber bitte nicht liegen lassen.`,
+    relaxed: (label, date, days) => `${label}: ${date} – ${days}. Genug Zeit. Ich habe unten aufgeschrieben, was zu tun ist.`,
+    none: "Für diesen Brief gibt es keine feste Frist. Reagieren Sie trotzdem zeitnah – unten steht, wie.",
+    filed: title => `Ich habe alles in die Akte „${title}“ gelegt und die Frist notiert.`,
+    filing: "Ich lege alles in Ihre Akte …",
+  },
+  en: {
+    track: ["Receive post", "Open file", "Read letter", "Check details", "Questions", "Note deadline", "Prepare reply"],
+    hello: name => `Hello${name ? ` ${name}` : ""}, I'm Ms Schimmelpilz, your legal assistant.\nDid you receive a letter?`,
+    yesPost: "Yes, I received a letter", noPost: "No – what is pending?", backPost: "Actually, I have a letter",
+    bring: "Great, let's have it! Take a photo of the letter or type it in. I'll open a file, read it carefully and tell you what to do – and by when.",
+    follow: title => `A new letter for "${title}"? Let's have it – I'll add it to the file.`,
+    openList: n => `Then let's look at your files: ${n === 1 ? "one open deadline" : `${n} open deadlines`}. Has anything happened since?`,
+    calm: "All quiet – no open deadlines. I'm here as soon as post arrives.",
+    reading: ["Opening a new file …", "Reading the letter …", "Who writes, what is demanded, is there a deadline?"],
+    readingSay: stage => stage === 0 ? "One moment, I'm taking the letter and opening a file." : stage === 1 ? "Now I'm reading the letter – word by word, like in a law office." : "Almost done – I'm sorting out what the letter says.",
+    readingNote: "Photos take a little longer to read.",
+    found: (kind, party, amount) => `I've read the letter. It is: ${kind}${party ? ` from ${party}` : ""}${amount ? `, about ${amount}` : ""}.\nPlease check my notes – is everything right?`,
+    unreadable: "Hm, I can't make out the text. Please enter the key details yourself – I'll take it from there.",
+    match: party => `\nBy the way: you already have a file for ${party}. Shall I add the letter to it?`,
+    asking: (i, n) => `Question ${i} of ${n}`,
+    calculating: "One moment – I'm calculating the deadline, including weekends and holidays.",
+    urgent: (label, date, days) => `Attention! ${label}: ${date} – ${days}. Best to act right away. What to do is below.`,
+    soon: (label, date, days) => `${label}: ${date} – ${days}. Manageable, but please don't leave it.`,
+    relaxed: (label, date, days) => `${label}: ${date} – ${days}. Plenty of time. I've written down below what to do.`,
+    none: "There is no fixed deadline for this letter. Still, reply soon – see below.",
+    filed: title => `I've put everything into the file "${title}" and noted the deadline.`,
+    filing: "Filing everything in your case …",
+  },
+};
 
 const json = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
@@ -131,6 +182,8 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   // true when the person chose to file this letter in an existing case they already run:
   // that case's particulars and deadlines stay; only empty fields are filled.
   const [attachOnly, setAttachOnly] = useState(false);
+  // The assistant first asks whether post has arrived: ask | yes | no.
+  const [post, setPost] = useState("ask");
   // id of the letter uploaded into the provisional case, so it can move to an existing case.
   const [uploadedDoc, setUploadedDoc] = useState("");
   const fileInput = useRef(null);
@@ -145,7 +198,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const questions = kinds.find(item => item.id === kind)?.questions || [];
   const openDeadlines = taskRows(storage.cases).filter(row => !row.completed && row.due_on && ["deadline", "notfrist"].includes(row.kind) && !row.caseItem.archived_at).slice(0, 6);
 
-  const reset = () => { setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDoc(""); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
+  const reset = () => { setPost("yes"); setStep("start"); setError(""); setPasted(""); setTyping(false); setCaseItem(null); setFollowCase(null); setAttachOnly(false); setUploadedDoc(""); setText(""); setPreview(""); setFields({}); setAnswers({}); setQuestionIndex(0); setResult(null); setSaved(null); };
 
   const analyze = async letterText => {
     if (letterText.trim().length < 20) {
@@ -267,21 +320,41 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const followUp = row => { setFollowCase(row.caseItem); setError(""); window.scrollTo?.({ top: 0, behavior: "smooth" }); };
 
   const question = questions[questionIndex];
+  const g = G[lang] || G.de;
+  const firstName = "";
+  const readingStage = progress === c.uploading ? 0 : text || progress === c.analysing ? 2 : 1;
+  // The assistant's reaction to the result: alarmed for short deadlines, relaxed when there is time.
+  const verdict = outcome => {
+    const deadline = outcome.deadline;
+    if (!deadline) return { pose: "cheer", mood: "smile", text: g.none };
+    const days = deadline.days_left < 0 ? c.overdue(-deadline.days_left) : deadline.days_left === 0 ? c.todayLeft : c.left(deadline.days_left);
+    const args = [deadline.label, dateLabel(deadline.date, lang), days];
+    if (["overdue", "high"].includes(outcome.urgency)) return { pose: "alarm", mood: "worried", text: g.urgent(...args) };
+    if (outcome.urgency === "medium") return { pose: "point", mood: "focus", text: g.soon(...args) };
+    return { pose: "cheer", mood: "grin", text: g.relaxed(...args) };
+  };
   const answered = question && (question.optional || answers[question.id]);
 
   return <section className="letter-assistant">
     {step === "start" && <>
-      <div className="la-hero"><IconMailOpened size={40} stroke={1.3} /><div><h2>{followCase ? c.followUp : c.heroTitle}</h2><p>{followCase ? followCase.title : c.heroText}</p></div></div>
+      <OfficeTrack steps={g.track} current={0} />
+      {followCase ? <AssistantSays pose="file" mood="smile" text={g.follow(followCase.title)} />
+        : post === "ask" ? <AssistantSays pose="wave" mood="grin" text={g.hello(firstName)}>
+          <button className="sp-reply primary" onClick={() => setPost("yes")}><IconMailOpened size={17} />{g.yesPost}</button>
+          <button className="sp-reply" onClick={() => setPost("no")}>{g.noPost}</button></AssistantSays>
+        : post === "no" ? <AssistantSays pose={openDeadlines.length ? "file" : "cheer"} mood={openDeadlines.length ? "focus" : "grin"} text={openDeadlines.length ? g.openList(openDeadlines.length) : g.calm}>
+          <button className="sp-reply primary" onClick={() => setPost("yes")}><IconMailOpened size={17} />{g.backPost}</button></AssistantSays>
+        : <AssistantSays pose="point" mood="grin" text={g.bring} />}
       {error && <p role="alert" className="la-error">{error}</p>}
-      <div className="la-choices">
+      {(post === "yes" || followCase) && <div className="la-choices">
         <button className="la-choice" onClick={() => fileInput.current?.click()}><IconCamera size={30} stroke={1.4} /><strong>{c.upload}</strong><small>{c.uploadHint}</small></button>
         <button className="la-choice" onClick={() => setTyping(true)}><IconKeyboard size={30} stroke={1.4} /><strong>{c.type}</strong><small>{c.typeHint}</small></button>
-      </div>
+      </div>}
       <input ref={fileInput} type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.docx" capture="environment" onChange={event => { startWithFile(event.target.files?.[0]); event.target.value = ""; }} />
       {typing && <div className="la-card"><label>{c.letterText}<textarea rows={10} value={pasted} onChange={event => setPasted(event.target.value)} placeholder={c.letterPlaceholder} /></label>
         <div className="la-actions"><button className="desk-button solid" disabled={pasted.trim().length < 20} onClick={startWithText}>{c.analyse}<IconArrowRight size={17} /></button><button className="desk-link" onClick={() => setTyping(false)}>{c.cancel}</button></div></div>}
       {followCase && <p className="la-more"><button className="desk-link" onClick={() => setFollowCase(null)}>{c.cancel}</button></p>}
-      {!followCase && openDeadlines.length > 0 && <div className="la-card"><h3><IconCalendarDue size={19} />{c.open}</h3><p className="field-help">{c.openHint}</p>
+      {!followCase && post === "no" && openDeadlines.length > 0 && <div className="la-card"><h3><IconCalendarDue size={19} />{c.open}</h3><p className="field-help">{c.openHint}</p>
         <ul className="la-followups">{openDeadlines.map(row => { const over = row.due_on < today; return <li key={row.id} className={over ? "over" : row.due_on <= today ? "due" : ""}>
           <button className="desk-link la-followup-title" onClick={() => open(row.caseItem.id, "tasks")}><strong>{dateLabel(row.due_on, lang)}</strong> {row.title}<small>{row.caseItem.title}</small></button>
           <span className="la-followup-actions"><button className="desk-button" onClick={() => complete(row)}><IconCheck size={15} />{c.done}</button><button className="desk-button" onClick={() => followUp(row)}><IconMailForward size={15} />{c.newLetter}</button>
@@ -291,12 +364,18 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       <p className="la-more"><button className="desk-link" onClick={onShowAll}>{c.allFeatures}</button></p>
     </>}
 
-    {(step === "reading" || step === "evaluating") && <div className="la-card la-busy" role="status"><IconLoader2 className="la-spin" size={30} />{step === "reading" ? progress : c.evaluating}</div>}
+    {step === "reading" && <><OfficeTrack steps={g.track} current={readingStage === 0 ? 1 : 2} busy />
+      <AssistantSays pose={readingStage === 0 ? "file" : "read"} mood="focus" text={g.readingSay(readingStage)} note={progress === c.readingLong ? g.readingNote : ""}>
+        <ul className="sp-checklist">{g.reading.map((line, index) => <li key={line} className={index < readingStage ? "done" : index === readingStage ? "now" : ""}>{line}</li>)}</ul></AssistantSays></>}
+    {step === "evaluating" && <><OfficeTrack steps={g.track} current={5} busy /><AssistantSays pose="read" mood="focus" text={g.calculating} /></>}
 
+    {step === "confirm" && <OfficeTrack steps={g.track} current={3} />}
+    {step === "confirm" && (error === c.unreadable ? <AssistantSays pose="think" mood="worried" text={g.unreadable} />
+      : <AssistantSays pose="file" mood="smile" text={g.found(kinds.find(item => item.id === kind)?.label || kind, party, fields.amount ? euro(fields.amount) : "") + (matchingCase ? g.match(party) : "")} />)}
     {step === "confirm" && <form className={preview ? "la-card la-with-preview" : "la-card"} onSubmit={confirm}>
       <div>
-        <p className="la-step">{c.step1}</p><h2>{c.confirmTitle}</h2><p>{c.confirmText}</p>
-        {error && <p role="alert" className="la-error">{error}</p>}
+        <p className="la-step">{c.step1}</p>
+        {error && error !== c.unreadable && <p role="alert" className="la-error">{error}</p>}
         <label>{c.kind}<select value={kind} onChange={event => { setKind(event.target.value); setLegalArea(kinds.find(item => item.id === event.target.value)?.legal_area || ""); }}>{kinds.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <div className="la-grid">{Object.entries(c.fields).map(([id, label]) => <label key={id}>{label}{FIELD_TYPES[id] === "date"
           ? <DateInput lang={lang} value={fields[id] || ""} onChange={event => setFields({ ...fields, [id]: event.target.value })} />
@@ -310,10 +389,11 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       {preview && <a className="la-preview" href={preview} target="_blank" rel="noreferrer"><img src={preview} alt={c.upload} /></a>}
     </form>}
 
+    {step === "questions" && question && <><OfficeTrack steps={g.track} current={4} />
+      <AssistantSays pose="think" mood="think" text={question.label} note={question.help || ""} /></>}
     {step === "questions" && question && <div className="la-card">
       <p className="la-step">{c.question(questionIndex + 1, questions.length)}</p>
       <div className="la-progress"><span style={{ width: `${((questionIndex + 1) / questions.length) * 100}%` }} /></div>
-      <h2>{question.label}</h2>{question.help && <p className="field-help">{question.help}</p>}
       {error && <p role="alert" className="la-error">{error}</p>}
       {question.type === "date" ? <div className="la-date"><DateInput lang={lang} max={question.id === "received_on" ? today : undefined} value={answers[question.id] || ""} onChange={event => answer(question.id, event.target.value)} />
         {question.id === "received_on" && <button type="button" className="desk-link" onClick={() => answer(question.id, today)}>{c.today}</button>}</div>
@@ -323,6 +403,8 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     </div>}
 
     {step === "result" && result && <div className="la-result">
+      <OfficeTrack steps={g.track} current={saved ? (samples.length ? 6 : 7) : 5} busy={!saved} />
+      <AssistantSays {...verdict(result)} note={saved ? g.filed(saved.title) : g.filing} />
       <div className="la-card"><p className="la-step">{c.step3}</p><h2>{result.kind.label}</h2><p>{result.summary}</p>{fields.amount ? <p><strong>{c.amount}:</strong> {euro(fields.amount)}</p> : null}</div>
       {result.deadline ? <div className={`la-deadline ${result.urgency}`}><IconCalendarDue size={34} stroke={1.4} /><div>
         <span>{result.deadline.label}{result.deadline.strict ? c.statutory : ""}</span>
