@@ -248,6 +248,7 @@ export function App() {
   };
   // A claim goes to a court: the app determines it (court type by value and area, place by the relevant address)
   // and records it in the case, so the draft never starts with an empty court.
+  const autoRecipient = useRef("");
   const withCourt = async (item, kind, recipient) => {
     if (kind !== "claim" || recipient.trim() || !item) return { item, jurisdiction: null };
     try {
@@ -260,13 +261,32 @@ export function App() {
       return { item, jurisdiction };
     } catch { return { item, jurisdiction: null }; }
   };
+  // For a claim the recipient is the competent court: filled in automatically, and removed again when the
+  // document type changes, as long as nobody has typed over it. A recipient someone entered is never replaced.
+  const courtRecipient = item => (item?.details?.court || "").split(/,\s*/).filter(Boolean).join("\n");
+  const fillRecipient = async (item, kind, recipient) => {
+    const automatic = !recipient.trim() || recipient === autoRecipient.current;
+    if (kind === "claim" && automatic) {
+      const found = await withCourt(item, kind, "");
+      const court = courtRecipient(found.item);
+      autoRecipient.current = court;
+      return { ...found, recipient: court };
+    }
+    if (kind !== "claim" && recipient && recipient === autoRecipient.current) {
+      autoRecipient.current = "";
+      return { item, jurisdiction: null, recipient: "" };
+    }
+    return { ...(await withCourt(item, kind, recipient)), recipient };
+  };
   const changeDraftSettings = async (kind, language, recipient) => {
     setDraftKind(kind); setDraftLanguage(language); setDraftRecipient(recipient);
-    if (storage.selectedCase && draftBody === generatedDraft.current) {
-      const draftBefore = draftBody;
-      const { item, jurisdiction } = await withCourt(storage.selectedCase, kind, recipient);
-      const body = documentTemplate(item, language, kind, recipient, jurisdiction);
-      if (generatedDraft.current === draftBefore) { generatedDraft.current = body; setDraftBody(body); }
+    if (!storage.selectedCase) return;
+    const draftBefore = draftBody, untouched = draftBody === generatedDraft.current;
+    const { item, jurisdiction, recipient: filled } = await fillRecipient(storage.selectedCase, kind, recipient);
+    if (filled !== recipient) setDraftRecipient(filled);
+    if (untouched && generatedDraft.current === draftBefore) {
+      const body = documentTemplate(item, language, kind, filled, jurisdiction);
+      generatedDraft.current = body; setDraftBody(body);
     }
   };
   // A text block goes in at the cursor of the draft editor (or at the end).
@@ -276,8 +296,9 @@ export function App() {
     setDraftBody(draftBody.slice(0, at) + text + draftBody.slice(at));
   };
   const insertDraftTemplate = async () => {
-    const { item, jurisdiction } = await withCourt(storage.selectedCase, draftKind, draftRecipient);
-    const body = documentTemplate(item, draftLanguage, draftKind, draftRecipient, jurisdiction);
+    const { item, jurisdiction, recipient } = await fillRecipient(storage.selectedCase, draftKind, draftRecipient);
+    if (recipient !== draftRecipient) setDraftRecipient(recipient);
+    const body = documentTemplate(item, draftLanguage, draftKind, recipient, jurisdiction);
     generatedDraft.current = body; setDraftBody(body);
   };
   const saveDraft = async () => {
