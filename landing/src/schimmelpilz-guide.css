@@ -1,19 +1,13 @@
 .sp-guide { display: flex; gap: 6px; align-items: flex-end; }
 .sp-figure-wrap { flex: none; margin-bottom: -6px; }
-.sp-figure { display: block; overflow: visible; }
-.sp-body { animation: sp-bob 3.2s ease-in-out infinite; }
-.sp-eyes { transform-box: fill-box; transform-origin: center; animation: sp-blink 4.6s infinite; }
-.sp-wave { transform-box: view-box; transform-origin: 132px 134px; animation: sp-wave 1.4s ease-in-out infinite; }
-.sp-float { animation: sp-float 2.4s ease-in-out infinite; }
-.sp-mouth-talk { opacity: 0; }
-.sp-figure.talking .sp-mouth-rest { animation: sp-talk-rest .26s steps(1) infinite; }
-.sp-figure.talking .sp-mouth-talk { animation: sp-talk .26s steps(1) infinite; }
+.sp-figure { position: relative; display: block; animation: sp-bob 3.2s ease-in-out infinite; transform-origin: 50% 100%; }
+.sp-figure img { display: block; width: 100%; height: auto; user-select: none; }
+.sp-figure.talking img { animation: sp-nod .5s ease-in-out infinite; transform-origin: 50% 90%; }
+.sp-sign { position: absolute; top: -4px; right: -10px; width: 34%; max-width: 54px; animation: sp-float 2.4s ease-in-out infinite; filter: drop-shadow(0 2px 0 rgba(0,0,0,.15)); }
+@keyframes sp-nod { 50% { transform: rotate(-1.5deg) translateY(-1px); } }
 @keyframes sp-bob { 50% { transform: translateY(-3px); } }
-@keyframes sp-blink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
-@keyframes sp-wave { 50% { transform: rotate(-12deg); } }
 @keyframes sp-float { 50% { transform: translateY(-4px); } }
 @keyframes sp-talk { 50% { opacity: 1; } }
-@keyframes sp-talk-rest { 50% { opacity: 0; } }
 
 .sp-bubble { position: relative; flex: 1; min-width: 0; background: #fff; border: 2px solid #263e31; border-radius: 18px; padding: 14px 18px 16px; margin-bottom: 40px; box-shadow: 4px 4px 0 #263e31; cursor: default; }
 .sp-bubble::before { content: ""; position: absolute; left: -16px; bottom: 26px; border: 9px solid transparent; border-right: 14px solid #263e31; }
@@ -49,9 +43,9 @@
   .sp-track li:not(.now) em { display: none; }
   .sp-track li:not(.now) { padding: 3px; }
   .sp-guide { gap: 2px; }
-  .sp-figure-wrap svg { width: 84px; height: auto; }
+  .sp-figure-wrap .sp-figure { width: 96px !important; }
   .sp-bubble { padding: 12px 14px; margin-bottom: 26px; }
   .sp-bubble p { font-size: 15px; }
   .sp-reply { font-size: 14px; padding: 9px 13px; }
 }
-@media (prefers-reduced-motion: reduce) { .sp-body, .sp-eyes, .sp-wave, .sp-float, .sp-caret, .sp-figure.talking * { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .sp-figure, .sp-figure img, .sp-sign, .sp-caret { animation: none !important; } }
