@@ -788,8 +788,10 @@ def router(require_user, db=None, record_activity=None, now=None, row_case=None)
             fields['amount'] = None
         # The deadline is recalculated here by the rules; the model only explains it.
         outcome = evaluate(payload.kind, fields, payload.answers, state=payload.state)
+        case_law = letter_ai.case_law_for_kind(payload.kind)
         try:
-            return {'text': letter_ai.explain(KIND_INFO[payload.kind]['label'], fields, payload.answers, outcome, payload.text, QUESTIONS[payload.kind])}
+            text = letter_ai.explain(KIND_INFO[payload.kind]['label'], fields, payload.answers, outcome, payload.text, QUESTIONS[payload.kind], case_law=case_law)
+            return {'text': text, 'case_law': case_law, 'citation_check': letter_ai.nulegal.check_citations(text)}
         except Exception:  # noqa: BLE001
             raise HTTPException(503, 'ai_unavailable') from None
 

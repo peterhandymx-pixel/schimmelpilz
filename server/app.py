@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets, letter_assistant, reminders, dictations
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ai_status, prepare_messages, generate_answer, AI_MODEL
+from . import nulegal
 from .document_context import select_sources
 from . import legal_catalogue
 from . import draft_review
@@ -1123,16 +1124,25 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
                 legal_passages = supplied_legal_passages(legal_rows,payload.question)
             except ValueError:
                 raise HTTPException(status_code=422,detail='source_excluded') from None
+        # Leading decisions for the statutes found, from nu:legal; the query holds statute headings and fixed vocabulary only.
+        case_law = []
+        if case['details'].get('jurisdiction','DE') == 'DE' and legal_passages:
+            titles = list(dict.fromkeys(item['title'] for item in legal_passages))
+            case_law = nulegal.case_law_for(titles, legal_catalogue.everyday_keywords(payload.question))
+        retrieval['case_law'] = case_law
+        with db() as connection:
             connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, AI_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False)))
         try:
-            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages))
+            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages, case_law))
         except (URLError, OSError, TimeoutError, ValueError) as error:
             code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_unavailable"
             with db() as connection:
                 connection.execute("UPDATE research_runs SET status = 'failed', error_code = ?, finished_at = ? WHERE id = ?", (code, now(), run_id))
             raise HTTPException(status_code=504 if code == "ai_timeout" else 503, detail=code) from None
+        # Every statute and docket the answer cites is checked against nu:legal (citation strings only).
+        retrieval['citation_check'] = nulegal.check_citations(result['answer'])
         with db() as connection:
-            connection.execute("UPDATE research_runs SET status = 'completed', answer = ?, input_tokens = ?, output_tokens = ?, truncated = ?, finished_at = ?, citation_audit=? WHERE id = ?", (result["answer"], result["input_tokens"], result["output_tokens"], result["truncated"], now(),json.dumps(citation_audit(result['answer'],legal_passages)), run_id))
+            connection.execute("UPDATE research_runs SET status = 'completed', answer = ?, input_tokens = ?, output_tokens = ?, truncated = ?, finished_at = ?, citation_audit=?, retrieval_report=? WHERE id = ?", (result["answer"], result["input_tokens"], result["output_tokens"], result["truncated"], now(),json.dumps(citation_audit(result['answer'],legal_passages)),json.dumps(retrieval,ensure_ascii=False), run_id))
             record_activity(connection, case_id, "research_answer")
             return research_row(connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone())
     finally:

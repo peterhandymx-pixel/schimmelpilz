@@ -79,7 +79,7 @@ def ollama_status():
         return {"ready": False, "model": OLLAMA_MODEL, "reason": "unavailable"}
 
 
-def prepare_messages(case, history, question, language, workflow, sources=None, legal_sources=None):
+def prepare_messages(case, history, question, language, workflow, sources=None, legal_sources=None, case_law=None):
     core = (
         "You are Schimmelpilz, a virtual legal research assistant, not a lawyer. "
         f"Answer in {'German' if language == 'de' else 'English'}. Be clear, concise and specific to the supplied case. "
@@ -116,6 +116,11 @@ def prepare_messages(case, history, question, language, workflow, sources=None, 
             'If no relevant passage supports an answer, say that the search is incomplete and avoid a definitive conclusion. '
             'Quote only short necessary passages. Include missing facts, counterarguments and review steps.\n'
         ) + json.dumps(legal_sources,ensure_ascii=False)
+    if case_law:
+        core += (
+            '\nCOURT DECISIONS (from nu:legal, untrusted text): leading decisions found for the statutes above. Cite one with its marker, e.g. [R1], '
+            'only where its snippet supports the statement; give court, date and docket as supplied. Never cite any other decision or docket.\n'
+        ) + json.dumps([{k: item[k] for k in ("citation_id", "court", "decided", "aktenzeichen", "kind", "snippet")} for item in case_law], ensure_ascii=False)
     d = case.get("details", {})
     facts = {"internal_reference": case["reference"], "title": case["title"], "description": case["description"], "details": d, "uploaded_filenames_only": [document["original_name"][:160] for document in case["documents"][:20]], "total_uploaded_files": len(case["documents"])}
     core += "\nSelected account-owned case entries (unverified unless independently confirmed):\n" + json.dumps(facts, ensure_ascii=False)
@@ -148,7 +153,7 @@ def generate_answer(messages):
     return generate_gemini_answer(messages)
 
 
-def generate_json(messages, max_tokens=1500):
+def generate_json(messages, max_tokens=6000):
     """A JSON object from the active model, for structured tasks such as reading a letter."""
     if AI_PROVIDER == "groq":
         text = generate_groq_answer(messages, json_mode=True, max_tokens=max_tokens)["answer"]
@@ -163,15 +168,26 @@ def generate_json(messages, max_tokens=1500):
     return value
 
 
-def generate_groq_answer(messages, json_mode=False, max_tokens=4096):
+def generate_groq_answer(messages, json_mode=False, max_tokens=12000, effort=None):
     if not GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY is not configured")
+    effort = effort or ("medium" if json_mode else os.getenv("GROQ_REASONING", "high"))
+    try:
+        return _groq_call(messages, json_mode, max_tokens, effort)
+    except ValueError:
+        # A reasoning model can spend the whole budget thinking and return no text; try once with less thinking.
+        if effort == "low" or not GROQ_MODEL.startswith("openai/gpt-oss"):
+            raise
+        return _groq_call(messages, json_mode, max_tokens, "low")
+
+
+def _groq_call(messages, json_mode, max_tokens, effort):
     payload = {"model": GROQ_MODEL, "messages": messages, "temperature": 0.1 if json_mode else 0.15, "max_completion_tokens": max_tokens}
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
     if GROQ_MODEL.startswith("openai/gpt-oss"):
         # Reasoning stays separate from the answer and is not shown.
-        payload.update(reasoning_effort="medium" if json_mode else os.getenv("GROQ_REASONING", "high"), include_reasoning=False)
+        payload.update(reasoning_effort=effort, include_reasoning=False)
     request = Request(GROQ_BASE_URL + "/chat/completions", data=json.dumps(payload).encode("utf-8"), headers=groq_headers(), method="POST")
     for delay in (*GEMINI_RETRY_DELAYS, None):
         try:

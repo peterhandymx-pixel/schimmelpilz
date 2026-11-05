@@ -390,6 +390,13 @@ Inhalt
   Akte anlegen, Brief lesen, Angaben prüfen, Fragen klären, Frist notieren,
   Antwort vorbereiten).
 
+- Mit KI (Groq): liest den Brief (Art, Absender, Gläubiger, Betrag, Daten)
+  und erklärt das Ergebnis in Klartext; die Frist berechnen feste Regeln.
+- Vor dem Lesen: neue Sache oder bestehende Akte (Suche nach eigenem,
+  gerichtlichem oder gegnerischem Aktenzeichen und Namen).
+- Passende Rechtsprechung (nu:legal) und Prüfung jedes zitierten Paragrafen
+  und Aktenzeichens; nach außen gehen nur Fachbegriffe und Zitate.
+
 
 25. DIKTAT UND SCHREIBPOOL (Kanzlei)
 --------------------------------------------------------------------

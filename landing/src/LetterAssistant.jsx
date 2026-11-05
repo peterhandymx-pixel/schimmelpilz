@@ -5,7 +5,7 @@ import { dateLabel, localToday, taskRows } from "./workbench.js";
 import { DateInput } from "./DateInput";
 import "./letter-assistant.css";
 import { AssistantSays, OfficeTrack } from "./Schimmelpilz.jsx";
-import { CitedAnswer } from "./LegalSources.jsx";
+import { CitedAnswer, CaseLawList, CitationCheck } from "./LegalSources.jsx";
 
 // What the comic assistant says at each step, in the order a law office handles incoming post.
 const G = {
@@ -286,7 +286,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       setResult(outcome); setStep("result");
       setExplanation(aiOn ? { loading: true } : null);
       if (aiOn) request("/letter-assistant/explain", json("POST", { kind, state: state || null, fields: { ...fields, legal_area: legalArea, amount: fields.amount === "" ? null : fields.amount }, answers: given, text: text.slice(0, 120000) }))
-        .then(answer => setExplanation({ text: answer.text })).catch(() => setExplanation({ failed: true }));
+        .then(answer => setExplanation({ text: answer.text, caseLaw: answer.case_law || [], check: answer.citation_check || [] })).catch(() => setExplanation({ failed: true }));
       const { SAMPLES } = await import("./documentSamples.js");
       setSamples(outcome.samples.map(id => SAMPLES.find(sample => sample.id === id)).filter(Boolean));
       setHelpSamples(Object.fromEntries(outcome.help.filter(item => item.sample).map(item => [item.id, SAMPLES.find(sample => sample.id === item.sample)]).filter(([, sample]) => sample)));
@@ -466,7 +466,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
       {explanation && <div className="la-card la-explain"><h3>{g.explainTitle}</h3>
         {explanation.loading ? <p className="la-busy" role="status"><IconLoader2 className="la-spin" size={20} />{g.explaining}</p>
           : explanation.failed ? <p className="field-help">{g.explainFailed}</p>
-          : <><CitedAnswer answer={explanation.text} /><p className="la-disclaimer">{g.explainNote}</p></>}</div>}
+          : <><CitedAnswer answer={explanation.text} caseLaw={explanation.caseLaw} /><CitationCheck lang={lang} items={explanation.check} /><CaseLawList lang={lang} items={explanation.caseLaw} /><p className="la-disclaimer">{g.explainNote}</p></>}</div>}
       {result.extra_deadlines.length > 0 && <div className="la-card"><h3>{c.more}</h3><ul className="la-deadlines">{result.extra_deadlines.map(item => <li key={item.label}><strong>{dateLabel(item.date, lang)}</strong> {item.label}</li>)}</ul></div>}
       <div className="la-card"><h3>{c.todo}</h3><ol className="la-steps">{result.steps.map(item => <li key={item}>{item}</li>)}</ol>
         {result.warnings.map(item => <p key={item} className="la-warning"><IconAlertTriangle size={18} />{item}</p>)}

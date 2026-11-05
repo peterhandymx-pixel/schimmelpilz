@@ -346,6 +346,12 @@ def _stem(word):
     return word
 
 
+def everyday_keywords(question):
+    """Words of the question that are in the fixed legal vocabulary above; never names or facts."""
+    words = re.findall(r'[^\W\d_]+', question.lower(), re.UNICODE)
+    return [word for word in dict.fromkeys(words) if word in QUESTION_SYNONYMS][:4]
+
+
 def question_terms(question):
     terms = []
     for word in re.findall(r'[^\W\d_]+',question.lower(),re.UNICODE):
