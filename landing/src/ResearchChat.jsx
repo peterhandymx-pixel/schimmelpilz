@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { IconMessageChatbot, IconSend, IconFileText, IconRefresh, IconCircleFilled } from "@tabler/icons-react";
+import { IconFileText, IconRefresh, IconCircleFilled, IconArrowUp, IconArrowUpRight, IconPaperclip, IconScale, IconLoader2 } from "@tabler/icons-react";
+import figureUrl from "./assets/frau-schimmelpilz.webp";
+import "./research-gemini.css";
 import { request } from "./useCaseStorage.js";
 import { DocumentLinks } from "./ExportLinks.jsx";
 import { legalWorkflows } from "./legalWorkflows.js";
@@ -23,11 +25,13 @@ function sourceLedger(sources = [], language) {
   return `\n\n${de ? "ÜBERGEBENE DOKUMENTSTELLEN – KEINE GEPRÜFTEN RECHTSQUELLEN" : "SUPPLIED DOCUMENT PASSAGES – NOT VERIFIED LEGAL SOURCES"}\n` + sources.map(source => `${source.filename} · ${source.unit_kind === "image" ? (de ? "Bild" : "Image") : source.unit_kind === "page" ? (de ? "PDF-Seite" : "PDF page") : (de ? "DOCX-Abschnitt" : "DOCX section")} ${source.unit_no}\n${de ? "Textstand" : "Text version"}: ${dateLabel(source.reviewed_at, language, true)}\nSHA-256: ${source.text_sha256}`).join("\n\n");
 }
 
-export function ResearchChat({ lang, selectedCase, onDraft, onDocuments }) {
+export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onDraft, onDocuments }) {
   const hasCorrectedSources = run => (run.sources || []).some(source => selectedCase?.documents?.some(document => document.id === source.document_id && document.inbox_reassigned_at));
   const [runs, setRuns] = useState([]), [question, setQuestion] = useState(""), [workflow, setWorkflow] = useState("research");
   const [status, setStatus] = useState(null), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const controller = useRef(null), messagesRef = useRef(null);
+  const controller = useRef(null), messagesRef = useRef(null), composerRef = useRef(null);
+  // Which drawer above the input is open: "", "docs" or "sources".
+  const [panel, setPanel] = useState("");
   const [documentIds, setDocumentIds] = useState([]);
   const [legalIds, setLegalIds] = useState([]), [automatic,setAutomatic] = useState(true);
   const de = lang === "de";
@@ -45,8 +49,9 @@ export function ResearchChat({ lang, selectedCase, onDraft, onDocuments }) {
     return () => { pending.abort(); controller.current?.abort(); };
   }, [selectedCase?.id]);
   useEffect(() => {
-    const panel = messagesRef.current;
-    if (panel) panel.scrollTop = panel.scrollHeight;
+    const thread = messagesRef.current;
+    const last = thread?.lastElementChild;
+    if (last && (runs.length || busy)) last.scrollIntoView({ block: busy ? "end" : "start", behavior: "smooth" });
   }, [runs, busy]);
   useEffect(() => {
     if (!status || status.ready || busy) return;
@@ -66,7 +71,8 @@ export function ResearchChat({ lang, selectedCase, onDraft, onDocuments }) {
     controller.current = new AbortController();
     try {
       const run = await request(`/cases/${selectedCase.id}/research`, { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.current.signal, body: JSON.stringify({ request_id: requestId(), question: sentQuestion, language: lang, workflow, document_ids: documentIds, legal_source_ids:legalIds, use_legal_catalogue:automatic && (selectedCase.details.jurisdiction || 'DE') === 'DE' }) });
-      setRuns(current => [...current, run]); setQuestion(""); setStatus(current => ({ ...current, ready: true }));
+      setRuns(current => [...current, run]); setQuestion(""); setPanel(""); setStatus(current => ({ ...current, ready: true }));
+      if (composerRef.current) composerRef.current.style.height = "auto";
     } catch (failure) {
       if (failure.name === "AbortError") return;
       const message = failure.status === 422 ? (de ? "Prüfen Sie Dokumentauswahl, ausgeschlossene Quellen und Rechtsordnung. Ihre Frage bleibt erhalten." : "Check document selection, excluded sources and jurisdiction. Your question has been retained.") : failure.status === 429 ? (de ? "Die KI beantwortet gerade eine andere Frage. Bitte kurz warten und erneut senden." : "The AI is answering another question. Wait briefly and retry.") : failure.status === 504 ? (de ? "Die KI-Antwort hat zu lange gedauert. Ihre Frage bleibt erhalten." : "The AI response timed out. Your question has been retained.") : (de ? "Der KI-Dienst ist gerade nicht erreichbar oder nicht eingerichtet. Ihre Frage bleibt erhalten; versuchen Sie es erneut." : "The AI service is unavailable or not configured. Your question has been retained; please retry.");
@@ -76,10 +82,79 @@ export function ResearchChat({ lang, selectedCase, onDraft, onDocuments }) {
       try { setRuns(await request(`/cases/${selectedCase.id}/research`)); } catch { /* Retain the useful error and current chat. */ }
     } finally { setBusy(false); }
   };
-  const suggestions = de ? ["Welche Unterlagen fehlen für den nächsten Schritt?", "Strukturiere den Sachverhalt und die offenen Fragen.", "Welche Zuständigkeitsfragen muss ich prüfen?"] : ["Which documents are missing for the next step?", "Structure the facts and unresolved questions.", "Which jurisdiction questions should I check?"];
-  return <section className="research-chat" aria-label={de ? "KI-Recherche-Assistent" : "AI research assistant"}><header className="research-chat-header"><span className="research-chat-avatar"><IconMessageChatbot size={22} /></span><div><h2>{de ? "Ihr KI-Recherche-Assistent" : "Your AI research assistant"}</h2><p>{selectedCase ? `${selectedCase.reference} · ${selectedCase.title}` : (de ? "Wählen Sie eine Akte für den Chat." : "Select a case to start chatting.")}</p></div><span className={`research-connection ${status?.ready ? "ready" : ""}`}><IconCircleFilled size={7} />{loading ? (de ? "Verbinde …" : "Connecting …") : status?.enabled===false ? (de ? "KI durch Administration pausiert" : "AI paused by operator") : status?.ready ? (de ? "KI bereit" : "AI ready") : (de ? "KI nicht bereit" : "AI not ready")}</span><button className="desk-link" aria-label={de ? "KI-Verbindung prüfen" : "Check AI connection"} onClick={() => load()} disabled={busy || loading}><IconRefresh size={16} /></button></header>
-    <div className="research-chat-scope"><strong>{de ? "Aktenbezogene Orientierung & Entwürfe" : "Case-based orientation & drafts"}</strong><span>{de ? `Der Bot nutzt Aktenangaben, geprüfte Dokumentstellen und ausgewählte oder lokal gefundene Originalquellen. Quellenherkunft und Verweise werden technisch geprüft; rechtliche Aussagen benötigen weiterhin Prüfung. ${status?.provider === "ollama" ? "Frage, Aktenangaben und ausgewählte Auszüge werden von einem lokalen KI-Modell auf diesem Server beantwortet und nicht an Dritte übermittelt." : status?.provider === "groq" ? "Frage, Aktenangaben und ausgewählte Auszüge werden zur Beantwortung an Groq (GroqCloud, USA) übermittelt." : "Frage, Aktenangaben und ausgewählte Auszüge werden zur Beantwortung an Google (Gemini API) übermittelt."}` : `The bot uses case particulars, reviewed document passages and selected or locally matched primary sources. Source origin and references are checked technically; legal statements still require review. ${status?.provider === "ollama" ? "Your question, case particulars and selected excerpts are answered by a local AI model on this server and are not sent to third parties." : status?.provider === "groq" ? "Your question, case particulars and selected excerpts are sent to Groq (GroqCloud, USA) to answer it." : "Your question, case particulars and selected excerpts are sent to Google (Gemini API) to answer it."}`}</span></div>
-    <div ref={messagesRef} className="research-messages" aria-live="polite" aria-busy={busy}>{!runs.length && <div className="research-chat-welcome"><IconMessageChatbot size={31} stroke={1.4} /><h3>{de ? "Was möchten Sie zu Ihrer Akte klären?" : "What would you like to clarify about your case?"}</h3><p>{de ? "Fragen stellen, Sachverhalte strukturieren und den nächsten Arbeitsschritt vorbereiten." : "Ask questions, structure the facts and prepare your next step."}</p><div className="research-suggestions">{suggestions.map(text => <button key={text} onClick={() => setQuestion(text)} disabled={!selectedCase || busy}>{text}</button>)}</div></div>}{runs.map(run => <div className="research-chat-turn" key={run.id}><article className="research-user-message"><span>{de ? "Sie" : "You"}</span><p>{run.question}</p></article><article className="research-assistant-message"><span className="research-message-author"><IconMessageChatbot size={17} />Schimmelpilz <small>{dateLabel(run.created_at, lang, true)}</small></span>{run.status === "completed" ? <><CitedAnswer answer={run.answer} sources={run.legal_sources} caseLaw={run.retrieval_report?.case_law || []} /><CitationCheck lang={lang} items={run.retrieval_report?.citation_check || []} /><SkillNote lang={lang} skill={run.retrieval_report?.skill} /><CaseLawList lang={lang} items={run.retrieval_report?.case_law || []} /><LegalAnswerSources lang={lang} sources={run.legal_sources} audit={run.citation_audit} report={run.retrieval_report} /><ResearchSourceList lang={lang} sources={run.sources} />{hasCorrectedSources(run) && <p className="storage-notice">{de ? "Die Zuordnung einer verwendeten Datei wurde berichtigt. Diese Antwort bleibt als historischer Nachweis erhalten und kann nicht neu als Entwurf übernommen werden. Angaben erneut prüfen." : "An underlying document assignment was corrected. This answer remains a historical record and cannot be newly adopted as a draft. Recheck the particulars."}</p>}<div className="research-answer-actions"><small>{de ? "KI-Antwort · rechtlich nicht geprüft" : "AI response · not legally reviewed"}{Boolean(run.truncated) && (de ? " · Antwort gekürzt" : " · Response truncated")}</small><DocumentLinks path={`/api/cases/${selectedCase.id}/research/${run.id}/answer`} lang={lang} /><button className="desk-link" disabled={busy || hasCorrectedSources(run)} onClick={() => onDraft({ research_run_id:run.id, kind: "response", language: run.language, body: `${de ? "KI-ARBEITSPAPIER – NICHT GEPRÜFT" : "AI WORKING PAPER – NOT REVIEWED"}\n${selectedCase.reference}\n\n${run.question}\n\n${run.answer}${sourceLedger(run.sources, run.language)}${legalLedger(run.legal_sources,run.citation_audit,run.language)}` }, selectedCase)}><IconFileText size={14} />{de ? "Als Entwurf übernehmen" : "Use as draft"}</button></div></> : <><p className="research-failed">{run.status === "pending" ? (de ? "Diese Anfrage wurde begonnen. Falls der Server neu gestartet wurde, stellen Sie die Frage bitte erneut." : "This request was started. If the server restarted, please ask again.") : (de ? "Für diese Anfrage konnte keine KI-Antwort gespeichert werden." : "No AI answer could be saved for this request.")}</p><button type="button" className="desk-link" disabled={busy} onClick={() => { setQuestion(run.question); setWorkflow(run.workflow); }}>{de ? "Frage erneut verwenden" : "Reuse question"}</button></>}</article></div>)}{busy && <p className="research-thinking" role="status">{de ? "Schimmelpilz bearbeitet Ihre Frage …" : "Schimmelpilz is working on your question …"}</p>}</div>
-    <LegalSourcePanel key={selectedCase?.id || 'no-case'} lang={lang} caseId={selectedCase?.id} jurisdiction={selectedCase?.details.jurisdiction} busy={busy} selected={legalIds} setSelected={setLegalIds} automatic={automatic} setAutomatic={setAutomatic} revision={runs.length} /><form className="research-composer" onSubmit={send}><ResearchDocumentPicker lang={lang} documents={selectedCase?.documents} selected={documentIds} setSelected={setDocumentIds} busy={busy} onDocuments={onDocuments} /><label className="research-workflow-select">{de ? "Arbeitsmodus" : "Work mode"}<select aria-label={de ? "Arbeitsmodus" : "Work mode"} value={workflow} onChange={event => setWorkflow(event.target.value)} disabled={busy}>{legalWorkflows[lang].map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label><label className="research-question">{de ? "Ihre Frage zur Akte" : "Your case question"}<textarea rows={3} minLength={3} maxLength={4000} value={question} onChange={event => setQuestion(event.target.value)} disabled={!selectedCase || busy} placeholder={de ? "Beschreiben Sie Ihre Frage oder den gewünschten nächsten Schritt …" : "Describe your question or the next step you want to prepare …"} /></label><div className="research-composer-actions"><small>{de ? "Antworten und Verlauf werden in Ihrer Akte gespeichert." : "Answers and history are stored with your case."}</small><button className="desk-button solid" type="submit" disabled={!selectedCase || busy || loading || status?.enabled===false || question.trim().length < 3}><IconSend size={17} />{busy ? (de ? "Wird bearbeitet …" : "Working …") : (de ? "Frage senden" : "Send question")}</button></div>{error && <p className="storage-error" role="alert">{error}</p>}</form>
+  const suggestions = de ? ["Wie ist die Rechtslage – mit Normen und Rechtsprechung?", "Welche Unterlagen fehlen für den nächsten Schritt?", "Strukturiere Sachverhalt und offene Fragen.", "Welche Fristen und Zuständigkeiten muss ich prüfen?"] : ["What is the legal position – with statutes and case law?", "Which documents are missing for the next step?", "Structure the facts and open questions.", "Which deadlines and jurisdiction questions should I check?"];
+  const providerNote = status?.provider === "ollama" ? (de ? "Läuft auf einem lokalen KI-Modell dieses Servers." : "Runs on a local AI model on this server.")
+    : status?.provider === "groq" ? (de ? "Frage, Aktenangaben und ausgewählte Auszüge gehen zur Beantwortung an Groq (USA)." : "Question, case details and selected excerpts are sent to Groq (USA).")
+    : (de ? "Frage, Aktenangaben und ausgewählte Auszüge gehen zur Beantwortung an Google (Gemini API)." : "Question, case details and selected excerpts are sent to Google (Gemini API).");
+  const statusLabel = loading ? (de ? "Verbinde …" : "Connecting …") : status?.enabled === false ? (de ? "KI pausiert" : "AI paused") : status?.ready ? (de ? "KI bereit" : "AI ready") : (de ? "KI nicht bereit" : "AI not ready");
+  const canSend = selectedCase && !busy && !loading && status?.enabled !== false && question.trim().length >= 3;
+  const grow = target => { target.style.height = "auto"; target.style.height = `${Math.min(target.scrollHeight, 240)}px`; };
+  const keys = event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (canSend) send(event); } };
+  const toggle = name => setPanel(current => current === name ? "" : name);
+  const draftFromRun = run => onDraft({ research_run_id: run.id, kind: "response", language: run.language, body: `${de ? "KI-ARBEITSPAPIER – NICHT GEPRÜFT" : "AI WORKING PAPER – NOT REVIEWED"}\n${selectedCase.reference}\n\n${run.question}\n\n${run.answer}${sourceLedger(run.sources, run.language)}${legalLedger(run.legal_sources, run.citation_audit, run.language)}` }, selectedCase);
+
+  return <section className="rc" aria-label={de ? "KI-Recherche" : "AI research"}>
+    <header className="rc-bar">
+      <label className="rc-case"><span>{de ? "Akte" : "Case"}</span>
+        <select value={selectedCase?.id || ""} onChange={event => onSelectCase?.(event.target.value)} aria-label={de ? "Recherche für Akte" : "Research for case"}>
+          <option value="" disabled>{de ? "Akte auswählen …" : "Select a case …"}</option>{cases.map(item => <option key={item.id} value={item.id}>{item.reference} · {item.title}</option>)}</select></label>
+      <span className={`rc-status ${status?.ready ? "ready" : ""}`}><IconCircleFilled size={8} />{statusLabel}</span>
+      <button type="button" className="rc-icon" aria-label={de ? "KI-Verbindung prüfen" : "Check AI connection"} onClick={() => load()} disabled={busy || loading}><IconRefresh size={17} /></button>
+      {selectedCase && <button type="button" className="rc-pill" onClick={() => onDraft(undefined, selectedCase)}><IconFileText size={15} />{de ? "Neuer Entwurf" : "New draft"}</button>}
+    </header>
+
+    <div ref={messagesRef} className="rc-thread" aria-live="polite" aria-busy={busy}>
+      {!runs.length && !busy && <div className="rc-hello">
+        <h2><span className="rc-gradient">{de ? "Hallo," : "Hello,"}</span><br />{selectedCase ? (de ? `was möchten Sie zu „${selectedCase.title}“ klären?` : `what would you like to clarify about “${selectedCase.title}”?`) : (de ? "wählen Sie oben eine Akte." : "choose a case above.")}</h2>
+        {selectedCase && <div className="rc-cards">{suggestions.map(text => <button type="button" key={text} onClick={() => { setQuestion(text); setTimeout(() => composerRef.current?.focus(), 0); }} disabled={busy}><span>{text}</span><IconArrowUpRight size={16} /></button>)}</div>}
+      </div>}
+      {runs.map(run => <div className="rc-turn" key={run.id}>
+        <div className="rc-q"><p>{run.question}</p></div>
+        <div className="rc-a"><span className="rc-avatar" style={{ backgroundImage: `url(${figureUrl})` }} aria-hidden="true" />
+          <div className="rc-a-body">
+            <span className="rc-meta">Frau Schimmelpilz · {dateLabel(run.created_at, lang, true)}{run.workflow && run.workflow !== "research" ? ` · ${legalWorkflows[lang].find(item => item.id === run.workflow)?.title || ""}` : ""}</span>
+            {run.status === "completed" ? <>
+              <CitedAnswer answer={run.answer} sources={run.legal_sources} caseLaw={run.retrieval_report?.case_law || []} />
+              <CitationCheck lang={lang} items={run.retrieval_report?.citation_check || []} />
+              <LegalAnswerSources lang={lang} sources={[]} audit={run.citation_audit} report={{ ...run.retrieval_report, automatic: false }} />
+              {(run.legal_sources?.length > 0 || run.retrieval_report?.case_law?.length > 0 || run.sources?.length > 0 || run.retrieval_report?.skill) && <details className="rc-sources">
+                <summary>{de ? "Quellen" : "Sources"}: {[run.legal_sources?.length && `${run.legal_sources.length} ${de ? "Normstellen" : "statute passages"}`, run.retrieval_report?.case_law?.length && `${run.retrieval_report.case_law.length} ${de ? "Urteile" : "decisions"}`, run.sources?.length && `${run.sources.length} ${de ? "Dokumentstellen" : "document passages"}`, run.retrieval_report?.skill && (de ? "Fachanleitung" : "expert guide")].filter(Boolean).join(" · ")}</summary>
+                <SkillNote lang={lang} skill={run.retrieval_report?.skill} />
+                <CaseLawList lang={lang} items={run.retrieval_report?.case_law || []} />
+                <LegalAnswerSources lang={lang} sources={run.legal_sources} audit={{}} report={{}} />
+                <ResearchSourceList lang={lang} sources={run.sources} />
+              </details>}
+              {hasCorrectedSources(run) && <p className="storage-notice">{de ? "Die Zuordnung einer verwendeten Datei wurde berichtigt. Diese Antwort bleibt als historischer Nachweis erhalten und kann nicht neu als Entwurf übernommen werden." : "An underlying document assignment was corrected. This answer remains a historical record and cannot be newly adopted as a draft."}</p>}
+              <div className="rc-actions">
+                <button type="button" className="rc-pill" disabled={busy || hasCorrectedSources(run)} onClick={() => draftFromRun(run)}><IconFileText size={15} />{de ? "Als Entwurf übernehmen" : "Use as draft"}</button>
+                <DocumentLinks path={`/api/cases/${selectedCase.id}/research/${run.id}/answer`} lang={lang} />
+                {Boolean(run.truncated) && <small>{de ? "Antwort gekürzt" : "Response truncated"}</small>}
+              </div>
+            </> : <>
+              <p className="research-failed">{run.status === "pending" ? (de ? "Diese Anfrage wurde begonnen. Falls der Server neu gestartet wurde, stellen Sie die Frage bitte erneut." : "This request was started. If the server restarted, please ask again.") : (de ? "Für diese Anfrage konnte keine KI-Antwort gespeichert werden." : "No AI answer could be saved for this request.")}</p>
+              <button type="button" className="rc-pill" disabled={busy} onClick={() => { setQuestion(run.question); setWorkflow(run.workflow); }}>{de ? "Frage erneut verwenden" : "Reuse question"}</button>
+            </>}
+          </div>
+        </div>
+      </div>)}
+      {busy && <div className="rc-a rc-thinking" role="status"><span className="rc-avatar" style={{ backgroundImage: `url(${figureUrl})` }} aria-hidden="true" /><div className="rc-a-body"><span className="rc-meta">Frau Schimmelpilz</span><div className="rc-shimmer"><i /><i /><i /></div><small>{de ? "Ich lese Normen und Rechtsprechung und schreibe die Antwort …" : "Reading statutes and case law and writing the answer …"}</small></div></div>}
+    </div>
+
+    <form className="rc-composer" onSubmit={send}>
+      {panel === "docs" && <div className="rc-pop"><ResearchDocumentPicker lang={lang} documents={selectedCase?.documents} selected={documentIds} setSelected={setDocumentIds} busy={busy} onDocuments={onDocuments} /></div>}
+      {panel === "sources" && <div className="rc-pop"><LegalSourcePanel key={selectedCase?.id || "no-case"} lang={lang} caseId={selectedCase?.id} jurisdiction={selectedCase?.details.jurisdiction} busy={busy} selected={legalIds} setSelected={setLegalIds} automatic={automatic} setAutomatic={setAutomatic} revision={runs.length} /></div>}
+      <div className="rc-box">
+        <textarea ref={composerRef} rows={1} minLength={3} maxLength={4000} value={question} onChange={event => { setQuestion(event.target.value); grow(event.target); }} onKeyDown={keys} disabled={!selectedCase || busy}
+          aria-label={de ? "Ihre Frage zur Akte" : "Your case question"} placeholder={selectedCase ? (de ? "Frage zur Akte stellen …" : "Ask about this case …") : (de ? "Erst oben eine Akte wählen" : "Choose a case first")} />
+        <div className="rc-tools">
+          <select className="rc-pill" aria-label={de ? "Arbeitsmodus" : "Work mode"} value={workflow} onChange={event => setWorkflow(event.target.value)} disabled={busy}>{legalWorkflows[lang].map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select>
+          <button type="button" className={`rc-pill ${panel === "docs" ? "on" : ""}`} onClick={() => toggle("docs")} disabled={!selectedCase}><IconPaperclip size={15} />{de ? "Dokumente" : "Documents"}{documentIds.length ? ` (${documentIds.length})` : ""}</button>
+          <button type="button" className={`rc-pill ${panel === "sources" ? "on" : ""}`} onClick={() => toggle("sources")} disabled={!selectedCase}><IconScale size={15} />{de ? "Rechtsquellen" : "Legal sources"}{legalIds.length ? ` (${legalIds.length})` : automatic ? (de ? " · automatisch" : " · automatic") : ""}</button>
+          <button type="submit" className="rc-send" disabled={!canSend} aria-label={de ? "Frage senden" : "Send question"}>{busy ? <IconLoader2 size={20} className="la-spin" /> : <IconArrowUp size={20} />}</button>
+        </div>
+      </div>
+      {error && <p className="storage-error" role="alert">{error}</p>}
+      <p className="rc-note">{de ? "Frau Schimmelpilz kann Fehler machen – Antworten sind Arbeitshilfen, rechtlich nicht geprüft. Zitate werden automatisch geprüft. " : "Ms Schimmelpilz can make mistakes – answers are working aids, not legal review. Citations are checked automatically. "}{providerNote} {de ? "Verlauf wird in der Akte gespeichert." : "History is stored with the case."}</p>
+    </form>
   </section>;
 }

@@ -138,7 +138,7 @@ def prepare_messages(case, history, question, language, workflow, sources=None, 
     facts = {"internal_reference": case["reference"], "title": case["title"], "description": case["description"], "details": d, "uploaded_filenames_only": [document["original_name"][:160] for document in case["documents"][:20]], "total_uploaded_files": len(case["documents"])}
     core += "\nSelected account-owned case entries (unverified unless independently confirmed):\n" + json.dumps(facts, ensure_ascii=False)
     if legal_sources:
-        core += '\nMANDATORY CITATION FORMAT: Append the exact supplied [L#] marker immediately after each source-backed legal proposition. Available markers in THIS request: ' + ', '.join(f"[{item['citation_id']}] ({item['title']}, {item['pinpoint']})" for item in legal_sources) + '. An answer without these markers is incomplete. Do not assign a source to a proposition it does not support. Unsupported leads must be labelled unverified.'
+        core += '\nMANDATORY CITATION FORMAT: Append the exact supplied [L#] marker immediately after each source-backed legal proposition. Available markers in THIS request: ' + ', '.join(f"[{item['citation_id']}] ({item['title']}, {item['pinpoint']})" for item in legal_sources) + '. An answer without these markers is incomplete. Do not assign a source to a proposition it does not support. Mark unsupported leads in the answer language: "(ungeprüft)" in German, "(unverified)" in English.'
     messages = [{"role": "system", "content": core}]
     # Bound conversation size so older answers cannot crowd out case/rules.
     retained = []
