@@ -31,6 +31,10 @@ const G = {
     none: "Für diesen Brief gibt es keine feste Frist. Reagieren Sie trotzdem zeitnah – unten steht, wie.",
     filed: title => `Ich habe alles in die Akte „${title}“ gelegt und die Frist notiert.`,
     filing: "Ich lege alles in Ihre Akte …",
+    own: summary => `Moment – das ist kein Brief an Sie, sondern ein Schreiben von Ihnen selbst. ${summary}\nAuf ein eigenes Schreiben muss ich keine Frist berechnen. Ich lege es zur Akte, damit alles beisammen ist.`,
+    ownMatch: (ref, title) => `Zur Akte ${ref} · ${title} legen`, ownNew: "Neue Akte dafür anlegen", ownIncoming: "Nein, das habe ich bekommen",
+    ownDone: title => `Erledigt – Ihr Schreiben liegt jetzt in der Akte „${title}“. Kommt eine Antwort, laden Sie sie einfach hier hoch.`,
+    ownTitle: (court, ref) => `Eigenes Schreiben${court ? ` an ${court}` : ""}${ref ? ` (${ref})` : ""}`,
     matter: "Gut. Gehört der Brief zu einer neuen Sache – oder zu einer Akte, die wir schon haben?",
     matterNew: "Neue Sache", matterOld: "Bestehende Akte",
     pick: "Zu welcher Akte? Nennen Sie mir das Aktenzeichen – unseres, das vom Gericht oder das der Gegenseite. Sie können auch nach dem Namen suchen.",
@@ -64,6 +68,10 @@ const G = {
     none: "There is no fixed deadline for this letter. Still, reply soon – see below.",
     filed: title => `I've put everything into the file "${title}" and noted the deadline.`,
     filing: "Filing everything in your case …",
+    own: summary => `Wait – this is not a letter to you but one you wrote yourself. ${summary}\nI don't need to calculate a deadline for your own letter. I'll put it in the file so everything is together.`,
+    ownMatch: (ref, title) => `Add to file ${ref} · ${title}`, ownNew: "Open a new file for it", ownIncoming: "No, I received it",
+    ownDone: title => `Done – your letter is now in the file "${title}". When a reply arrives, just upload it here.`,
+    ownTitle: (court, ref) => `Own letter${court ? ` to ${court}` : ""}${ref ? ` (${ref})` : ""}`,
     matter: "Good. Is the letter about a new matter – or about a file we already have?",
     matterNew: "New matter", matterOld: "Existing file",
     pick: "Which file? Tell me the reference – ours, the court's or the other side's. You can also search by name.",
@@ -219,7 +227,9 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   const profileAddress = user?.street ? `${user.street}\n${user.postal_code} ${user.city}` : "";
   const party = fields.creditor || fields.sender;
   const provisional = Boolean(caseItem && uploadedDoc && PROVISIONAL_TITLES.includes(caseItem.title));
-  const matchingCase = !followCase && (!caseItem || provisional) && party ? (storage.cases || []).find(item => !item.archived_at && item.id !== caseItem?.id && sameParty(item.details?.opponent_name, party)) : null;
+  const refKey = value => (value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const sameReference = item => refKey(fields.reference).length >= 5 && [item.reference, item.details?.court_reference, item.details?.opponent_reference].some(value => refKey(value) === refKey(fields.reference));
+  const matchingCase = !followCase && (!caseItem || provisional) && (party || fields.reference) ? (storage.cases || []).find(item => !item.archived_at && item.id !== caseItem?.id && (sameReference(item) || (party && sameParty(item.details?.opponent_name, party)))) : null;
 
   useEffect(() => { request("/letter-assistant/kinds").then(setKinds).catch(() => setKinds([])); }, []);
   useEffect(() => { request("/research/status").then(setAiStatus).catch(() => setAiStatus(null)); }, []);
@@ -236,7 +246,7 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
     }
     const analysis = await request("/letter-assistant/analyze", json("POST", { text: letterText.slice(0, 120000), use_ai: aiOn }));
     setKind(analysis.kind.id); setLegalArea(analysis.kind.legal_area); setFields(analysis.fields); setAiSummary(analysis.ai ? analysis.summary : "");
-    setStep("confirm");
+    setStep(analysis.direction === "outgoing" ? "own" : "confirm");
   };
 
   const startWithFile = async file => {
@@ -347,6 +357,23 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
   };
 
   const draftFrom = sample => import("./documentSamples.js").then(({ sampleContext }) => onDraft({ body: fillLetterPlaceholders(sample.body(sampleContext(saved || caseItem)), { fields, answers, user, today }), language: "de", kind: sample.kind, recipient: "" }, saved || caseItem));
+  const fileOwn = async existing => {
+    setError("");
+    try {
+      const note = `— Eigenes Schreiben${fields.letter_date ? ` vom ${dateLabel(fields.letter_date, "de")}` : ""} —\n${aiSummary || ""}${text ? `\n\nText (Auszug):\n${text.slice(0, 1500)}` : ""}`;
+      let target = existing || followCase;
+      if (target && provisional && uploadedDoc) {
+        target = await request("/letter-assistant/move-letter", json("POST", { from_case_id: caseItem.id, document_id: uploadedDoc, to_case_id: target.id }));
+        setUploadedDoc("");
+      }
+      const details = target ? target.details : { audience: user.audience, client_name: user.organisation || user.full_name, client_address: profileAddress, client_email: user.email };
+      const filled = { ...details, court: details.court || fields.court || "", court_reference: details.court_reference || fields.reference || "", opponent_name: details.opponent_name || fields.creditor || "" };
+      if (target) target = await storage.updateCase(target.id, { title: target.title, description: `${target.description || ""}\n\n${note}`.slice(-4000), language: "de", details: filled });
+      else if (caseItem) target = await storage.updateCase(caseItem.id, { title: g.ownTitle(fields.court, fields.reference).slice(0, 120), description: note.slice(0, 4000), language: "de", details: filled });
+      else target = await storage.createCase({ title: g.ownTitle(fields.court, fields.reference).slice(0, 120), description: note.slice(0, 4000), language: "de", details: filled });
+      setCaseItem(target); setSaved(target); setStep("ownDone"); storage.reload?.();
+    } catch { setError(c.saveFailed); }
+  };
   const attachTo = item => { setFollowCase(item); setAttachOnly(true); };
   const complete = row => storage.saveTask(row.caseItem.id, { title: row.title, note: row.note || "", due_on: row.due_on, priority: row.priority, kind: row.kind, due_time: row.due_time || null, pre_days: row.pre_days ?? 0, completed: true, completion_note: c.doneNote }, row.id).catch(() => setError(c.offline));
   const followUp = row => { setFollowCase(row.caseItem); setError(""); window.scrollTo?.({ top: 0, behavior: "smooth" }); };
@@ -420,6 +447,18 @@ export function LetterAssistant({ lang = "de", user, storage, onDraft, open, onS
         <ul className="sp-checklist">{g.reading.map((line, index) => <li key={line} className={index < readingStage ? "done" : index === readingStage ? "now" : ""}>{line}</li>)}</ul></AssistantSays></>}
     {step === "evaluating" && <><OfficeTrack steps={g.track} current={5} busy /><AssistantSays pose="read" mood="focus" text={g.calculating} /></>}
 
+    {step === "own" && <><OfficeTrack steps={g.track} current={2} />
+      <AssistantSays pose="think" mood="focus" text={g.own(aiSummary)}>
+        {(followCase || matchingCase) && <button className="sp-reply primary" onClick={() => fileOwn(followCase || matchingCase)}><IconFolder size={17} />{g.ownMatch((followCase || matchingCase).reference, (followCase || matchingCase).title)}</button>}
+        {!followCase && <button className={followCase || matchingCase ? "sp-reply" : "sp-reply primary"} onClick={() => fileOwn(null)}>{g.ownNew}</button>}
+        <button className="sp-reply" onClick={() => setStep("confirm")}>{g.ownIncoming}</button>
+      </AssistantSays>
+      {error && <p role="alert" className="la-error">{error}</p>}</>}
+    {step === "ownDone" && saved && <><OfficeTrack steps={g.track} current={7} />
+      <AssistantSays pose="cheer" mood="grin" text={g.ownDone(saved.title)}>
+        <button className="sp-reply primary" onClick={() => open(saved.id, "overview")}><IconFolder size={17} />{c.openCase}</button>
+        <button className="sp-reply" onClick={reset}><IconMailOpened size={17} />{c.another}</button>
+      </AssistantSays></>}
     {step === "confirm" && <OfficeTrack steps={g.track} current={3} />}
     {step === "confirm" && (error === c.unreadable ? <AssistantSays pose="think" mood="worried" text={g.unreadable} />
       : <AssistantSays pose="file" mood="smile" text={(aiSummary ? g.aiRead(aiSummary) : g.found(kinds.find(item => item.id === kind)?.label || kind, party, fields.amount ? euro(fields.amount) : "")) + (matchingCase ? g.match(party) : "")} />)}

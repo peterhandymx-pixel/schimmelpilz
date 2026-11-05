@@ -766,7 +766,7 @@ def router(require_user, db=None, record_activity=None, now=None, row_case=None)
         # The model reads the letter; without AI (or if it fails) the rule-based reading stays.
         if payload.use_ai and ai_allowed():
             try:
-                ai = letter_ai.read_letter(payload.text, list(KIND_INFO.values()))
+                ai = letter_ai.read_letter(payload.text, list(KIND_INFO.values()), user.get('full_name', ''))
             except Exception:  # noqa: BLE001 - any model or network failure falls back to the rules
                 ai = None
         if ai:
@@ -775,7 +775,8 @@ def router(require_user, db=None, record_activity=None, now=None, row_case=None)
                 alternatives = [kind['id'], *[item for item in alternatives if item != ai['kind']]][:3]
                 kind = KIND_INFO[ai['kind']]
         return {'kind': kind, 'alternatives': [KIND_INFO[item] for item in alternatives], 'fields': fields, 'questions': QUESTIONS[kind['id']],
-                'ai': bool(ai), 'summary': ai['summary'] if ai else '', 'demands': ai['demands'] if ai else []}
+                'ai': bool(ai), 'summary': ai['summary'] if ai else '', 'demands': ai['demands'] if ai else [],
+                'direction': ai['direction'] if ai else 'incoming'}
 
     @routes.post('/api/letter-assistant/explain')
     def explain_letter(payload: ExplainInput, user: dict = Depends(require_user)):

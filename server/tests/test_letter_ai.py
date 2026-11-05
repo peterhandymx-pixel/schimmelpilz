@@ -61,3 +61,32 @@ class LetterAiTests(test_inbox.InboxTests):
                 self.assertFalse(client.post('/api/letter-assistant/analyze', json={'text': LETTER, 'use_ai': True}).json()['ai'])
                 reader.assert_not_called()
             self.assertEqual(client.post('/api/letter-assistant/explain', json=body).status_code, 503)
+
+
+class LetterDirectionTests(test_inbox.InboxTests):
+    test_unassigned_persistence_then_exact_file_and_text_review_in_case = None
+    test_ownership_validation_stale_updates_and_single_assignment = None
+    test_rejected_uploads_leave_no_files_and_auth_guard_applies = None
+    test_atomic_assignment_rollback_and_failed_upload_cleanup = None
+    test_correction_guards_and_atomic_rollback = None
+    test_correction_preserves_snapshots_blocks_old_sources_and_can_assign_back = None
+
+    def test_own_filing_is_outgoing_and_model_court_replaces_pattern_guess(self):
+        filing = ('Synthetic Person, Testweg 1, 10115 Berlin\nAn das Landessozialgericht\nAktenzeichen: L 9 SO 1/26 B ER\n(Vorinstanz: Sozialgericht Köln)\n'
+                  'Replik auf den Schriftsatz der Antragsgegnerin vom 21.09.2026')
+        seen = {}
+
+        def model(messages):
+            seen['system'] = messages[0]['content']
+            return {'kind': 'sonstiges', 'direction': 'outgoing', 'sender': 'Synthetic Person', 'court': 'Landessozialgericht', 'opponent': 'Landesbehörde',
+                    'reference': 'L 9 SO 1/26 B ER', 'summary': 'Eigener Schriftsatz.'}
+        with TestClient(api.app) as client:
+            self.login(client, 'direction@example.invalid')
+            with patch.object(research, 'generate_json', side_effect=model):
+                read = client.post('/api/letter-assistant/analyze', json={'text': filing, 'use_ai': True}).json()
+        self.assertEqual(read['direction'], 'outgoing')
+        self.assertEqual(read['fields']['court'], 'Landessozialgericht')
+        self.assertEqual(read['fields']['creditor'], 'Landesbehörde')
+        self.assertIn('Synthetic Person', seen['system'])
+        self.assertEqual(letter_ai.merge({'creditor': 'auf den Schriftsatz', 'court': 'Sozialgericht Köln', 'sender': 'X'},
+                                         {'fields': {'creditor': '', 'court': '', 'sender': ''}}), {'creditor': '', 'court': '', 'sender': 'X'})
