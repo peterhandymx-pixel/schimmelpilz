@@ -1,4 +1,4 @@
-"""Model transport (Gemini API or local Ollama) with bounded case, document and official-source context."""
+"""Model transport (Gemini API, Groq or local Ollama) with bounded case, document and official-source context."""
 import json
 import os
 import time
@@ -18,7 +18,11 @@ GEMINI_RETRY_DELAYS = (2, 6)
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-AI_MODEL = OLLAMA_MODEL if AI_PROVIDER == "ollama" else GEMINI_MODEL
+# Groq serves open models through an OpenAI-compatible API; the key is sent only in the Authorization header.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
+AI_MODEL = {"ollama": OLLAMA_MODEL, "groq": GROQ_MODEL}.get(AI_PROVIDER, GEMINI_MODEL)
 SKILL_DIR = Path(__file__).resolve().parents[1] / ".agents" / "skills" / "schimmelpilz-german-law"
 WORKFLOWS = {"intake": "case-intake.md", "research": "research.md", "jurisdiction": "jurisdiction.md", "costs": "cost-review.md", "drafting": "drafting.md", "deadlines": "deadlines.md"}
 
@@ -27,6 +31,8 @@ def ai_status():
     # The provider tells the UI where research context goes (local server vs. Google).
     if AI_PROVIDER == "ollama":
         return {**ollama_status(), "provider": "ollama"}
+    if AI_PROVIDER == "groq":
+        return {**groq_status(), "provider": "groq"}
     return {**gemini_status(), "provider": "gemini"}
 
 
@@ -41,6 +47,24 @@ def gemini_status():
         return {"ready": True, "model": GEMINI_MODEL, "reason": "ready"}
     except (URLError, TimeoutError, OSError, ValueError):
         return {"ready": False, "model": GEMINI_MODEL, "reason": "unavailable"}
+
+
+def groq_headers():
+    # Groq's edge rejects Python's default user agent; send a plain client name.
+    return {"Authorization": "Bearer " + GROQ_API_KEY, "Content-Type": "application/json", "User-Agent": "schimmelpilz-server/1.0"}
+
+
+def groq_status():
+    if not GROQ_API_KEY:
+        return {"ready": False, "model": GROQ_MODEL, "reason": "unavailable"}
+    try:
+        with urlopen(Request(GROQ_BASE_URL + "/models/" + quote(GROQ_MODEL, safe=""), headers=groq_headers(), method="GET"), timeout=5) as response:
+            json.loads(response.read(256 * 1024))
+        return {"ready": True, "model": GROQ_MODEL, "reason": "ready"}
+    except HTTPError as error:
+        return {"ready": False, "model": GROQ_MODEL, "reason": "model_missing" if error.code == 404 else "unavailable"}
+    except (URLError, TimeoutError, OSError, ValueError):
+        return {"ready": False, "model": GROQ_MODEL, "reason": "unavailable"}
 
 
 def ollama_status():
@@ -115,7 +139,42 @@ def prepare_messages(case, history, question, language, workflow, sources=None, 
 
 
 def generate_answer(messages):
-    return generate_ollama_answer(messages) if AI_PROVIDER == "ollama" else generate_gemini_answer(messages)
+    if AI_PROVIDER == "ollama":
+        return generate_ollama_answer(messages)
+    if AI_PROVIDER == "groq":
+        return generate_groq_answer(messages)
+    return generate_gemini_answer(messages)
+
+
+def generate_groq_answer(messages):
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY is not configured")
+    payload = {"model": GROQ_MODEL, "messages": messages, "temperature": 0.15, "max_completion_tokens": 4096}
+    if GROQ_MODEL.startswith("openai/gpt-oss"):
+        # Reasoning stays separate from the answer and is not shown.
+        payload.update(reasoning_effort="medium", include_reasoning=False)
+    request = Request(GROQ_BASE_URL + "/chat/completions", data=json.dumps(payload).encode("utf-8"), headers=groq_headers(), method="POST")
+    for delay in (*GEMINI_RETRY_DELAYS, None):
+        try:
+            with urlopen(request, timeout=120) as response:
+                raw = response.read(2 * 1024 * 1024 + 1)
+            break
+        except HTTPError as error:
+            if delay is None or error.code not in (429, 500, 502, 503):
+                raise
+            time.sleep(delay)
+    if len(raw) > 2 * 1024 * 1024:
+        raise ValueError("Oversized model response")
+    result = json.loads(raw)
+    choices = result.get("choices") if isinstance(result, dict) else None
+    if not choices or not isinstance(choices[0], dict) or not isinstance((choices[0].get("message") or {}).get("content"), str):
+        raise ValueError("Invalid model response")
+    finish = choices[0].get("finish_reason")
+    answer = choices[0]["message"]["content"].strip()
+    if not answer or finish not in ("stop", "length"):
+        raise ValueError("Incomplete model response")
+    usage = result.get("usage") or {}
+    return {"answer": answer, "input_tokens": usage.get("prompt_tokens"), "output_tokens": usage.get("completion_tokens"), "truncated": finish == "length"}
 
 
 def generate_gemini_answer(messages):
