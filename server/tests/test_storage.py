@@ -227,7 +227,7 @@ class PersistentStorageTests(unittest.TestCase):
                 self.assertEqual(first.post(route, json=payload).json()["id"], payload["request_id"])
                 self.assertEqual(generate.call_count, 1)
                 self.assertEqual(first.post(route, json={**payload, "question": "Changed question"}).status_code, 409)
-                follow_up = {**payload, "request_id": str(uuid.uuid4()), "question": "Welche Frage folgt daraus?"}
+                follow_up = {**payload, "request_id": str(uuid.uuid4()), "question": "Welche Frage folgt daraus?", "thread_id": payload["request_id"]}
                 first.post(route, json=follow_up)
                 self.assertEqual(generate.call_args[0][0][1]["content"], payload["question"])
                 self.assertEqual(first.get(f"/api/cases/{other_case['id']}/research").json(), [])
