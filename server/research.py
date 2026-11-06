@@ -1,10 +1,11 @@
 """Model transport (Gemini API, Groq or local Ollama) with bounded case, document and official-source context."""
 import json
+import re
 import os
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 from .operator_config import load as load_operator_config
 
@@ -22,7 +23,11 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
-AI_MODEL = {"ollama": OLLAMA_MODEL, "groq": GROQ_MODEL}.get(AI_PROVIDER, GEMINI_MODEL)
+# Any OpenAI-compatible provider (Mistral, DeepSeek, OpenRouter, Together, Cerebras, GitHub Models, ...): address, key, model.
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "").strip().rstrip("/")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "").strip()
+LLM_MODEL = os.getenv("LLM_MODEL", "").strip()
+AI_MODEL = {"ollama": OLLAMA_MODEL, "groq": GROQ_MODEL, "openai": LLM_MODEL}.get(AI_PROVIDER, GEMINI_MODEL)
 # Names of remedies that models mix up; stated once here, checked against the statutes.
 REMEDIES = ('Richtige Bezeichnungen (nicht verwechseln): gegen einen Mahnbescheid → Widerspruch, zwei Wochen ab Zustellung (§ 692 Abs. 1 Nr. 3, § 694 ZPO); '
             'gegen einen Vollstreckungsbescheid → Einspruch, zwei Wochen (§ 700 Abs. 1, § 339 ZPO); gegen einen Strafbefehl → Einspruch, zwei Wochen (§ 410 StPO); '
@@ -39,6 +44,8 @@ def ai_status():
         return {**ollama_status(), "provider": "ollama"}
     if AI_PROVIDER == "groq":
         return {**groq_status(), "provider": "groq"}
+    if AI_PROVIDER == "openai":
+        return {**llm_status(), "provider": "openai", "host": urlparse(LLM_BASE_URL).hostname or ""}
     return {**gemini_status(), "provider": "gemini"}
 
 
@@ -58,6 +65,24 @@ def gemini_status():
 def groq_headers():
     # Groq's edge rejects Python's default user agent; send a plain client name.
     return {"Authorization": "Bearer " + GROQ_API_KEY, "Content-Type": "application/json", "User-Agent": "schimmelpilz-server/1.0"}
+
+
+def llm_headers():
+    return {"Authorization": "Bearer " + LLM_API_KEY, "Content-Type": "application/json", "User-Agent": "schimmelpilz-server/1.0"}
+
+
+def llm_status():
+    if not (LLM_BASE_URL and LLM_API_KEY and LLM_MODEL):
+        return {"ready": False, "model": LLM_MODEL, "reason": "unavailable"}
+    try:
+        with urlopen(Request(LLM_BASE_URL + "/models", headers=llm_headers(), method="GET"), timeout=8) as response:
+            listed = {item.get("id") for item in json.loads(response.read(4 * 1024 * 1024)).get("data", []) if isinstance(item, dict)}
+        # Some providers list only part of their models; an answering key counts as ready.
+        return {"ready": True, "model": LLM_MODEL, "reason": "ready" if not listed or LLM_MODEL in listed else "model_not_listed"}
+    except HTTPError as error:
+        return {"ready": error.code not in (401, 403), "model": LLM_MODEL, "reason": "unavailable" if error.code in (401, 403) else "ready"}
+    except (URLError, TimeoutError, OSError, ValueError):
+        return {"ready": False, "model": LLM_MODEL, "reason": "unavailable"}
 
 
 def groq_status():
@@ -163,6 +188,8 @@ def generate_answer(messages):
         return generate_ollama_answer(messages)
     if AI_PROVIDER == "groq":
         return generate_groq_answer(messages)
+    if AI_PROVIDER == "openai":
+        return generate_llm_answer(messages)
     return generate_gemini_answer(messages)
 
 
@@ -170,6 +197,8 @@ def generate_json(messages, max_tokens=6000):
     """A JSON object from the active model, for structured tasks such as reading a letter."""
     if AI_PROVIDER == "groq":
         text = generate_groq_answer(messages, json_mode=True, max_tokens=max_tokens)["answer"]
+    elif AI_PROVIDER == "openai":
+        text = generate_llm_answer(messages, json_mode=True, max_tokens=max_tokens)["answer"]
     else:
         text = generate_answer(messages)["answer"]
     start, end = text.find("{"), text.rfind("}")
@@ -222,6 +251,45 @@ def generate_groq_answer(messages, json_mode=False, max_tokens=12000, effort=Non
         if effort == "low" or not GROQ_MODEL.startswith("openai/gpt-oss"):
             raise
         return _groq_call(messages, json_mode, max_tokens, "low")
+
+
+def generate_llm_answer(messages, json_mode=False, max_tokens=8000):
+    """OpenAI-compatible chat completion; providers without JSON mode get the same request without it."""
+    if not (LLM_BASE_URL and LLM_API_KEY and LLM_MODEL):
+        raise ValueError("LLM_BASE_URL, LLM_API_KEY and LLM_MODEL must be configured")
+    payload = {"model": LLM_MODEL, "messages": messages, "temperature": 0.1 if json_mode else 0.15, "max_tokens": max_tokens}
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    raw = None
+    for delay in (*GEMINI_RETRY_DELAYS, None):
+        request = Request(LLM_BASE_URL + "/chat/completions", data=json.dumps(payload).encode("utf-8"), headers=llm_headers(), method="POST")
+        try:
+            with urlopen(request, timeout=180) as response:
+                raw = response.read(2 * 1024 * 1024 + 1)
+            break
+        except HTTPError as error:
+            if error.code in (400, 422) and "response_format" in payload:
+                payload.pop("response_format")   # JSON mode not supported: ask again, the prompt still demands JSON
+                continue
+            if delay is None or error.code not in (429, 500, 502, 503):
+                raise
+            time.sleep(delay)
+    if raw is None:
+        raise ValueError("No model response")
+    if len(raw) > 2 * 1024 * 1024:
+        raise ValueError("Oversized model response")
+    result = json.loads(raw)
+    choices = result.get("choices") if isinstance(result, dict) else None
+    if not choices or not isinstance(choices[0], dict) or not isinstance((choices[0].get("message") or {}).get("content"), str):
+        raise ValueError("Invalid model response")
+    finish = choices[0].get("finish_reason")
+    answer = choices[0]["message"]["content"].strip()
+    # Reasoning models may wrap their thinking in <think> tags; only the answer is kept.
+    answer = re.sub(r"<think>.*?</think>", "", answer, flags=re.DOTALL).strip()
+    if not answer or finish not in ("stop", "length", "eos", None):
+        raise ValueError("Incomplete model response")
+    usage = result.get("usage") or {}
+    return {"answer": answer, "input_tokens": usage.get("prompt_tokens"), "output_tokens": usage.get("completion_tokens"), "truncated": finish == "length"}
 
 
 def _groq_call(messages, json_mode, max_tokens, effort):
