@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, Response as BinaryResponse
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets, letter_assistant, reminders, dictations, speech
+from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets, letter_assistant, reminders, dictations, speech, conflicts
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
 from .research import ai_status, prepare_messages, generate_answer, AI_MODEL, plan_norms
 from . import nulegal, law_skills
@@ -1495,6 +1495,7 @@ app.include_router(bookkeeping.router(db, require_user, now, record_activity))
 app.include_router(snippets.router(db, require_user, now))
 app.include_router(dictations.router(db, require_user, now, record_activity, lambda: UPLOAD_DIR))
 app.include_router(speech.router(db, require_user))
+app.include_router(conflicts.router(db, require_user))
 app.include_router(route_plans.router(db, require_user, now, record_activity))
 app.include_router(exports.router(db, require_user, now))
 app.include_router(ocr_routes.router(db, require_user, now, record_activity, get_case, get_document, document_text, lambda: UPLOAD_DIR, EXTRACTION_LOCK, ROOT))

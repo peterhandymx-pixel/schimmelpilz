@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { request } from "./useCaseStorage.js";
 import { IconArrowRight, IconBriefcase, IconBuildingBank, IconUser } from "@tabler/icons-react";
 
 import { DateInput } from "./DateInput";
@@ -16,7 +17,7 @@ export const intakeCopy = {
     matterHeading: "03 · Angelegenheit & Ziel", title: "Kurzbezeichnung der Akte *", description: "Sachverhalt / Chronologie *", descriptionHint: "Was ist wann passiert? Welche Unterlagen und Beweise liegen vor?", objective: "Gewünschtes Ergebnis / Auftrag", objectiveHint: "z. B. Forderung durchsetzen, Kündigung prüfen oder Recherche zu einer Rechtsfrage",
     legalArea: "Rechtsgebiet", jurisdiction: "Rechtsordnung / Bezug", stage: "Verfahrensstand",
     procedureHeading: "04 · Verfahren & Fristen", court: "Gericht / Behörde (falls bekannt)", courtReference: "Gerichtliches / behördliches Aktenzeichen", receivedOn: "Eingang der Angelegenheit", deadline: "Bekannte Frist / Wiedervorlage", deadlineNote: "Fristgrund / Herkunft", deadlineHint: "Manuell erfasste Angaben; Fristen werden derzeit weder automatisch berechnet noch überwacht.",
-    costsHeading: "05 · Wert & Kosten", value: "Streit- / Gegenstandswert", currency: "Währung", feeBasis: "Vergütungsgrundlage", conflict: "Interessenkollision – manuelle Prüfung", conflictHint: "Dokumentiert den angegebenen Prüfstatus. Das System führt keine automatische Kollisionsprüfung durch.",
+    costsHeading: "05 · Wert & Kosten", value: "Streit- / Gegenstandswert", currency: "Währung", feeBasis: "Vergütungsgrundlage", conflict: "Interessenkollision – Prüfstatus", conflictHint: "Das System sucht Mandant und Gegner automatisch in allen Akten, auch archivierten (siehe Parteien). Die rechtliche Bewertung und der Status bleiben Ihre Entscheidung.",
     facts: "Aktenstammdaten", noEntry: "Nicht angegeben", duplicate: "Dieses Aktenzeichen ist bereits vergeben. Wählen Sie eine andere Nummer oder öffnen Sie die bestehende Akte über die Fallauswahl.", invalid: "Bitte prüfen Sie Ihre Angaben und die Feldlängen.",
     roles: [["other", "Noch offen / andere Rolle"], ["claimant", "Anspruchsteller / Kläger"], ["respondent", "Anspruchsgegner / Beklagter"], ["applicant", "Antragsteller"]],
     areas: [["general", "Allgemeine Rechtsfrage"], ["consumer", "Verbraucherrecht"], ["tenancy", "Mietrecht"], ["contract", "Vertrags- & Zivilrecht"], ["commercial", "Handels- & Gesellschaftsrecht"], ["employment", "Arbeitsrecht"], ["family", "Familienrecht"], ["social", "Sozialrecht"], ["administrative", "Verwaltungsrecht"], ["tax", "Steuerrecht"], ["criminal", "Strafrecht"]],
@@ -38,7 +39,7 @@ export const intakeCopy = {
     matterHeading: "03 · Matter & objective", title: "Case file title *", description: "Facts / chronology *", descriptionHint: "What happened and when? What documents and evidence are available?", objective: "Desired outcome / instructions", objectiveHint: "e.g. recover a debt, review a termination or research a legal question",
     legalArea: "Area of law", jurisdiction: "Legal system / connection", stage: "Procedural stage",
     procedureHeading: "04 · Proceedings & deadlines", court: "Court / authority (if known)", courtReference: "Court / authority reference", receivedOn: "Date received", deadline: "Known deadline / follow-up", deadlineNote: "Reason / source of deadline", deadlineHint: "Manually entered dates. Deadlines are currently neither calculated nor monitored automatically.",
-    costsHeading: "05 · Value & costs", value: "Value in dispute / matter value", currency: "Currency", feeBasis: "Fee basis", conflict: "Conflict of interest – manual review", conflictHint: "Records the supplied review status. The system does not perform an automatic conflict check.",
+    costsHeading: "05 · Value & costs", value: "Value in dispute / matter value", currency: "Currency", feeBasis: "Fee basis", conflict: "Conflict of interest – review status", conflictHint: "The system searches client and opponent in all files, archived ones included (see parties). Assessment and status remain your decision.",
     facts: "Case particulars", noEntry: "Not provided", duplicate: "This reference is already in use. Choose another number or open the existing file using the case selector.", invalid: "Please check your entries and field lengths.",
     roles: [["other", "Undetermined / other"], ["claimant", "Claimant"], ["respondent", "Respondent / defendant"], ["applicant", "Applicant"]],
     areas: [["general", "General legal question"], ["consumer", "Consumer law"], ["tenancy", "Tenancy law"], ["contract", "Contract & civil law"], ["commercial", "Commercial & company law"], ["employment", "Employment law"], ["family", "Family law"], ["social", "Social law"], ["administrative", "Administrative law"], ["tax", "Tax law"], ["criminal", "Criminal law"]],
@@ -60,6 +61,20 @@ export function CaseIntake({ lang, t, saving, error, onSubmit, onCancel, user, i
   const ownAccount = audience === user?.audience && audience !== "law_firm";
   const profileAddress = user ? `${user.street}\n${user.postal_code} ${user.city}\n${user.country}` : "";
   const [referenceMode, setReferenceMode] = useState("generate");
+  const formRef = useRef(null), [conflict, setConflict] = useState(null), lastChecked = useRef("");
+  // Conflict search (§ 43a BRAO) whenever client or opponent changes; names go in the request body, never the URL.
+  const checkConflicts = async () => {
+    if (audience !== "law_firm" || !formRef.current) return;
+    const client = formRef.current.client_name?.value.trim() || "", opponent = formRef.current.opponent_name?.value.trim() || "";
+    const key = `${client}|${opponent}`;
+    if (key === lastChecked.current || (!client && !opponent)) return;
+    lastChecked.current = key;
+    try {
+      const result = await request("/conflicts/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client, opponent, exclude_case: initialCase?.id || "" }) });
+      setConflict(result);
+      if (result.conflict && formRef.current.conflict_check) formRef.current.conflict_check.value = "conflict";
+    } catch { setConflict({ error: true, hits: [] }); }
+  };
   const submit = async event => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -73,7 +88,7 @@ export function CaseIntake({ lang, t, saving, error, onSubmit, onCancel, user, i
     if (saved) { form.reset(); setReferenceMode("generate"); }
   };
   const audienceOptions = [["consumer", IconUser], ["business", IconBriefcase], ["law_firm", IconBuildingBank]];
-  return <form className="case-intake" onSubmit={submit}>
+  return <form className="case-intake" onSubmit={submit} ref={formRef} onBlur={event => { if (["client_name", "opponent_name"].includes(event.target.name)) checkConflicts(); }}>
     <p className="dialog-intro">{initialCase ? (lang === "de" ? "Aktualisieren Sie die Angaben zur bestehenden Akte. Das Aktenzeichen bleibt erhalten." : "Update the existing file's particulars. Its reference is retained.") : c.intro}</p>
     <fieldset disabled={saving} className="audience-picker"><legend>{c.audience}</legend>{audienceOptions.map(([id, Icon]) => <label key={id} className={audience === id ? "choice-card chosen" : "choice-card"}><input type="radio" name="audience" value={id} checked={audience === id} onChange={() => setAudience(id)} /><span><Icon size={20} /><strong>{c[id]}</strong><small>{c[`${id}Hint`]}</small></span></label>)}</fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.referenceHeading}</legend>
@@ -93,7 +108,7 @@ export function CaseIntake({ lang, t, saving, error, onSubmit, onCancel, user, i
       <label className="span-two">{lang === "de" ? "Rechtsschutzversicherung (Name, Anschrift)" : "Legal expenses insurer (name, address)"}<input name="insurer_name" maxLength={300} defaultValue={d.insurer_name || ""} /></label>
       <label>{lang === "de" ? "Versicherungsnummer" : "Policy number"}<input name="insurer_policy" maxLength={60} defaultValue={d.insurer_policy || ""} /></label>
       <label>{lang === "de" ? "Schadennummer" : "Claim number"}<input name="insurer_claim" maxLength={60} defaultValue={d.insurer_claim || ""} /></label>
-    </div></fieldset>
+    </div>{audience === "law_firm" && <ConflictResult lang={lang} result={conflict} />}</fieldset>
     <fieldset disabled={saving} className="intake-section"><legend>{c.matterHeading}</legend><div className="intake-grid">
       <label className="span-two">{c.title}<input name="title" required minLength={3} maxLength={120} placeholder={t.caseTitle} defaultValue={initialCase?.title || ""} /></label>
       <SelectField name="legal_area" label={c.legalArea} options={c.areas} defaultValue={d.legal_area || "general"} />
@@ -134,4 +149,19 @@ export function CaseFacts({ item, lang }) {
     [c.feeBasis, option(c.fees, d.fee_basis)], ...(d.audience === "law_firm" ? [[c.conflict, option(c.conflicts, d.conflict_check)]] : []),
   ].filter(([, value]) => value);
   return <details className="panel case-facts"><summary>{c.facts}<span>+</span></summary><dl>{entries.map(([label, value]) => <div key={label}><dt>{label.replace(" *", "")}</dt><dd>{value}</dd></div>)}</dl>{d.deadline && <p className="field-help">{c.deadlineHint}</p>}</details>;
+}
+
+function ConflictResult({ lang, result }) {
+  const de = lang === "de";
+  if (!result) return <p className="field-help">{de ? "Kollisionsprüfung: Sobald Mandant oder Gegner eingetragen ist, sucht das System in allen Akten." : "Conflict check: once client or opponent is entered, all files are searched."}</p>;
+  if (result.error) return <p className="storage-notice">{de ? "Kollisionsprüfung gerade nicht möglich. Bitte manuell prüfen." : "Conflict check unavailable. Please check manually."}</p>;
+  if (!result.hits.length) return <p className="conflict-box clear">{de ? "Kollisionsprüfung: keine Treffer in Ihren Akten." : "Conflict check: no matches in your files."}</p>;
+  const side = value => value === "client" ? (de ? "Mandant" : "client") : (de ? "Gegner" : "opponent");
+  return <div className={`conflict-box ${result.conflict ? "danger" : "info"}`} role={result.conflict ? "alert" : "status"}>
+    <strong>{result.conflict ? (de ? "Mögliche Interessenkollision (§ 43a Abs. 4 BRAO)" : "Possible conflict of interest") : (de ? "Bekannte Beteiligte" : "Known parties")}</strong>
+    <ul>{result.hits.map((hit, index) => <li key={index} className={hit.kind}>
+      {de ? `Neuer ${side(hit.searched)}` : `New ${side(hit.searched)}`} {hit.kind === "conflict" ? (de ? "ist" : "is") : (de ? "ist auch" : "is also")} {side(hit.side)} {de ? "in" : "in"} <b>{hit.reference}</b>{hit.title ? ` · ${hit.title}` : ""}{hit.name ? ` („${hit.name}“)` : ""}{hit.archived ? (de ? " – archiviert" : " – archived") : ""}
+    </li>)}</ul>
+    {result.conflict && <small>{de ? "Der Prüfstatus unten wurde auf „Möglicher Konflikt“ gesetzt. Bitte prüfen, ob die Mandate kollidieren." : "The review status below was set to “possible conflict”. Please assess the mandates."}</small>}
+  </div>;
 }

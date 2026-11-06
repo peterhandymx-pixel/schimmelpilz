@@ -241,3 +241,10 @@
 .sample-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
 .sample-text{white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.55;background:#fff;border:1px solid #dfe5e1;border-radius:6px;padding:22px 26px;max-height:62vh;overflow:auto;margin:0 0 10px}
 @media (max-width:900px){.sample-library{grid-template-columns:1fr}.sample-list{max-height:40vh}}
+/* Conflict check result below the parties */
+.conflict-box{margin:14px 0 0;padding:12px 14px;border-radius:8px;font-size:14px;line-height:1.45;border:1px solid #dce3d7;background:#f6f8f3}
+.conflict-box.clear{color:#2f5d4d}
+.conflict-box.info{border-color:#c9d7e6;background:#f3f7fb}
+.conflict-box.danger{border-color:#e2a69c;background:#fdf0ee;color:#7a2318}
+.conflict-box ul{margin:6px 0;padding-left:18px}.conflict-box li{margin:3px 0}
+.conflict-box small{display:block;color:inherit;opacity:.85}
