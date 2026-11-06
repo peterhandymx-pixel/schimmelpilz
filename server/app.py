@@ -227,7 +227,7 @@ class ResearchInput(BaseModel):
     request_id: uuid.UUID
     question: str = Field(min_length=3, max_length=4000)
     language: Literal["de", "en"] = "de"
-    workflow: Literal["intake", "research", "jurisdiction", "costs", "drafting", "deadlines"] = "research"
+    workflow: Literal["intake", "research", "jurisdiction", "costs", "drafting", "deadlines", "comparison"] = "research"
     document_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
     legal_source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
     use_legal_catalogue: bool = False

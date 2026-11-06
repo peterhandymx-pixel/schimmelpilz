@@ -183,6 +183,7 @@ export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onD
           <button type="submit" className="rc-send" disabled={!canSend} aria-label={de ? "Frage senden" : "Send question"}>{busy ? <IconLoader2 size={20} className="la-spin" /> : <IconArrowUp size={20} />}</button>
         </div>
       </div>
+      {workflow === "comparison" && documentIds.length < 2 && <p className="storage-notice">{de ? "Für die Gegenüberstellung unter „Dokumente“ mindestens zwei Schriftsätze auswählen, z. B. Klage und Klageerwiderung (Text muss geprüft sein)." : "For a comparison, select at least two submissions under “Documents”, e.g. claim and defence (text must be reviewed)."}</p>}
       {error && <p className="storage-error" role="alert">{error}</p>}
       <p className="rc-note">{de ? "Frau Schimmelpilz kann Fehler machen – Antworten sind Arbeitshilfen, rechtlich nicht geprüft. Zitate werden automatisch geprüft. " : "Ms Schimmelpilz can make mistakes – answers are working aids, not legal review. Citations are checked automatically. "}{providerNote} {status?.speech ? (de ? "Spracheingaben gehen zur Umwandlung in Text an Groq und werden nicht gespeichert. " : "Voice input is sent to Groq for transcription and not stored. ") : ""}{de ? "Verlauf wird in der Akte gespeichert." : "History is stored with the case."}</p>
     </form>
