@@ -184,10 +184,19 @@ def read_fields(text):
     match = re.search(r'\b(amtsgericht|landgericht|arbeitsgericht|sozialgericht|verwaltungsgericht|finanzgericht|oberlandesgericht)\s+([a-z][a-z\-]+(?:\s(?:am|an der|im|in der)\s[a-z][a-z\-]+)?)', folded)
     if match:
         court = original_slice(text, folded, match.start(), match.end()).strip()
+    # Which remedy the instructions name: in some Länder and matters (e.g. building law in NRW, § 110 JustG NRW) there is
+    # no Widerspruch, the notice must be challenged by Klage directly.
+    instructions = folded[folded.find('rechtsbehelfsbelehrung'):] if 'rechtsbehelfsbelehrung' in folded else folded
+    if 'widerspruch' in instructions:
+        remedy = 'widerspruch'
+    elif re.search(r"\bklage\b", instructions) and re.search(r"verwaltungsgericht|sozialgericht|finanzgericht", instructions):
+        remedy = 'klage'
+    else:
+        remedy = ''
     return {
         'sender': sender[:160], 'sender_address': sender_address[:300], 'letter_date': letter_date.isoformat() if letter_date else None,
         'reference': reference[:100], 'amount': amount, 'creditor': creditor[:160], 'court': court[:160],
-        'letter_deadline': letter_deadline.isoformat() if letter_deadline else None, 'period': period,
+        'letter_deadline': letter_deadline.isoformat() if letter_deadline else None, 'period': period, 'remedy': remedy,
     }
 
 
@@ -198,11 +207,24 @@ def area_for_authority(folded):
                                        r'sozialgesetzbuch|\bsgb\b|elterngeld|wohngeld|versorgungsamt|berufsgenossenschaft') else 'administrative'
 
 
+def is_enforcement_order(t):
+    """A Vollstreckungsbescheid, not a Mahnbescheid that merely warns one may follow ("... kann einen Vollstreckungsbescheid beantragen")."""
+    if 'vollstreckungsbescheid' not in t:
+        return False
+    # Mentions that only announce or request one do not make the letter one.
+    remaining = re.sub(r'(antrag auf erlass eines |erlass eines )?vollstreckungsbescheid\w*\s+(zu\s+)?(beantragen|beantragt|erlassen werden|ergehen)', ' ', t)
+    if 'vollstreckungsbescheid' not in remaining:
+        return False
+    first_order, first_notice = t.find('vollstreckungsbescheid'), t.find('mahnbescheid')
+    # A real one names itself before it refers back to the earlier Mahnbescheid.
+    return first_notice < 0 or first_order < first_notice
+
+
 KINDS = [
     # id, label, legal area, stage, recognition rule (folded text -> bool)
     ('gerichtsvollzieher', 'Gerichtsvollzieher: Zahlungsaufforderung / Vermögensauskunft', 'contract', 'enforcement', lambda t: 'gerichtsvollzieher' in t and any_of(t, r'vermoegensauskunft', r'802f', r'zahlungsaufforderung', r'ladung')),
     ('pfaendung', 'Kontopfändung / Pfändungsbeschluss', 'contract', 'enforcement', lambda t: any_of(t, r'pfaendungs-? und ueberweisungsbeschluss', r'pfaendungsbeschluss', r'kontopfaendung', r'vorlaeufiges zahlungsverbot', r'pfaendung (ihres|des) (konto|guthaben|arbeitseinkommen)')),
-    ('vollstreckungsbescheid', 'Vollstreckungsbescheid', 'contract', 'court', lambda t: 'vollstreckungsbescheid' in t and not has(t, r'antrag auf erlass eines vollstreckungsbescheid')),
+    ('vollstreckungsbescheid', 'Vollstreckungsbescheid', 'contract', 'court', lambda t: is_enforcement_order(t)),
     ('mahnbescheid', 'Mahnbescheid vom Gericht', 'contract', 'court', lambda t: 'mahnbescheid' in t),
     ('klage', 'Klage / Post vom Gericht', 'general', 'court', lambda t: any_of(t, r'klageschrift', r'erhebt?\s.{0,30}klage', r'erhebe ich.{0,30}klage', r'verteidigungsanzeige', r'schriftliche[ns]? vorverfahren', r'klageerwiderung', r'guetetermin')),
     ('strafbefehl', 'Strafbefehl', 'criminal', 'court', lambda t: 'strafbefehl' in t),
@@ -493,9 +515,18 @@ def evaluate(kind, fields, answers, today=None, state=None):
         if answers.get('instructions') == 'no':
             result.calc('Widerspruch (ohne Rechtsbehelfsbelehrung)', start, 1, 'years', '§ 66 Abs. 2 SGG' if social else '§ 58 Abs. 2 VwGO',
                         f'Fehlt die Belehrung oder ist sie falsch, gilt ein Jahr ab Bekanntgabe. Berechnet ab {basis}. Sicherer ist es, trotzdem innerhalb eines Monats zu handeln.')
+        elif fields.get('remedy') == 'klage':
+            result.calc('Klage beim Gericht (kein Widerspruch)', start, 1, 'months', '§ 87 Abs. 1 SGG' if social else '§ 74 Abs. 1 VwGO',
+                        f'Laut Rechtsbehelfsbelehrung ist kein Widerspruch vorgesehen; die Klage muss binnen eines Monats ab Bekanntgabe beim Gericht eingehen. Berechnet ab {basis}.')
         else:
             result.calc('Widerspruch', start, 1, 'months', '§ 84 Abs. 1 SGG' if social else '§ 70 Abs. 1 VwGO', f'Ein Monat ab Bekanntgabe. Berechnet ab {basis}.')
-        if answers.get('wrong') != 'no':
+        if answers.get('wrong') != 'no' and fields.get('remedy') == 'klage' and answers.get('instructions') != 'no':
+            result.steps = ['Erheben Sie Klage bei dem Gericht, das in der Rechtsbehelfsbelehrung genannt ist. Ein Widerspruch bei der Behörde wahrt die Frist hier nicht.',
+                            'Die Klage muss den Kläger, die beklagte Behörde und den angefochtenen Bescheid bezeichnen; die Begründung kann nachgereicht werden.',
+                            'Beantragen Sie Akteneinsicht, wenn Sie nicht wissen, worauf die Entscheidung beruht.']
+            result.samples = ['klage-sozialgericht' if social else 'klage-verwaltungsgericht', 'akteneinsicht-behoerde']
+            result.warnings.append('Achtung: Hier ist direkt Klage zu erheben. Ein Widerspruch an die Behörde hält die Frist nicht ein.')
+        elif answers.get('wrong') != 'no':
             result.steps = ['Legen Sie schriftlich Widerspruch bei der Stelle ein, die den Bescheid erlassen hat (Anschrift steht in der Rechtsbehelfsbelehrung). Eine Begründung kann nachgereicht werden.',
                             'Beantragen Sie Akteneinsicht, wenn Sie nicht wissen, worauf die Entscheidung beruht.']
             result.samples = ['widerspruch-bescheid', 'akteneinsicht-behoerde']

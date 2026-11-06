@@ -41,3 +41,17 @@ class ResearchChatTests(test_inbox.InboxTests):
             self.assertEqual(self.ask(client, case_id, 'Fremder Chat?', str(uuid.uuid4())).status_code, 404)
             runs = client.get(f'/api/cases/{case_id}/research').json()
             self.assertEqual(sorted({run['thread_id'] for run in runs}), sorted({first['thread_id'], other['thread_id']}))
+
+
+class ResearchQuotaTests(ResearchChatTests):
+    test_chats_keep_their_own_history = None
+
+    def test_exhausted_provider_quota_is_reported_as_such(self):
+        from urllib.error import HTTPError
+        quota = HTTPError('https://example.invalid', 429, 'Too Many Requests', {}, None)
+        with TestClient(api.app) as client, patch.object(api, 'generate_answer', side_effect=quota):
+            self.login(client, 'quota@example.invalid')
+            case_id = self.case(client)
+            reply = self.ask(client, case_id, 'Frage bei aufgebrauchtem Kontingent?')
+            self.assertEqual((reply.status_code, reply.json()['detail']), (429, 'ai_quota'))
+            self.assertEqual(client.get(f'/api/cases/{case_id}/research').json()[0]['error_code'], 'ai_quota')

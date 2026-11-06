@@ -14,7 +14,7 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").strip().lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest").strip()
 # Google answers 503 "high demand" (and 429/500) in short spikes; retry those twice before reporting failure.
-GEMINI_RETRY_DELAYS = (2, 6)
+GEMINI_RETRY_DELAYS = (2, 6, 20)  # the last one bridges a per-minute quota window
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
@@ -271,7 +271,9 @@ def generate_gemini_answer(messages):
         except HTTPError as error:
             if delay is None or error.code not in (429, 500, 503):
                 raise
-            time.sleep(delay)
+            # Respect the server's own wait hint for quota errors, within reason.
+            hint = (error.headers or {}).get("Retry-After") if hasattr(error, "headers") else None
+            time.sleep(min(float(hint), 30) if hint and str(hint).replace(".", "", 1).isdigit() and delay else delay)
     if len(raw) > 2 * 1024 * 1024:
         raise ValueError("Oversized model response")
     result = json.loads(raw)

@@ -1199,10 +1199,10 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
         try:
             result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages, case_law, skill))
         except (URLError, OSError, TimeoutError, ValueError) as error:
-            code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_unavailable"
+            code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_quota" if getattr(error, "code", None) == 429 else "ai_unavailable"
             with db() as connection:
                 connection.execute("UPDATE research_runs SET status = 'failed', error_code = ?, finished_at = ? WHERE id = ?", (code, now(), run_id))
-            raise HTTPException(status_code=504 if code == "ai_timeout" else 503, detail=code) from None
+            raise HTTPException(status_code=504 if code == "ai_timeout" else 429 if code == "ai_quota" else 503, detail=code) from None
         # Every statute and docket the answer cites is checked against nu:legal (citation strings only).
         retrieval['citation_check'] = nulegal.check_citations(result['answer'])
         with db() as connection:
