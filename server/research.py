@@ -271,6 +271,14 @@ def generate_gemini_answer(messages):
         except HTTPError as error:
             if delay is None or error.code not in (429, 500, 503):
                 raise
+            if error.code == 429:
+                try:
+                    body = error.read(64 * 1024).decode("utf-8", "replace")
+                except Exception:  # noqa: BLE001 - a missing body only means we cannot tell
+                    body = ""
+                # A daily quota does not come back within seconds: report it at once instead of waiting.
+                if "PerDay" in body:
+                    raise
             # Respect the server's own wait hint for quota errors, within reason.
             hint = (error.headers or {}).get("Retry-After") if hasattr(error, "headers") else None
             time.sleep(min(float(hint), 30) if hint and str(hint).replace(".", "", 1).isdigit() and delay else delay)
