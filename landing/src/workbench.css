@@ -124,3 +124,11 @@
 .reference-editor input[type=text],.reference-editor input:not([type]){border:1px solid #ced5d1;border-radius:4px;padding:8px;font:inherit;margin-left:26px;max-width:260px}
 .reference-editor .field-help{margin:0}
 .reference-actions{display:flex;gap:10px;align-items:center}
+.resubmit{position:relative;display:inline-flex;flex-direction:column;align-items:flex-end}
+.resubmit-note{font-size:12px;color:#2f5d4d;margin-top:4px;white-space:nowrap}
+.resubmit-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:300px;display:grid;gap:8px;background:#fff;border:1px solid #d6ded2;border-radius:12px;padding:14px;box-shadow:0 10px 28px rgba(31,45,38,.16);text-align:left}
+.resubmit-pop label{display:grid;gap:4px;font-size:13px;font-weight:600}
+.resubmit-pop input{border:1px solid #ced5d1;border-radius:4px;padding:8px;font:inherit;font-weight:400}
+.resubmit-presets{display:flex;flex-wrap:wrap;gap:6px}
+.resubmit-presets button{font:inherit;font-size:12.5px;border:1px solid #dce3d7;border-radius:999px;background:#fff;padding:5px 10px;cursor:pointer}
+.resubmit-presets button.on{border-color:#0b5a46;background:#e9f3ec;color:#0b5a46}

@@ -3,16 +3,16 @@ import { CaseTools } from './CaseTools.jsx';
 import { CostReview } from './CostReview.jsx';
 import { ContactBook } from './ContactBook.jsx';
 import { useState } from "react";
-import { IconArrowLeft, IconEdit, IconFileText, IconUpload, IconHash } from "@tabler/icons-react";
+import { IconArrowLeft, IconEdit, IconFileText, IconUpload, IconHash, IconCalendarRepeat } from "@tabler/icons-react";
 import { CaseFacts, intakeCopy } from "./CaseIntake.jsx";
 import { ActivityList, DocumentList, DraftList, Status, TaskBoard } from "./DeskComponents.jsx";
-import { dateLabel } from "./workbench.js";
+import { dateLabel, localToday } from "./workbench.js";
 import { DeadlineCalculator } from "./DeadlineCalculator.jsx";
 
 export function CaseFile({ item, lang, storage, workspace, open, back, contacts, canDelete = false }) {
   const de = lang === "de", c = intakeCopy[lang], d = item.details || {};
   const tabs = de ? [["overview", "Aktenübersicht"], ["parties", "Beteiligte"], ["documents", "Dokumente"], ["drafts", "Schriftsätze"], ["tasks", "Fristen & Aufgaben"], ["costs", "Kostenprüfung"], ["routes", "Verfahrenswege"], ["activity", "Verlauf"]] : [["overview", "Case overview"], ["parties", "Parties"], ["documents", "Documents"], ["drafts", "Drafts"], ["tasks", "Deadlines & tasks"], ["costs", "Cost review"], ["routes", "Procedural routes"], ["activity", "Activity"]];
-  return <div className="desk-case-file"><button className="desk-link desk-back" onClick={back}><IconArrowLeft size={16} />{de ? "Aktenbestand" : "Case register"}</button><header className="desk-case-header"><div><span className="desk-reference">{item.reference}</span>{storage.changeReference && <ReferenceEditor item={item} lang={lang} storage={storage} />}<h2>{item.title}</h2><div className="desk-case-meta"><Status item={item} lang={lang} /><span>{c.areas.find(([id]) => id === d.legal_area)?.[1] || c.areas[0][1]}</span><span>{d.jurisdiction || "DE"}</span><span>{c.stages.find(([id]) => id === d.stage)?.[1] || c.stages[0][1]}</span></div></div><div className="desk-case-actions"><button className="desk-button" onClick={() => workspace.onEdit(item)}><IconEdit size={17} />{de ? "Stammdaten bearbeiten" : "Edit particulars"}</button><button className="desk-button solid" onClick={() => workspace.onDraft(undefined, item)}><IconFileText size={17} />{de ? "Schriftsatz erstellen" : "Prepare document"}</button></div></header>
+  return <div className="desk-case-file"><button className="desk-link desk-back" onClick={back}><IconArrowLeft size={16} />{de ? "Aktenbestand" : "Case register"}</button><header className="desk-case-header"><div><span className="desk-reference">{item.reference}</span>{storage.changeReference && <ReferenceEditor item={item} lang={lang} storage={storage} />}<h2>{item.title}</h2><div className="desk-case-meta"><Status item={item} lang={lang} /><span>{c.areas.find(([id]) => id === d.legal_area)?.[1] || c.areas[0][1]}</span><span>{d.jurisdiction || "DE"}</span><span>{c.stages.find(([id]) => id === d.stage)?.[1] || c.stages[0][1]}</span></div></div><div className="desk-case-actions"><Resubmission item={item} lang={lang} storage={storage} /><button className="desk-button" onClick={() => workspace.onEdit(item)}><IconEdit size={17} />{de ? "Stammdaten bearbeiten" : "Edit particulars"}</button><button className="desk-button solid" onClick={() => workspace.onDraft(undefined, item)}><IconFileText size={17} />{de ? "Schriftsatz erstellen" : "Prepare document"}</button></div></header>
     {item.documents.some(document=>document.inbox_reassigned_at) && <p className="storage-notice">{de ? "Eine Posteingangszuordnung wurde berichtigt. Frühere Dokumente bleiben als Nachweis erhalten. Bereits gespeicherte Antworten, Schriftsätze und eigene Freigaben vor weiterer Verwendung anhand des Berichtigungsverlaufs erneut prüfen." : "An incoming document assignment was corrected. Previous documents remain as records. Recheck existing answers, drafts and self-declared approvals against the correction history before further use."}</p>}
     <CaseTools item={item} lang={lang} onChanged={storage.reload} canDelete={canDelete} onDeleted={async () => { await storage.reload(); back(); }} />
     <nav className="desk-tabs" aria-label={de ? "Aktenregister" : "Case sections"}>{tabs.map(([id, title]) => <button key={id} aria-current={workspace.activeTab === id ? "page" : undefined} className={workspace.activeTab === id ? "active" : ""} onClick={() => workspace.setActiveTab(id)}>{title}{id === "documents" && <span>{item.documents.length}</span>}{id === "drafts" && <span>{item.drafts.length}</span>}</button>)}</nav>
@@ -52,4 +52,34 @@ function ReferenceEditor({ item, lang, storage }) {
     <span className="reference-actions"><button className="desk-button solid" disabled={busy || (mode === "existing" && !value.trim())}>{de ? "Übernehmen" : "Apply"}</button>
       <button type="button" className="desk-link" onClick={() => { setOpen(false); setError(""); }}>{de ? "Abbrechen" : "Cancel"}</button></span>
   </form>;
+}
+
+const addDays = days => { const day = new Date(); day.setDate(day.getDate() + days); return localToday(day); };
+const addMonths = months => { const day = new Date(); day.setMonth(day.getMonth() + months); return localToday(day); };
+
+// Quick follow-up ("Wiedervorlage") from the case header: a resubmission task with date and reason.
+function Resubmission({ item, lang, storage }) {
+  const de = lang === "de";
+  const [open, setOpen] = useState(false), [due, setDue] = useState(addDays(14)), [reason, setReason] = useState(""), [busy, setBusy] = useState(false), [note, setNote] = useState("");
+  const presets = de ? [["1 Woche", addDays(7)], ["2 Wochen", addDays(14)], ["1 Monat", addMonths(1)], ["3 Monate", addMonths(3)]] : [["1 week", addDays(7)], ["2 weeks", addDays(14)], ["1 month", addMonths(1)], ["3 months", addMonths(3)]];
+  const save = async event => {
+    event.preventDefault(); setBusy(true); setNote("");
+    try {
+      await storage.saveTask(item.id, { title: reason.trim() || (de ? "Akte wieder vorlegen" : "Review file again"), note: "", due_on: due, priority: "normal", kind: "resubmission", due_time: null, pre_days: null });
+      setOpen(false); setReason(""); setNote(de ? `Wiedervorlage am ${dateLabel(due, lang)} gespeichert.` : `Follow-up on ${dateLabel(due, lang)} saved.`);
+    } catch { setNote(de ? "Wiedervorlage konnte nicht gespeichert werden." : "Follow-up could not be saved."); }
+    finally { setBusy(false); }
+  };
+  if (!storage.saveTask) return null;
+  return <span className="resubmit">
+    <button type="button" className="desk-button" aria-expanded={open} onClick={() => setOpen(!open)}><IconCalendarRepeat size={17} />{de ? "Wiedervorlage" : "Follow-up"}</button>
+    {note && !open && <small className="resubmit-note" role="status">{note}</small>}
+    {open && <form className="resubmit-pop" onSubmit={save}>
+      <strong>{de ? "Akte wieder vorlegen am" : "Bring file back on"}</strong>
+      <span className="resubmit-presets">{presets.map(([label, day]) => <button type="button" key={label} className={due === day ? "on" : ""} onClick={() => setDue(day)}>{label}</button>)}</span>
+      <label>{de ? "Datum" : "Date"}<input type="date" required min={localToday()} value={due} onChange={event => setDue(event.target.value)} /></label>
+      <label>{de ? "Grund" : "Reason"}<input maxLength={200} value={reason} onChange={event => setReason(event.target.value)} placeholder={de ? "z. B. Stellungnahme Gegenseite abwarten" : "e.g. await the other side's reply"} /></label>
+      <span className="reference-actions"><button className="desk-button solid" disabled={busy}>{de ? "Speichern" : "Save"}</button><button type="button" className="desk-link" onClick={() => setOpen(false)}>{de ? "Abbrechen" : "Cancel"}</button></span>
+    </form>}
+  </span>;
 }
