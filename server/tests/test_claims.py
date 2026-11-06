@@ -60,3 +60,35 @@ class ClaimTests(test_inbox.InboxTests):
             payment_id = data['payments'][0]['id']
             self.assertEqual(client.delete(f'/api/cases/{case_id}/claim/payments/{payment_id}').status_code, 204)
             self.assertEqual(client.get(f'/api/cases/{case_id}/claim').json()['payments'], [])
+
+
+def test_bundesbank_series_parsing_and_merge(tmp_path=None):
+    import tempfile
+    from datetime import date as day
+    from pathlib import Path
+    from unittest import mock
+    from server import claims
+    sample = '﻿"";BBIN1.M.DE.BBK.BBKBAS2.EUR.ME\nEinheit;% p.a.;\n2026-12;1,52;\n2027-01;1,77;Bemerkung\n2027-02;1,77;\n'
+    rates, until = claims.parse_rates(sample)
+    assert rates[-1] == (day(2027, 2, 1), '1.77') and until == day(2027, 6, 30)
+    folder = Path(tempfile.mkdtemp())
+
+    class Reply:
+        def __init__(self, text): self.text = text
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, limit): return self.text.encode('utf-8')
+
+    with mock.patch.object(claims, 'RATE_CACHE', folder / 'base-rates.json'), mock.patch.dict(claims._FETCHED, {'rates': None, 'until': None, 'checked': 0.0}), \
+            mock.patch.dict('os.environ', {'BASE_RATE_FETCH_IN_TESTS': '1'}), mock.patch.object(claims, 'urlopen', lambda request, timeout: Reply(sample)):
+        assert claims.refresh_rates() is True
+        assert claims.refresh_rates() is False                      # at most once a day
+        assert claims.base_rate(day(2027, 3, 15)) == claims.Decimal('1.77')
+        assert claims.base_rate(day(2024, 3, 15)) == claims.Decimal('3.62')   # built-in history still applies
+        assert claims.known_until() == day(2027, 6, 30)
+        assert (folder / 'base-rates.json').is_file()
+    # A failed download keeps the built-in table and never raises.
+    with mock.patch.dict(claims._FETCHED, {'rates': [], 'until': None, 'checked': 0.0}), mock.patch.dict('os.environ', {'BASE_RATE_FETCH_IN_TESTS': '1'}), \
+            mock.patch.object(claims, 'RATE_CACHE', folder / 'other.json'), mock.patch.object(claims, 'urlopen', side_effect=OSError('offline')):
+        assert claims.refresh_rates(force=True) is False
+        assert claims.known_until() == claims.KNOWN_UNTIL

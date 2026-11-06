@@ -3,9 +3,16 @@
 Interest is simple (§ 289 BGB), day-exact, actual days / 365, for the period from "interest from" up to the day before a
 payment (or up to and including the statement date). The base rate (§ 247 BGB) changes on 1 January and 1 July.
 """
+import json
+import os
 import re
+import sys
+import threading
+import time
 import uuid
 from datetime import date, timedelta
+from pathlib import Path
+from urllib.request import Request, urlopen
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
@@ -32,10 +39,79 @@ KNOWN_UNTIL = date(2026, 12, 31)
 SPREAD = {'consumer': Decimal(5), 'business': Decimal(9)}   # § 288 Abs. 1 und Abs. 2 BGB
 
 
+# The Bundesbank publishes the rate as a monthly series; it is fetched at most once a day and cached next to the data.
+RATE_URL = 'https://api.statistiken.bundesbank.de/rest/data/BBIN1/M.DE.BBK.BBKBAS2.EUR.ME?format=csv&lang=de&startPeriod=2015-01'
+RATE_CACHE = Path(os.getenv('DATA_DIR', Path(__file__).resolve().parents[1] / 'data')) / 'base-rates.json'
+_FETCHED = {'rates': None, 'until': None, 'checked': 0.0}
+_RATE_LOCK = threading.Lock()
+
+
+def parse_rates(text):
+    """Monthly 'YYYY-MM;1,52;' rows -> [(first day of month, '1.52')] and the last day the newest value is known for."""
+    rates = []
+    for year, month, value in re.findall(r'^(\d{4})-(\d{2});(-?\d+,\d+);', text, re.MULTILINE):
+        number = Decimal(value.replace(',', '.'))
+        if abs(number) < 20:
+            rates.append((date(int(year), int(month), 1), str(number)))
+    if not rates:
+        raise ValueError('no_rates')
+    last = rates[-1][0]
+    # The rate is fixed per half-year, so the newest observation is valid to the end of its half-year.
+    until = date(last.year, 6, 30) if last.month <= 6 else date(last.year, 12, 31)
+    return rates, until
+
+
+def _load_cache():
+    if _FETCHED['rates'] is None:
+        try:
+            data = json.loads(RATE_CACHE.read_text(encoding='utf-8'))
+            _FETCHED.update(rates=[(date.fromisoformat(day), rate) for day, rate in data['rates']], until=date.fromisoformat(data['until']), checked=data.get('checked', 0.0))
+        except (OSError, ValueError, KeyError, TypeError):
+            _FETCHED['rates'] = []
+
+
+def refresh_rates(force=False):
+    """Fetch the series if the cache is older than a day. Never raises; the built-in table stays the fallback."""
+    if 'pytest' in sys.modules and not os.getenv('BASE_RATE_FETCH_IN_TESTS'):
+        return False
+    with _RATE_LOCK:
+        _load_cache()
+        if not force and time.time() - _FETCHED['checked'] < 86400:
+            return False
+        _FETCHED['checked'] = time.time()
+        try:
+            request = Request(RATE_URL, headers={'Accept': 'text/csv', 'User-Agent': 'schimmelpilz-server/1.0'})
+            with urlopen(request, timeout=20) as response:
+                rates, until = parse_rates(response.read(2 * 1024 * 1024).decode('utf-8-sig', 'replace'))
+            _FETCHED.update(rates=rates, until=until)
+            RATE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            RATE_CACHE.write_text(json.dumps({'rates': [(day.isoformat(), rate) for day, rate in rates], 'until': until.isoformat(), 'checked': _FETCHED['checked'], 'source': RATE_URL}), encoding='utf-8')
+            return True
+        except (OSError, ValueError):
+            return False
+
+
+def refresh_in_background():
+    threading.Thread(target=refresh_rates, daemon=True).start()
+
+
+def rate_table():
+    """Built-in table merged with the fetched Bundesbank series (fetched values win for the same month)."""
+    _load_cache()
+    merged = dict(BASE_RATES)
+    merged.update(dict(_FETCHED['rates'] or []))
+    return sorted(merged.items())
+
+
+def known_until():
+    return max(KNOWN_UNTIL, _FETCHED['until'] or KNOWN_UNTIL)
+
+
 def base_rate(day):
-    if day < BASE_RATES[0][0]:
+    table = rate_table()
+    if day < table[0][0]:
         raise HTTPException(422, 'date_before_rate_table')
-    return Decimal([rate for start, rate in BASE_RATES if start <= day][-1])
+    return Decimal([rate for start, rate in table if start <= day][-1])
 
 
 def rate_changes(start, end):
@@ -114,8 +190,8 @@ def statement(items, payments, as_of):
     return {'as_of': as_of.isoformat(), 'entries': [{**entry, 'amount': round_(Decimal(entry['amount']))} for entry in entries],
             'principal': round_(owed_principal), 'costs': round_(owed_costs), 'interest': round_(interest_due),
             'total': round_(owed_principal + owed_costs + interest_due), 'daily_interest': round_(daily),
-            'rate_table_until': KNOWN_UNTIL.isoformat(), 'rate_warning': as_of > KNOWN_UNTIL,
-            'base_rate_now': str(base_rate(min(as_of, KNOWN_UNTIL)))}
+            'rate_table_until': known_until().isoformat(), 'rate_warning': as_of > known_until(),
+            'base_rate_now': str(base_rate(min(as_of, known_until())))}
 
 
 def positive_amount(value):
@@ -251,6 +327,7 @@ def report_pdf(case, data, items):
 
 def router(db, require_user, now, record_activity, compose_pdf):
     r = APIRouter()
+    refresh_in_background()
 
     def owned(c, case_id, user):
         row = c.execute('SELECT * FROM cases WHERE id=? AND user_id=?', (case_id, user['id'])).fetchone()
@@ -265,6 +342,7 @@ def router(db, require_user, now, record_activity, compose_pdf):
 
     @r.get('/api/cases/{case_id}/claim')
     def account(case_id: str, as_of: date | None = None, user: dict = Depends(require_user)):
+        refresh_in_background()   # at most one Bundesbank request per day, never blocks the answer
         with db() as c:
             owned(c, case_id, user)
             items, payments, data = load(c, case_id, as_of or date.today())

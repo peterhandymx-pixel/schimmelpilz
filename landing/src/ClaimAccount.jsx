@@ -38,7 +38,7 @@ export function ClaimAccount({ cases, selectedCase }) {
       <div className="claim-sum"><strong>{euro(s.total)}</strong><span>Gesamtforderung</span></div>
       <div><strong>{euro(s.daily_interest)}</strong><span>Zinsen je weiterem Tag</span></div>
     </div>}
-    {s?.rate_warning && <p className="storage-notice">Der Basiszinssatz ist nur bis {dateLabel(s.rate_table_until, "de")} hinterlegt; für spätere Zeiträume wird der letzte Wert ({s.base_rate_now.replace(".", ",")} %) angesetzt. Bitte den neuen Wert der Bundesbank ergänzen lassen.</p>}
+    {s?.rate_warning && <p className="storage-notice">Der Basiszinssatz ist nur bis {dateLabel(s.rate_table_until, "de")} hinterlegt; für spätere Zeiträume wird der letzte Wert ({s.base_rate_now.replace(".", ",")} %) angesetzt. Der neue Wert wird automatisch bei der Bundesbank abgerufen, sobald er veröffentlicht ist (in der Regel Ende Dezember bzw. Ende Juni).</p>}
 
     <div className="admin-columns">
       <form className="admin-card" onSubmit={addItem}><h3>Forderung oder Kosten erfassen</h3>
