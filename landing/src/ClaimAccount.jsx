@@ -47,7 +47,7 @@ export function ClaimAccount({ cases, selectedCase }) {
           <label>Bezeichnung *<input required minLength={2} value={item.description} onChange={e => setItem({ ...item, description: e.target.value })} placeholder="z. B. Rechnung Nr. 4711" /></label>
           <label>Betrag EUR *<input required inputMode="decimal" value={item.amount} onChange={e => setItem({ ...item, amount: e.target.value })} /></label>
           <label>Datum / fällig am<DateInput value={item.booked_on} onChange={e => setItem({ ...item, booked_on: e.target.value })} /></label>
-          <label>Zinsen<select value={item.interest_mode} onChange={e => setItem({ ...item, interest_mode: e.target.value })}>{Object.entries(MODES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+          <label className="claim-wide">Zinsen<select value={item.interest_mode} onChange={e => setItem({ ...item, interest_mode: e.target.value })}>{Object.entries(MODES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
           {item.interest_mode === "fixed" && <label>Zinssatz % p. a.<input inputMode="decimal" value={item.interest_rate} onChange={e => setItem({ ...item, interest_rate: e.target.value })} /></label>}
           {item.interest_mode !== "none" && <label>Zinsen ab<DateInput value={item.interest_from} onChange={e => setItem({ ...item, interest_from: e.target.value })} /></label>}
         </div>

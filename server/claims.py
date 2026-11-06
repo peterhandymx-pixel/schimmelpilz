@@ -172,22 +172,81 @@ def migrate(c):
     ''')
 
 
-def report_text(case, data, items):
-    euro = lambda value: f'{Decimal(value):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.') + ' EUR'
+def report_pdf(case, data, items):
+    """Forderungsaufstellung as a proper table document (annex for enforcement): claims, account history, totals."""
+    import io
+    from xml.sax.saxutils import escape
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_RIGHT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    money = lambda value: euro(Decimal(value))
     when = lambda value: date.fromisoformat(value).strftime('%d.%m.%Y')
-    modes = {'none': 'unverzinslich', 'consumer': '5 Prozentpunkte über dem Basiszinssatz (§ 288 Abs. 1 BGB)', 'business': '9 Prozentpunkte über dem Basiszinssatz (§ 288 Abs. 2 BGB)'}
-    out = ['FORDERUNGSAUFSTELLUNG', f'Stand: {when(data["as_of"])}', f'Akte: {case["reference"]} – {case["title"]}', '', 'Forderungen:']
+    modes = {'consumer': '5 %-Punkte über Basiszins (§ 288 Abs. 1 BGB)', 'business': '9 %-Punkte über Basiszins (§ 288 Abs. 2 BGB)'}
+    base = ParagraphStyle('base', fontName='Helvetica', fontSize=9.5, leading=12.5, textColor=colors.HexColor('#1f2d26'))
+    small = ParagraphStyle('small', parent=base, fontSize=8.5, leading=11, textColor=colors.HexColor('#5d6b60'))
+    bold = ParagraphStyle('bold', parent=base, fontName='Helvetica-Bold')
+    right = ParagraphStyle('right', parent=base, alignment=TA_RIGHT)
+    right_bold = ParagraphStyle('right_bold', parent=bold, alignment=TA_RIGHT)
+    title = ParagraphStyle('title', parent=base, fontName='Helvetica-Bold', fontSize=16, leading=20, spaceAfter=4)
+    heading = ParagraphStyle('heading', parent=base, fontName='Helvetica-Bold', fontSize=11, leading=14, spaceBefore=12, spaceAfter=6)
+    cell = lambda text, style=base: Paragraph(escape(str(text)), style)
+    width = A4[0] - 45 * mm
+    grid = lambda header_rows=1: [('LINEBELOW', (0, 0), (-1, header_rows - 1), 0.8, colors.HexColor('#2f5d4d')), ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                  ('LINEBELOW', (0, header_rows), (-1, -1), 0.3, colors.HexColor('#d6ded2')), ('TOPPADDING', (0, 0), (-1, -1), 4),
+                                  ('BOTTOMPADDING', (0, 0), (-1, -1), 4), ('LEFTPADDING', (0, 0), (-1, -1), 3), ('RIGHTPADDING', (0, 0), (-1, -1), 3)]
+
+    story = [Paragraph('Forderungsaufstellung', title),
+             cell(f'Akte {case["reference"]} – {case["title"]}'), cell(f'Stand: {when(data["as_of"])}', small), Spacer(1, 6)]
+
+    rows = [[cell('Art', bold), cell('Bezeichnung', bold), cell('Fällig am', bold), cell('Betrag', right_bold), cell('Verzinsung', bold)]]
     for item in items:
-        mode = modes.get(item['interest_mode']) or f'{item["interest_rate"].replace(".", ",")} % p. a.'
-        out.append(f'- {"Hauptforderung" if item["kind"] == "principal" else "Kosten"} {item["description"]} vom {when(item["booked_on"])}: {euro(Decimal(item["amount_minor"]) / 100)}'
-                   + (f'; Zinsen {mode} seit {when(item["interest_from"])}' if item['interest_mode'] != 'none' else ''))
-    out += ['', 'Kontoverlauf:']
-    out += [f'{when(entry["day"])}  {entry["text"]}: {euro(entry["amount"])}' for entry in data['entries']]
-    out += ['', f'Offene Hauptforderung: {euro(data["principal"])}', f'Offene Kosten: {euro(data["costs"])}', f'Rückständige Zinsen bis {when(data["as_of"])}: {euro(data["interest"])}',
-            f'Gesamtforderung: {euro(data["total"])}', f'zuzüglich weiterer Zinsen ab {when((date.fromisoformat(data["as_of"]) + timedelta(days=1)).isoformat())}: derzeit {euro(data["daily_interest"])} täglich', '',
-            'Zahlungen sind nach § 367 Abs. 1 BGB zuerst auf die Kosten, dann auf die Zinsen und zuletzt auf die Hauptforderung verrechnet.',
-            'Zinsen taggenau (Tage/365), ohne Zinseszins (§ 289 BGB); Basiszinssatz nach § 247 BGB.']
-    return '\n'.join(out)
+        if item['interest_mode'] == 'none':
+            rate = 'unverzinslich'
+        else:
+            rate = (modes.get(item['interest_mode']) or f'{str(item["interest_rate"]).replace(".", ",")} % p. a.') + f' ab {when(item["interest_from"])}'
+        rows.append([cell('Hauptforderung' if item['kind'] == 'principal' else 'Kosten'), cell(item['description']), cell(when(item['booked_on'])),
+                     cell(money(Decimal(item['amount_minor']) / 100), right), cell(rate, small)])
+    claims_table = Table(rows, colWidths=[28 * mm, None, 22 * mm, 26 * mm, 52 * mm], repeatRows=1)
+    claims_table.setStyle(TableStyle(grid()))
+    story += [Paragraph('1. Forderungen', heading), claims_table]
+
+    rows = [[cell('Datum', bold), cell('Vorgang', bold), cell('Betrag', right_bold)]]
+    for entry in data['entries']:
+        text, _, credited = entry['text'].partition(' – verrechnet: ')
+        label = [cell(text)] + ([cell('verrechnet nach § 367 BGB: ' + credited, small)] if credited else [])
+        rows.append([cell(when(entry['day'])), label, cell(money(entry['amount']), right)])
+    history = Table(rows, colWidths=[22 * mm, None, 30 * mm], repeatRows=1)
+    history.setStyle(TableStyle(grid()))
+    story += [Paragraph('2. Kontoverlauf', heading), history]
+
+    next_day = when((date.fromisoformat(data['as_of']) + timedelta(days=1)).isoformat())
+    rows = [[cell('Offene Hauptforderung'), cell(money(data['principal']), right)],
+            [cell(f'Rückständige Zinsen bis {when(data["as_of"])}'), cell(money(data['interest']), right)],
+            [cell('Offene Kosten'), cell(money(data['costs']), right)],
+            [cell('Gesamtforderung', bold), cell(money(data['total']), right_bold)],
+            [cell(f'zuzüglich weiterer Zinsen ab {next_day} je Tag', small), cell(money(data['daily_interest']), ParagraphStyle('rs', parent=small, alignment=TA_RIGHT))]]
+    totals = Table(rows, colWidths=[None, 34 * mm], hAlign='RIGHT')
+    totals.setStyle(TableStyle([('LINEABOVE', (0, 3), (-1, 3), 0.8, colors.HexColor('#1f2d26')), ('LINEBELOW', (0, 3), (-1, 3), 0.8, colors.HexColor('#1f2d26')),
+                                ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#f3f7f4')), ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                                ('LEFTPADDING', (0, 0), (-1, -1), 3), ('RIGHTPADDING', (0, 0), (-1, -1), 3)]))
+    story += [KeepTogether([Paragraph('3. Zusammenfassung', heading), totals]), Spacer(1, 12),
+              cell('Zahlungen sind nach § 367 Abs. 1 BGB zuerst auf die Kosten, dann auf die Zinsen und zuletzt auf die Hauptforderung verrechnet. '
+                   'Zinsen taggenau (Tage/365), ohne Zinseszins (§ 289 BGB); Basiszinssatz nach § 247 BGB laut Deutscher Bundesbank.', small)]
+
+    def footer(canvas, doc):
+        canvas.saveState(); canvas.setFont('Helvetica', 8); canvas.setFillColor(colors.HexColor('#5d6b60'))
+        canvas.drawString(25 * mm, 12 * mm, f'Forderungsaufstellung {case["reference"]} · Stand {when(data["as_of"])}')
+        canvas.drawRightString(A4[0] - 20 * mm, 12 * mm, f'Seite {doc.page}')
+        canvas.restoreState()
+
+    output = io.BytesIO()
+    SimpleDocTemplate(output, pagesize=A4, leftMargin=25 * mm, rightMargin=20 * mm, topMargin=22 * mm, bottomMargin=20 * mm,
+                      title=f'Forderungsaufstellung {case["reference"]}', author='').build(story, onFirstPage=footer, onLaterPages=footer)
+    return output.getvalue()
 
 
 def router(db, require_user, now, record_activity, compose_pdf):
@@ -243,8 +302,7 @@ def router(db, require_user, now, record_activity, compose_pdf):
         with db() as c:
             case = owned(c, case_id, user)
             items, _, data = load(c, case_id, as_of or date.today())
-        layout = {'left_mm': 25, 'right_mm': 20, 'top_mm': 25, 'bottom_mm': 20, 'font_size': 10}
-        return Response(compose_pdf(report_text(case, data, items), None, layout), media_type='application/pdf',
+        return Response(report_pdf(case, data, items), media_type='application/pdf',
                         headers={'Cache-Control': 'no-store', 'Content-Disposition': f'inline; filename="Forderungsaufstellung-{case["reference"]}.pdf"'})
 
     return r
