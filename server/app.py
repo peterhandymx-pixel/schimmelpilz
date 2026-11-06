@@ -231,6 +231,7 @@ class ResearchInput(BaseModel):
     document_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
     legal_source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
     use_legal_catalogue: bool = False
+    thread_id: uuid.UUID | None = None  # continue this chat; empty starts a new one
 
     @field_validator("question", mode="before")
     @classmethod
@@ -440,6 +441,11 @@ def init_db() -> None:
         for column in ('legal_selection','citation_audit','retrieval_report'):
             if column not in research_columns:
                 connection.execute(f"ALTER TABLE research_runs ADD COLUMN {column} TEXT NOT NULL DEFAULT '{{}}'")
+        if 'thread_id' not in research_columns:
+            # Chats: earlier questions each become a chat of their own.
+            connection.execute("ALTER TABLE research_runs ADD COLUMN thread_id TEXT")
+            connection.execute("UPDATE research_runs SET thread_id = id WHERE thread_id IS NULL")
+        connection.execute("CREATE INDEX IF NOT EXISTS research_runs_thread ON research_runs(case_id, thread_id, created_at)")
         connection.commit()
         # Legacy databases made references globally unique. They are now per account.
         if any(index["origin"] == "u" for index in connection.execute("PRAGMA index_list(cases)")):
@@ -1123,7 +1129,11 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
                 if existing["status"] == "completed":
                     return research_row(existing)
                 raise HTTPException(status_code=409, detail="request_already_recorded")
-            history = [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 6", (case_id,))][::-1]
+            thread_id = str(payload.thread_id) if payload.thread_id else run_id
+            if payload.thread_id and not connection.execute("SELECT 1 FROM research_runs WHERE case_id = ? AND thread_id = ?", (case_id, thread_id)).fetchone():
+                raise HTTPException(status_code=404, detail="chat_not_found")
+            # Only the chosen chat is context for the model, not every question ever asked in the case.
+            history = [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? AND thread_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 6", (case_id, thread_id))][::-1]
             retired = {row['id'] for row in connection.execute('SELECT id FROM documents WHERE case_id=? AND inbox_reassigned_at IS NOT NULL',(case_id,))}
             history = [turn for turn in history if not any(source.get('document_id') in retired for source in json.loads(turn['sources'] or '[]'))]
             for document_id in document_ids:
@@ -1185,7 +1195,7 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
         skill = {**law_skills.label(chosen), 'text': law_skills.instructions(chosen)} if chosen else None
         retrieval['skill'] = {key: value for key, value in skill.items() if key != 'text'} if skill else None
         with db() as connection:
-            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, AI_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False)))
+            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report,thread_id) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, AI_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False), thread_id))
         try:
             result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages, case_law, skill))
         except (URLError, OSError, TimeoutError, ValueError) as error:

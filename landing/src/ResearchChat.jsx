@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { IconFileText, IconRefresh, IconCircleFilled, IconArrowUp, IconArrowUpRight, IconPaperclip, IconScale, IconLoader2 } from "@tabler/icons-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { IconFileText, IconRefresh, IconCircleFilled, IconArrowUp, IconArrowUpRight, IconPaperclip, IconScale, IconLoader2, IconPlus, IconMessage, IconChevronDown } from "@tabler/icons-react";
 import figureUrl from "./assets/frau-schimmelpilz.webp";
 import "./research-gemini.css";
 import { VoiceButton } from "./VoiceInput.jsx";
@@ -35,7 +35,21 @@ export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onD
   const [panel, setPanel] = useState("");
   const [documentIds, setDocumentIds] = useState([]);
   const [legalIds, setLegalIds] = useState([]), [automatic,setAutomatic] = useState(true);
+  // Chats like in Gemini: "" is a new, empty chat; otherwise the thread id of the chosen chat.
+  const [activeThread, setActiveThread] = useState(""), [chatsOpen, setChatsOpen] = useState(false);
   const de = lang === "de";
+  const threads = useMemo(() => {
+    const byId = new Map();
+    for (const run of runs) {
+      const id = run.thread_id || run.id;
+      const entry = byId.get(id) || { id, title: run.question, started: run.created_at, last: run.created_at, count: 0 };
+      entry.count += 1; if (run.created_at > entry.last) entry.last = run.created_at;
+      byId.set(id, entry);
+    }
+    return [...byId.values()].sort((a, b) => b.last.localeCompare(a.last));
+  }, [runs]);
+  const visibleRuns = activeThread ? runs.filter(run => (run.thread_id || run.id) === activeThread) : [];
+  const openChat = id => { setActiveThread(id); setChatsOpen(false); setError(""); setPanel(""); };
   const load = async signal => {
     setLoading(true); setError("");
     try {
@@ -45,15 +59,15 @@ export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onD
     finally { if (!signal?.aborted) setLoading(false); }
   };
   useEffect(() => {
-    setDocumentIds([]);setLegalIds([]);
+    setDocumentIds([]);setLegalIds([]);setActiveThread("");
     const pending = new AbortController(); load(pending.signal);
     return () => { pending.abort(); controller.current?.abort(); };
   }, [selectedCase?.id]);
   useEffect(() => {
     const thread = messagesRef.current;
     const last = thread?.lastElementChild;
-    if (last && (runs.length || busy)) last.scrollIntoView({ block: busy ? "end" : "start", behavior: "smooth" });
-  }, [runs, busy]);
+    if (last && (visibleRuns.length || busy)) last.scrollIntoView({ block: busy ? "end" : "start", behavior: "smooth" });
+  }, [runs, busy, activeThread]);
   useEffect(() => {
     if (!status || status.ready || busy) return;
     const pending = new AbortController();
@@ -71,8 +85,8 @@ export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onD
     setBusy(true); setError("");
     controller.current = new AbortController();
     try {
-      const run = await request(`/cases/${selectedCase.id}/research`, { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.current.signal, body: JSON.stringify({ request_id: requestId(), question: sentQuestion, language: lang, workflow, document_ids: documentIds, legal_source_ids:legalIds, use_legal_catalogue:automatic && (selectedCase.details.jurisdiction || 'DE') === 'DE' }) });
-      setRuns(current => [...current, run]); setQuestion(""); setPanel(""); setStatus(current => ({ ...current, ready: true }));
+      const run = await request(`/cases/${selectedCase.id}/research`, { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.current.signal, body: JSON.stringify({ request_id: requestId(), question: sentQuestion, language: lang, workflow, document_ids: documentIds, legal_source_ids:legalIds, use_legal_catalogue:automatic && (selectedCase.details.jurisdiction || 'DE') === 'DE', ...(activeThread ? { thread_id: activeThread } : {}) }) });
+      setRuns(current => [...current, run]); setActiveThread(run.thread_id || run.id); setQuestion(""); setPanel(""); setStatus(current => ({ ...current, ready: true }));
       if (composerRef.current) composerRef.current.style.height = "auto";
     } catch (failure) {
       if (failure.name === "AbortError") return;
@@ -94,7 +108,20 @@ export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onD
   const toggle = name => setPanel(current => current === name ? "" : name);
   const draftFromRun = run => onDraft({ research_run_id: run.id, kind: "response", language: run.language, body: `${de ? "KI-ARBEITSPAPIER – NICHT GEPRÜFT" : "AI WORKING PAPER – NOT REVIEWED"}\n${selectedCase.reference}\n\n${run.question}\n\n${run.answer}${sourceLedger(run.sources, run.language)}${legalLedger(run.legal_sources, run.citation_audit, run.language)}` }, selectedCase);
 
-  return <section className="rc" aria-label={de ? "KI-Recherche" : "AI research"}>
+  const chatList = <aside className={`rc-chats ${chatsOpen ? "open" : ""}`} aria-label={de ? "Chats dieser Akte" : "Chats of this case"}>
+    <button type="button" className={`rc-newchat ${!activeThread ? "on" : ""}`} onClick={() => openChat("")} disabled={!selectedCase || busy}><IconPlus size={16} />{de ? "Neuer Chat" : "New chat"}</button>
+    <button type="button" className="rc-chats-toggle" aria-expanded={chatsOpen} onClick={() => setChatsOpen(!chatsOpen)}>
+      <IconMessage size={15} />{de ? `Chats (${threads.length})` : `Chats (${threads.length})`}<IconChevronDown size={15} /></button>
+    <div className="rc-chats-list">
+      <span className="rc-chats-label">{de ? "Chats in dieser Akte" : "Chats in this case"}</span>
+      {threads.length ? threads.map(chat => <button type="button" key={chat.id} className={`rc-chat ${chat.id === activeThread ? "on" : ""}`} onClick={() => openChat(chat.id)} disabled={busy} title={chat.title}>
+        <span className="rc-chat-title">{chat.title}</span>
+        <small>{dateLabel(chat.last, lang, true)}{chat.count > 1 ? ` · ${chat.count} ${de ? "Fragen" : "questions"}` : ""}</small></button>)
+        : <small className="rc-chats-empty">{de ? "Noch keine Chats. Ihre erste Frage startet einen." : "No chats yet. Your first question starts one."}</small>}
+    </div>
+  </aside>;
+
+  return <div className="rc-shell">{chatList}<section className="rc" aria-label={de ? "KI-Recherche" : "AI research"}>
     <header className="rc-bar">
       <label className="rc-case"><span>{de ? "Akte" : "Case"}</span>
         <select value={selectedCase?.id || ""} onChange={event => onSelectCase?.(event.target.value)} aria-label={de ? "Recherche für Akte" : "Research for case"}>
@@ -105,11 +132,11 @@ export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onD
     </header>
 
     <div ref={messagesRef} className="rc-thread" aria-live="polite" aria-busy={busy}>
-      {!runs.length && !busy && <div className="rc-hello">
+      {!visibleRuns.length && !busy && <div className="rc-hello">
         <h2><span className="rc-gradient">{de ? "Hallo," : "Hello,"}</span><br />{selectedCase ? (de ? `was möchten Sie zu „${selectedCase.title}“ klären?` : `what would you like to clarify about “${selectedCase.title}”?`) : (de ? "wählen Sie oben eine Akte." : "choose a case above.")}</h2>
         {selectedCase && <div className="rc-cards">{suggestions.map(text => <button type="button" key={text} onClick={() => { setQuestion(text); setTimeout(() => composerRef.current?.focus(), 0); }} disabled={busy}><span>{text}</span><IconArrowUpRight size={16} /></button>)}</div>}
       </div>}
-      {runs.map(run => <div className="rc-turn" key={run.id}>
+      {visibleRuns.map(run => <div className="rc-turn" key={run.id}>
         <div className="rc-q"><p>{run.question}</p></div>
         <div className="rc-a"><span className="rc-avatar" style={{ backgroundImage: `url(${figureUrl})` }} aria-hidden="true" />
           <div className="rc-a-body">
@@ -159,5 +186,5 @@ export function ResearchChat({ lang, selectedCase, cases = [], onSelectCase, onD
       {error && <p className="storage-error" role="alert">{error}</p>}
       <p className="rc-note">{de ? "Frau Schimmelpilz kann Fehler machen – Antworten sind Arbeitshilfen, rechtlich nicht geprüft. Zitate werden automatisch geprüft. " : "Ms Schimmelpilz can make mistakes – answers are working aids, not legal review. Citations are checked automatically. "}{providerNote} {status?.speech ? (de ? "Spracheingaben gehen zur Umwandlung in Text an Groq und werden nicht gespeichert. " : "Voice input is sent to Groq for transcription and not stored. ") : ""}{de ? "Verlauf wird in der Akte gespeichert." : "History is stored with the case."}</p>
     </form>
-  </section>;
+  </section></div>;
 }
