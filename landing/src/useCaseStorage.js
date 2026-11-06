@@ -73,6 +73,11 @@ export function useCaseStorage(enabled = true) {
   };
 
   const replaceCase = item => setCases(current => current.map(saved => saved.id === item.id ? item : saved));
+  const changeReference = async (caseId, payload) => {
+    const saved = await request(`/cases/${caseId}/reference`, jsonOptions("PUT", payload));
+    replaceCase(saved);
+    return saved;
+  };
   const updateCase = async (caseId, payload) => {
     const { title, description, language, details } = payload;
     const updated = await request(`/cases/${caseId}`, jsonOptions("PUT", { title, description, language, details }));
@@ -127,7 +132,7 @@ export function useCaseStorage(enabled = true) {
   };
 
   const applyDraft = draft => setCases(current => current.map(item => item.id === selectedId ? {...item,drafts:item.drafts.map(saved => saved.id === draft.id && (saved.version < draft.version || (saved.version === draft.version && saved.review_revision <= draft.review_revision)) ? draft : saved),activities:[draft.activity,...(item.activities || [])].filter(Boolean)} : item));
-  return { cases, selectedCase, selectCase, loading, loadError, reload, createCase, updateCase, saveTask, uploadDocuments, saveDraft, applyDraft, uploading, savingDraft };
+  return { cases, selectedCase, selectCase, loading, loadError, reload, createCase, updateCase, changeReference, saveTask, uploadDocuments, saveDraft, applyDraft, uploading, savingDraft };
 }
 
 export function letterTemplate(item, language) {

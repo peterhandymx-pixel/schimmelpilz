@@ -116,3 +116,11 @@
 .cal-entry.kind-resubmission{border-left-color:#5b3f7d;background:#efe9f5}
 .cal-entry.done{opacity:.55;text-decoration:line-through}
 @media (max-width:900px){.cal-grid.cal-view-week,.cal-grid.cal-view-month{grid-template-columns:1fr}.cal-grid .cal-day{min-height:0}}
+.desk-case-header .desk-reference{display:inline-block;margin-right:10px}
+.reference-change{display:inline-flex;align-items:center;gap:4px;font-size:12px;vertical-align:baseline}
+.reference-editor{margin:8px 0 6px;padding:12px 14px;border:1px solid #dce3d7;border-radius:8px;background:#fafbf8;max-width:460px;display:grid;gap:8px}
+.reference-editor fieldset{border:0;padding:0;margin:0;display:grid;gap:6px}
+.reference-editor legend{font-weight:600;font-size:13px;margin-bottom:4px}
+.reference-editor input[type=text],.reference-editor input:not([type]){border:1px solid #ced5d1;border-radius:4px;padding:8px;font:inherit;margin-left:26px;max-width:260px}
+.reference-editor .field-help{margin:0}
+.reference-actions{display:flex;gap:10px;align-items:center}

@@ -878,6 +878,52 @@ def list_cases(user: dict = Depends(require_user)) -> list[dict]:
         return [row_case(row, connection) for row in connection.execute("SELECT * FROM cases WHERE user_id = ? ORDER BY created_at DESC", (user["id"],)) if user.get("allowed_cases") is None or row["id"] in user["allowed_cases"]]
 
 
+def allocate_reference(connection, user_id: str) -> str:
+    # Imported references may already occupy a generated number.
+    while True:
+        counter = connection.execute("UPDATE counters SET value = value + 1 WHERE name = 'case_reference' RETURNING value").fetchone()[0]
+        reference = f"SCH-{datetime.now().year}-{counter:06d}"
+        if not connection.execute("SELECT 1 FROM cases WHERE reference = ? COLLATE NOCASE AND user_id = ?", (reference, user_id)).fetchone():
+            return reference
+
+
+class ReferenceChange(BaseModel):
+    mode: Literal["generate", "existing"]
+    reference: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @field_validator("reference", mode="before")
+    @classmethod
+    def strip_reference(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def check(self):
+        if self.mode == "existing" and not self.reference:
+            raise ValueError("An existing reference is required")
+        if self.reference and any(ord(character) < 32 or ord(character) == 127 for character in self.reference):
+            raise ValueError("Control characters are not allowed in references")
+        return self
+
+
+@app.put("/api/cases/{case_id}/reference")
+def change_reference(case_id: str, payload: ReferenceChange, user: dict = Depends(require_user)) -> dict:
+    """A firm taking over a case gives it its own file number, typed in or allocated; the old one stays in the history."""
+    get_case(case_id, user["id"])
+    with db() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        old = connection.execute("SELECT reference FROM cases WHERE id = ? AND user_id = ?", (case_id, user["id"])).fetchone()["reference"]
+        if payload.mode == "existing":
+            reference = payload.reference
+            if reference.casefold() != old.casefold() and connection.execute("SELECT 1 FROM cases WHERE reference = ? COLLATE NOCASE AND user_id = ? AND id != ?", (reference, user["id"], case_id)).fetchone():
+                raise HTTPException(status_code=409, detail="Reference already exists")
+        else:
+            reference = allocate_reference(connection, user["id"])
+        if reference != old:
+            connection.execute("UPDATE cases SET reference = ? WHERE id = ? AND user_id = ?", (reference, case_id, user["id"]))
+            record_activity(connection, case_id, "reference_changed", f"{old} → {reference}")
+        return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
+
+
 @app.post("/api/cases", status_code=201)
 def create_case(payload: CaseCreate, user: dict = Depends(require_user)) -> dict:
     case_id = str(uuid.uuid4())
@@ -888,12 +934,7 @@ def create_case(payload: CaseCreate, user: dict = Depends(require_user)) -> dict
             if connection.execute("SELECT 1 FROM cases WHERE reference = ? COLLATE NOCASE AND user_id = ?", (reference, user["id"])).fetchone():
                 raise HTTPException(status_code=409, detail="Reference already exists")
         else:
-            # Imported references may already occupy a generated number.
-            while True:
-                counter = connection.execute("UPDATE counters SET value = value + 1 WHERE name = 'case_reference' RETURNING value").fetchone()[0]
-                reference = f"SCH-{datetime.now().year}-{counter:06d}"
-                if not connection.execute("SELECT 1 FROM cases WHERE reference = ? COLLATE NOCASE AND user_id = ?", (reference, user["id"])).fetchone():
-                    break
+            reference = allocate_reference(connection, user["id"])
         connection.execute(
             "INSERT INTO cases(id, reference, title, description, language, created_at, details, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (case_id, reference, payload.title, payload.description, payload.language, now(), payload.details.model_dump_json(), user["id"]),
