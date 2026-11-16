@@ -34,6 +34,7 @@ export function DeadlineCalculator({ lang, cases, caseId = "", saveTask }) {
   const [result, setResult] = useState(null), [input, setInput] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [targetCase, setTargetCase] = useState(caseId || cases[0]?.id || "");
+  const [kind, setKind] = useState("deadline"), [preDays, setPreDays] = useState(7), [taskTitle, setTaskTitle] = useState("");
   const submit = async event => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -48,7 +49,7 @@ export function DeadlineCalculator({ lang, cases, caseId = "", saveTask }) {
     if (!result || !targetCase) return;
     setBusy(true); setError(""); setNotice("");
     const note = `${input.amount} ${c.units[input.unit]} ab ${dateLabel(result.start, lang)} · ${result.start_rule}, ${result.rule}${result.shifted ? ` · ${c.moved}: ${result.skipped.map(item => item.reason).join(", ")}` : ""} · ${result.state_name} · ${lang === "de" ? "Rechenhilfe, selbst geprüft?" : "calculation aid, checked yourself?"}`;
-    try { await saveTask(targetCase, { title: c.taskTitle, note: note.slice(0, 2000), due_on: result.end, priority: "high", kind: "deadline" }); setNotice(c.saved); }
+    try { await saveTask(targetCase, { title: (taskTitle.trim().length >= 3 ? taskTitle.trim() : c.taskTitle).slice(0, 200), note: note.slice(0, 2000), due_on: result.end, priority: "high", kind, pre_days: Number(preDays) }); setNotice(c.saved); }
     catch { setError(c.saveFailed); }
     finally { setBusy(false); }
   };
@@ -64,7 +65,7 @@ export function DeadlineCalculator({ lang, cases, caseId = "", saveTask }) {
     {error && <p className="storage-error" role="alert">{error}</p>}
     {result && <div className="deadline-result" role="status"><p><strong>{c.result}: {dateLabel(result.end, lang)}</strong> ({new Date(result.end + "T12:00:00").toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { weekday: "long" })})</p>
       <ul><li>{c.first}: {dateLabel(result.first_day, lang)} · {result.start_rule}</li><li>{c.raw}: {dateLabel(result.raw_end, lang)} · {result.rule}</li><li>{result.shifted ? `${c.moved}: ${result.skipped.map(item => `${dateLabel(item.date, lang)} ${item.reason}`).join(", ")}` : c.notMoved}</li><li>{result.state_name}</li></ul>
-      {saveTask && cases.length > 0 && <div className="cost-actions">{!caseId && <label>{c.caseLabel}<select value={targetCase} onChange={event => setTargetCase(event.target.value)}>{cases.map(item => <option key={item.id} value={item.id}>{item.reference} · {item.title}</option>)}</select></label>}<button className="desk-button" disabled={busy || !targetCase} onClick={addTask}>{c.task}</button></div>}
+      {saveTask && cases.length > 0 && <div className="cost-actions deadline-save"><label>{lang === "de" ? "Bezeichnung" : "Label"}<input value={taskTitle} maxLength={200} placeholder={lang === "de" ? "z. B. Berufungsfrist" : "e.g. appeal deadline"} onChange={event => setTaskTitle(event.target.value)} /></label><label>{lang === "de" ? "Art" : "Type"}<select value={kind} onChange={event => setKind(event.target.value)}><option value="deadline">{lang === "de" ? "Frist" : "Deadline"}</option><option value="notfrist">{lang === "de" ? "Notfrist (nicht verlängerbar)" : "Statutory deadline (not extendable)"}</option></select></label><label>{lang === "de" ? "Vorfrist" : "Pre-deadline"}<select value={preDays} onChange={event => setPreDays(event.target.value)}>{[0, 3, 5, 7, 10, 14].map(days => <option key={days} value={days}>{days ? `${days} ${lang === "de" ? "Tage vorher" : "days before"}` : (lang === "de" ? "keine" : "none")}</option>)}</select></label>{!caseId && <label>{c.caseLabel}<select value={targetCase} onChange={event => setTargetCase(event.target.value)}>{cases.map(item => <option key={item.id} value={item.id}>{item.reference} · {item.title}</option>)}</select></label>}<button className="desk-button" disabled={busy || !targetCase} onClick={addTask}>{c.task}</button></div>}
       {notice && <p className="storage-notice">{notice}</p>}</div>}
     <p className="field-help">{c.limits}</p>
   </section>;

@@ -12,6 +12,7 @@ const internal = [
   ['activity', 'Aktuelle Akten', 'Recent files', IconListCheck, '#4583a0'],
   ['routes', 'Verfahrenswege', 'Procedural routes', IconScale, '#8a7751'],
   ['costs', 'Kostenprüfung', 'Cost review', IconReceipt, '#b99142'],
+  ['risk', 'Kostenrisiko', 'Cost risk', IconReportMoney, '#a4573e'],
   ['inbox', 'Posteingang', 'Inbox', IconInbox, '#658454'],
 ];
 const external = [

@@ -47,6 +47,9 @@ from . import account
 from . import deletion
 from . import deadlines
 from . import mailbox
+from . import email_import
+from . import cost_risk
+from . import forms
 from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
 from .word_export import compose_docx
@@ -1292,22 +1295,69 @@ def review_document_text(case_id: str, document_id: str, unit_no: int, payload: 
         return document_text(connection, document_id)
 
 
+def import_mail(case_id: str, user: dict, content: bytes, extension: str, background_tasks: BackgroundTasks) -> dict:
+    """An e-mail becomes a PDF of the message plus one document per attachment of an allowed type."""
+    try:
+        mail = email_import.parse(content, extension)
+    except email_import.MailError:
+        raise HTTPException(status_code=422, detail="not_a_mail") from None
+    except Exception:
+        raise HTTPException(status_code=422, detail="not_a_mail") from None
+    case = get_case(case_id, user["id"])
+    keep, skipped = [], []
+    for item in mail["attachments"][:email_import.MAX_ATTACHMENTS]:
+        suffix = Path(item["name"]).suffix.lower()
+        if item["data"] and suffix in ALLOWED_EXTENSIONS and len(item["data"]) <= MAX_UPLOAD_BYTES:
+            keep.append(item)
+        else:
+            skipped.append(item["name"])
+    skipped += [item["name"] for item in mail["attachments"][email_import.MAX_ATTACHMENTS:]]
+    pdf = email_import.mail_pdf(mail, case["reference"], [item["name"] for item in keep], skipped)
+    files = [(email_import.pdf_name(mail), pdf, "application/pdf")] + [(item["name"], item["data"], None) for item in keep]
+    written, created_documents = [], []
+    created = now()
+    try:
+        with db() as connection:
+            for index, (name, data, content_type) in enumerate(files):
+                document_id = str(uuid.uuid4())
+                suffix = Path(name).suffix.lower()
+                target = UPLOAD_DIR / f"{document_id}{suffix}"
+                target.write_bytes(data)
+                written.append(target)
+                kind = content_type or {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".zip": "application/zip",
+                                        ".doc": "application/msword", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}.get(suffix, "application/octet-stream")
+                connection.execute("INSERT INTO documents(id, case_id, original_name, stored_name, content_type, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                   (document_id, case_id, name, target.name, kind, len(data), created))
+                activity = record_activity(connection, case_id, "document_uploaded", name if index == 0 else f"{name} (Anhang)")
+                created_documents.append({"id": document_id, "case_id": case_id, "original_name": name, "content_type": kind, "size_bytes": len(data), "created_at": created, "activity": activity})
+    except Exception:
+        for target in written:
+            target.unlink(missing_ok=True)
+        raise
+    for document in created_documents:
+        AUTO_TEXT.queue(background_tasks, case_id, document["id"], user["id"])
+    return {**created_documents[0], "extra_documents": created_documents[1:], "skipped_attachments": skipped}
+
+
 @app.post("/api/cases/{case_id}/documents", status_code=201)
 async def upload_document(case_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...), user: dict = Depends(require_user)) -> dict:
     get_case(case_id, user["id"])
     original = Path((file.filename or "document").replace("\\", "/")).name
     extension = Path(original).suffix.lower()
-    if extension not in ALLOWED_EXTENSIONS:
+    if extension not in ALLOWED_EXTENSIONS | email_import.MAIL_EXTENSIONS:
         await file.close()
         raise HTTPException(status_code=415, detail="Unsupported document type")
+    limit = MAX_UPLOAD_BYTES * 3 if extension in email_import.MAIL_EXTENSIONS else MAX_UPLOAD_BYTES
     try:
-        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        content = await file.read(limit + 1)
     finally:
         await file.close()
     if not content:
         raise HTTPException(status_code=422, detail="Document is empty")
-    if len(content) > MAX_UPLOAD_BYTES:
+    if len(content) > limit:
         raise HTTPException(status_code=413, detail="Document exceeds the 10 MB limit")
+    if extension in email_import.MAIL_EXTENSIONS:
+        return import_mail(case_id, user, content, extension, background_tasks)
     document_id = str(uuid.uuid4())
     stored_name = f"{document_id}{extension}"
     target = UPLOAD_DIR / stored_name
@@ -1508,6 +1558,8 @@ app.include_router(admin.router(db,require_user,now,lambda:UPLOAD_DIR,lambda:DAT
 app.include_router(legal_notice.router())
 app.include_router(account.router(db, require_user, lambda: UPLOAD_DIR, lambda: DATA_DIR))
 app.include_router(deadlines.router(require_user))
+app.include_router(cost_risk.router(require_user))
+app.include_router(forms.router(db, require_user, get_case, letterhead_pdf_response))
 app.include_router(letter_assistant.router(require_user, db, record_activity, now, row_case))
 app.include_router(reminders.router(db, require_user))
 app.include_router(deletion.router(db, require_user, record_activity, lambda: UPLOAD_DIR, lambda: DATA_DIR))

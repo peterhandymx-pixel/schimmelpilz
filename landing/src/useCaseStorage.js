@@ -103,8 +103,10 @@ export function useCaseStorage(enabled = true) {
           body.append("file", file);
           const document = await request(`/cases/${caseId}/documents`, { method: "POST", body });
           // Keep each successful upload visible even if a later file fails.
-          setCases(current => current.map(item => item.id === caseId ? { ...item, documents: [...item.documents, document], activities: [document.activity, ...(item.activities || [])].filter(Boolean) } : item));
-          results.push({ name: file.name, ok: true });
+          // An e-mail (.eml/.msg) arrives as a PDF of the message plus its attachments as further documents.
+          const added = [document, ...(document.extra_documents || [])];
+          setCases(current => current.map(item => item.id === caseId ? { ...item, documents: [...item.documents, ...added], activities: [...added.map(entry => entry.activity).reverse(), ...(item.activities || [])].filter(Boolean) } : item));
+          results.push({ name: file.name, ok: true, count: added.length, skipped: document.skipped_attachments || [] });
         } catch (error) {
           results.push({ name: file.name, ok: false, status: error.status });
         }
