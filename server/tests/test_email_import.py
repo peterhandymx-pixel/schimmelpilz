@@ -112,3 +112,9 @@ class EmailImportTests(test_inbox.InboxTests):
             self.assertEqual(len(names), 2)
             bad = client.post(f"/api/cases/{case['id']}/documents", files={'file': ('kaputt.msg', b'no outlook file', 'application/vnd.ms-outlook')})
             self.assertEqual(bad.status_code, 422)
+
+
+def test_mail_pdf_uses_embedded_fonts_for_bea():
+    from server import pdfa
+    mail = email_import.parse_eml(sample_eml())
+    assert pdfa.check(email_import.mail_pdf(mail, '1/26', ['Stellungnahme.pdf'], []))['ok']

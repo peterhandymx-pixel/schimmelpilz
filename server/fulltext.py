@@ -84,6 +84,10 @@ def search(connection, user: dict, query: str) -> dict:
     for row in connection.execute("SELECT id, case_id, question, answer FROM research_runs WHERE status = 'completed' AND case_id IN (SELECT id FROM cases WHERE user_id = ?)", (user["id"],)):
         if matches(f"{row['question']} {row['answer']}", words):
             add(row["case_id"], "research", "Recherche: " + compact(row["question"])[:60], f"{row['question']} {row['answer']}", "research", row["id"])
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='case_notes'").fetchone():
+        for row in connection.execute("SELECT id, case_id, person, happened_at, note FROM case_notes WHERE case_id IN (SELECT id FROM cases WHERE user_id = ?)", (user["id"],)):
+            if matches(f"{row['person']} {row['note']}", words):
+                add(row["case_id"], "note", "Notiz" + (f" {row['person']}" if row["person"] else "") + f", {row['happened_at'][:10]}", f"{row['person']} {row['note']}", "notes", row["id"])
     contacts = []
     for row in connection.execute("SELECT id, name, address, email, phone, note FROM contacts WHERE user_id = ?", (user["id"],)):
         if matches(" ".join(str(row[key] or "") for key in ("name", "address", "email", "phone", "note")), words):

@@ -110,3 +110,35 @@
 @media (max-width:800px){.tool-grid{grid-template-columns:1fr}.risk-cards{grid-template-columns:1fr}}
 .cal2-grid.week .cal2-chip{white-space:normal;padding:5px 7px}
 .cal2-agenda-day.late{background:#fdf4f2;border-radius:8px;padding:12px 8px;border-bottom:0;margin-top:8px}.cal2-agenda-day.late .cal2-agenda-date strong{color:#b3413b;font-weight:700}
+
+/* Call notes */
+.note-form fieldset{border:0;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:10px}
+.note-kinds{display:flex;flex-wrap:wrap;gap:6px}
+.note-kinds button{display:inline-flex;align-items:center;gap:6px;border:1px solid #d5ddd7;background:#fff;border-radius:20px;padding:6px 12px;font:600 12.5px var(--sans,inherit);color:#3f5246;cursor:pointer}
+.note-kinds button.active{background:#2f5d4d;border-color:#2f5d4d;color:#fff}
+.note-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.note-grid .span-two{grid-column:span 2}
+.note-form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600;color:#3f5246}
+.note-form input,.note-form textarea{border:1px solid #cfd8d1;border-radius:6px;padding:8px 10px;font:inherit;font-size:14px;background:#fff}
+.note-form .desk-button{align-self:flex-start}
+.note-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.note-list li{display:grid;grid-template-columns:34px 1fr;gap:10px;padding:14px 0;border-top:1px solid #edf1ed}
+.note-icon{width:32px;height:32px;border-radius:50%;background:#e9efe9;color:#2f5d4d;display:grid;place-items:center}
+.note-meta{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.note-meta strong{font-size:14px;color:#22392d}.note-meta span{font-size:12px;color:#728076}
+.note-delete{margin-left:auto;border:0;background:none;color:#9aa69d;cursor:pointer}.note-delete:hover{color:#9b3d3d}
+.note-list p{margin:6px 0 0;white-space:pre-wrap;font-size:14px;line-height:1.5;color:#2f3f35}
+@media (max-width:700px){.note-grid{grid-template-columns:1fr}.note-grid .span-two{grid-column:auto}}
+
+.extra-costs{border:1px solid #e2e8e3;border-radius:8px;padding:10px;margin:0;display:flex;flex-direction:column;gap:6px}
+.extra-costs legend{font-size:12.5px;font-weight:600;color:#3f5246;padding:0 4px}
+.extra-row{display:grid;grid-template-columns:1fr 90px 26px;gap:6px;align-items:center}
+.extra-row input{height:34px;border:1px solid #cfd8d1;border-radius:6px;padding:0 8px;font-size:13px}
+.tool-form .desk-link{align-self:flex-start;display:inline-flex;gap:4px;align-items:center}
+
+.retention-status{display:inline-block;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700}
+.retention-status.running{background:#eef2ee;color:#4c5d52}.retention-status.ready{background:#fdf2e1;color:#8a5410}
+.retention-table form.invoice-inline{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.retention-table form.invoice-inline input{height:32px;border:1px solid #cfd8d1;border-radius:6px;padding:0 8px}
+.retention-log-title{font:600 14px var(--sans,inherit);margin:18px 0 0;color:#22392d}
+.tool-panel{padding-bottom:20px}.tool-panel>:not(.desk-panel-heading):not(.desk-table-scroll){margin-left:21px;margin-right:21px}.tool-panel>.tool-grid,.tool-panel>.note-form{margin-top:16px}

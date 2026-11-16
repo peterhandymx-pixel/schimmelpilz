@@ -1,4 +1,4 @@
-import { IconBooks, IconFolders, IconUsers, IconFileText, IconEdit, IconCalendar, IconMessageChatbot, IconFileDescription, IconBuilding, IconPlus, IconListCheck, IconBook2, IconGavel, IconBuildingBank, IconReceipt, IconWorld, IconScale, IconBuildingCommunity, IconReportMoney, IconExternalLink, IconInbox } from '@tabler/icons-react';
+import { IconBooks, IconFolders, IconUsers, IconFileText, IconEdit, IconCalendar, IconMessageChatbot, IconFileDescription, IconBuilding, IconPlus, IconListCheck, IconBook2, IconGavel, IconBuildingBank, IconReceipt, IconWorld, IconScale, IconBuildingCommunity, IconReportMoney, IconExternalLink, IconInbox, IconArchive } from '@tabler/icons-react';
 
 const internal = [
   ['cases', 'Akten', 'Case files', IconFolders, '#b3984c'],
@@ -13,6 +13,7 @@ const internal = [
   ['routes', 'Verfahrenswege', 'Procedural routes', IconScale, '#8a7751'],
   ['costs', 'Kostenprüfung', 'Cost review', IconReceipt, '#b99142'],
   ['risk', 'Kostenrisiko', 'Cost risk', IconReportMoney, '#a4573e'],
+  ['retention', 'Aufbewahrung', 'Retention', IconArchive, '#6f7d6a'],
   ['inbox', 'Posteingang', 'Inbox', IconInbox, '#658454'],
 ];
 const external = [

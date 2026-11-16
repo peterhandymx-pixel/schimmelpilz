@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { IconFileText, IconFolder, IconCalendarEvent, IconScale, IconMail, IconUser, IconSearch } from "@tabler/icons-react";
+import { IconFileText, IconFolder, IconCalendarEvent, IconScale, IconMail, IconUser, IconSearch, IconPhone } from "@tabler/icons-react";
 import { request } from "./useCaseStorage.js";
 
-const ICONS = { case: IconFolder, document: IconFileText, draft: IconMail, task: IconCalendarEvent, research: IconScale };
+const ICONS = { case: IconFolder, document: IconFileText, draft: IconMail, task: IconCalendarEvent, research: IconScale, note: IconPhone };
 
 // Full-text results across all files; the query goes in the request body, never the URL.
 export function FullTextSearch({ lang, query, open }) {
@@ -19,7 +19,7 @@ export function FullTextSearch({ lang, query, open }) {
     }, 300);
     return () => clearTimeout(timer);
   }, [query]);
-  const kindLabel = { case: de ? "Akte" : "File", document: de ? "Dokument" : "Document", draft: de ? "Schriftsatz" : "Draft", task: de ? "Frist/Aufgabe" : "Task", research: de ? "Recherche" : "Research" };
+  const kindLabel = { case: de ? "Akte" : "File", document: de ? "Dokument" : "Document", draft: de ? "Schriftsatz" : "Draft", task: de ? "Frist/Aufgabe" : "Task", research: de ? "Recherche" : "Research", note: de ? "Notiz" : "Note" };
 
   return <section className="desk-panel fulltext">
     <div className="desk-panel-heading"><div><h2>{de ? "Volltextsuche" : "Full-text search"}</h2>

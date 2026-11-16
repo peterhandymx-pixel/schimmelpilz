@@ -26,3 +26,5 @@
 .draft-historical { max-height: 350px; overflow: auto; padding: 12px; border: 1px solid #d5ddd3; }
 .draft-version-history li { margin: 10px 0; }
 @media (max-width: 760px) { .draft-evidence-grid { grid-template-columns: minmax(0,1fr); } .draft-review-panel { padding: 14px; } .draft-version-row { flex-wrap: wrap; } }
+
+.bea-report{border-radius:8px;padding:10px 12px;font-size:13px;margin:6px 0}.bea-report.ok{background:#eef7f0;border:1px solid #cfe2d4}.bea-report.warn{background:#fdf2e1;border:1px solid #efd9b0}.bea-report p{margin:4px 0 0}

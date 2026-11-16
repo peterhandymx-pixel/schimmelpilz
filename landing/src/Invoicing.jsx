@@ -11,6 +11,7 @@ const cents = minor => euro(minor / 100);
 // German input: "10.000,50" or "1,3"; a lone dot with up to two decimals ("1.3") is read as a decimal point.
 const decimal = value => { const text = String(value || "").trim(); return text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : /^\d+\.\d{1,2}$/.test(text) ? text : text.replace(/\./g, ""); };
 const STATUS = { open: "offen", paid: "bezahlt", cancelled: "storniert" };
+const REMINDER = { 1: "Zahlungserinnerung", 2: "Mahnung", 3: "Letzte Mahnung" };
 const KINDS = { rvg: "RVG-Rechnung", advance: "Vorschussrechnung (§ 9 RVG)", time: "Rechnung nach Zeitaufwand" };
 const ERRORS = { value_outside_table: "Gegenstandswert außerhalb der RVG-Tabelle (bis 500.000 EUR).", no_unbilled_time: "Für diese Akte gibt es keine abzurechnenden Zeiten.", invoice_cancelled: "Die Rechnung ist storniert." };
 const failure = error => ERRORS[error.detail] || (error.status === 422 ? "Eingaben prüfen: Beträge ohne Tausenderpunkt, Gebührensätze im zulässigen Rahmen." : "Aktion fehlgeschlagen.");
@@ -23,12 +24,21 @@ function InvoiceList({ cases, reloadKey }) {
   const load = () => request(`/invoices?status=${filter}`).then(setData).catch(e => setError(failure(e)));
   useEffect(() => { load(); }, [filter, reloadKey]);
   const act = async work => { setBusy(true); setError(""); try { await work(); await load(); setPaying(null); } catch (e) { setError(failure(e)); } finally { setBusy(false); } };
+  // Reminder: created on the server (with a Wiedervorlage on the payment deadline), then opened as PDF.
+  const remind = item => act(async () => {
+    let bank = remembered("bank");
+    if (!bank) { bank = window.prompt("Bankverbindung für das Mahnschreiben (IBAN, Bank) – wird nur in diesem Browser gemerkt:", "") || ""; remember("bank", bank.trim()); }
+    const updated = await request(`/invoices/${item.id}/reminders`, json("POST", { pay_within_days: 14, bank: bank.trim() }));
+    window.open(`${API_BASE}/api/invoices/${item.id}/reminders/${updated.dunning_level}/pdf`, "_blank", "noopener");
+  });
+  const dueCount = data?.invoices.filter(item => item.dunning_due).length || 0;
   if (!data) return error ? <p role="alert" className="storage-error">{error}</p> : <p role="status">Rechnungen werden geladen …</p>;
   return <>
-    <div className="eakte-filter"><label>Anzeigen<select value={filter} onChange={e => setFilter(e.target.value)}><option value="open">Offene Posten</option><option value="all">Alle Rechnungen</option><option value="paid">Bezahlt</option><option value="cancelled">Storniert</option></select></label>
+    <div className="eakte-filter"><label>Anzeigen<select value={filter} onChange={e => setFilter(e.target.value)}><option value="open">Offene Posten</option><option value="all">Alle Rechnungen</option><option value="paid">Bezahlt</option><option value="cancelled">Storniert</option><option value="dunning">Zu mahnen</option></select></label>
       <span>Offen gesamt: <strong>{cents(data.open_total_minor)}</strong></span>
       <a className="desk-button" href={`${API_BASE}/api/invoices.csv`}><IconDownload size={16} />CSV</a></div>
     {error && <p role="alert" className="storage-error">{error}</p>}
+    {dueCount > 0 && filter !== "dunning" && <p className="storage-notice dunning-hint">{dueCount} {dueCount === 1 ? "Rechnung ist" : "Rechnungen sind"} seit über 30 Tagen bzw. nach Ablauf des Zahlungsziels offen. <button className="desk-link" onClick={() => setFilter("dunning")}>Anzeigen</button></p>}
     {data.invoices.length ? <div className="desk-table-scroll"><table className="desk-table invoice-table"><thead><tr><th>Nr.</th><th>Datum</th><th>Akte / Empfänger</th><th>Art</th><th>Betrag</th><th>Offen</th><th>Status</th><th></th></tr></thead><tbody>
       {data.invoices.map(item => <tr key={item.id} className={item.status === "cancelled" ? "invoice-cancelled" : ""}>
         <td><strong>{item.number}</strong></td><td>{dateLabel(item.issued_on, "de")}</td>
@@ -36,7 +46,7 @@ function InvoiceList({ cases, reloadKey }) {
         <td>{cents(item.payable_minor)}</td><td>{item.status === "cancelled" ? "—" : cents(item.open_minor)}</td>
         <td><span className={`invoice-status ${item.status}`}>{STATUS[item.status]}</span>{item.payments.map((p, i) => <small key={i}>{dateLabel(p.paid_on, "de")}: {cents(p.amount_minor)}</small>)}{item.cancel_reason && <small>{item.cancel_reason}</small>}</td>
         <td className="invoice-actions"><a className="desk-link" href={`${API_BASE}/api/invoices/${item.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>
-          {item.status === "open" && <button className="desk-link" onClick={() => setPaying({ id: item.id, amount: (item.open_minor / 100).toFixed(2).replace(".", ","), paid_on: localToday(), mode: "pay" })}>Zahlung erfassen</button>}
+          {item.next_level && item.status === "open" && <button className={`desk-link${item.dunning_due ? " dunning-due" : ""}`} disabled={busy} onClick={() => remind(item)}>{REMINDER[item.next_level]} erstellen</button>}{item.reminders?.map(reminder => <a key={reminder.level} className="desk-link" href={`${API_BASE}/api/invoices/${item.id}/reminders/${reminder.level}/pdf`} target="_blank" rel="noreferrer">{REMINDER[reminder.level]} {dateLabel(reminder.issued_on, "de")} (PDF)</a>)}{item.status === "open" && <button className="desk-link" onClick={() => setPaying({ id: item.id, amount: (item.open_minor / 100).toFixed(2).replace(".", ","), paid_on: localToday(), mode: "pay" })}>Zahlung erfassen</button>}
           {item.status !== "cancelled" && <button className="desk-link desk-delete" onClick={() => setPaying({ id: item.id, mode: "cancel", reason: "" })}>Stornieren</button>}
           {paying?.id === item.id && paying.mode === "pay" && <form className="invoice-inline" onSubmit={e => { e.preventDefault(); act(() => request(`/invoices/${item.id}/payments`, json("POST", { paid_on: paying.paid_on, amount: decimal(paying.amount), note: "" }))); }}>
             <DateInput value={paying.paid_on} onChange={e => setPaying({ ...paying, paid_on: e.target.value })} /><input aria-label="Betrag" value={paying.amount} onChange={e => setPaying({ ...paying, amount: e.target.value })} /><button className="desk-button solid" disabled={busy}>Buchen</button><button type="button" className="desk-link" onClick={() => setPaying(null)}>Abbrechen</button></form>}

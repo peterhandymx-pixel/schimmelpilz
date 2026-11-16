@@ -188,10 +188,19 @@ def mail_pdf(mail: dict, case_reference: str, stored: list[str], skipped: list[s
     from reportlab.lib.units import mm
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-    base = ParagraphStyle('base', fontName='Helvetica', fontSize=10, leading=13.5, textColor=colors.HexColor('#1f2d26'))
+    # Embedded fonts (Bitstream Vera, shipped with reportlab): the PDF may be filed as an exhibit via beA (§ 2 ERVV).
+    import reportlab
+    from pathlib import Path
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    folder = Path(reportlab.__file__).parent / 'fonts'
+    for name, file in (('SchimmelpilzBody', 'Vera.ttf'), ('SchimmelpilzBold', 'VeraBd.ttf')):
+        if name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(name, str(folder / file)))
+    base = ParagraphStyle('base', fontName='SchimmelpilzBody', fontSize=10, leading=13.5, textColor=colors.HexColor('#1f2d26'))
     small = ParagraphStyle('small', parent=base, fontSize=8.5, leading=11, textColor=colors.HexColor('#5d6b60'))
-    bold = ParagraphStyle('bold', parent=base, fontName='Helvetica-Bold')
-    title = ParagraphStyle('title', parent=base, fontName='Helvetica-Bold', fontSize=14, leading=18, spaceAfter=6)
+    bold = ParagraphStyle('bold', parent=base, fontName='SchimmelpilzBold')
+    title = ParagraphStyle('title', parent=base, fontName='SchimmelpilzBold', fontSize=14, leading=18, spaceAfter=6)
     cell = lambda value, style=base: Paragraph(escape(str(value)), style)
     rows = [[cell('Von', bold), cell(mail['sender'] or '–')], [cell('An', bold), cell(mail['to'] or '–')]]
     if mail['cc']:
@@ -201,7 +210,7 @@ def mail_pdf(mail: dict, case_reference: str, stored: list[str], skipped: list[s
         listed = [f'{name} (in der Akte)' for name in stored] + [f'{name} (nicht übernommen)' for name in skipped]
         rows.append([cell('Anhänge', bold), cell('; '.join(listed))])
     head = Table(rows, colWidths=[22 * mm, None])
-    head.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, -1), (-1, -1), 0.8, colors.HexColor('#2f5d4d')),
+    head.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), 'SchimmelpilzBody'), ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, -1), (-1, -1), 0.8, colors.HexColor('#2f5d4d')),
                               ('BOTTOMPADDING', (0, 0), (-1, -1), 3), ('TOPPADDING', (0, 0), (-1, -1), 3), ('LEFTPADDING', (0, 0), (-1, -1), 0)]))
     story = [Paragraph('E-Mail', title), head, Spacer(1, 10)]
     body = mail['body'] or '(Kein Text in der Nachricht.)'
@@ -209,14 +218,14 @@ def mail_pdf(mail: dict, case_reference: str, stored: list[str], skipped: list[s
         story.append(Paragraph(escape(block).replace('\t', '    ') or '&nbsp;', base))
 
     def footer(canvas, doc):
-        canvas.saveState(); canvas.setFont('Helvetica', 8); canvas.setFillColor(colors.HexColor('#5d6b60'))
+        canvas.saveState(); canvas.setFont('SchimmelpilzBody', 8); canvas.setFillColor(colors.HexColor('#5d6b60'))
         canvas.drawString(20 * mm, 12 * mm, f'Akte {case_reference} · E-Mail vom {local(mail["date"]) or "unbekannten Datum"} · in die Akte übernommen')
         canvas.drawRightString(A4[0] - 20 * mm, 12 * mm, f'Seite {doc.page}')
         canvas.restoreState()
 
     output = io.BytesIO()
     SimpleDocTemplate(output, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=20 * mm, bottomMargin=20 * mm,
-                      title=mail['subject'] or 'E-Mail', author='').build(story, onFirstPage=footer, onLaterPages=footer)
+                      title=mail['subject'] or 'E-Mail', author='', initialFontName='SchimmelpilzBody').build(story, onFirstPage=footer, onLaterPages=footer)
     return output.getvalue()
 
 

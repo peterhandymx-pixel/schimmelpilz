@@ -8,7 +8,7 @@ import io
 import json
 import re
 import uuid
-from datetime import date, datetime, UTC
+from datetime import date, datetime, timedelta, UTC
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
@@ -180,6 +180,12 @@ class TimeEntry(BaseModel):
         return decimal_text(value, '2000')
 
 
+class ReminderInput(BaseModel):
+    model_config = {'extra': 'forbid'}
+    pay_within_days: int = Field(default=14, ge=3, le=60)
+    bank: str = Field(default='', max_length=300)
+
+
 def calculate(payload, time_rows=(), advances=()):
     """Lines, totals and the amount payable. All amounts as decimal strings."""
     lines, fees_total = [], Decimal(0)
@@ -226,6 +232,8 @@ def migrate(c):
             status TEXT NOT NULL DEFAULT 'open',cancel_reason TEXT,credited_by TEXT,created_at TEXT NOT NULL,UNIQUE(user_id,number));
         CREATE TABLE IF NOT EXISTS invoice_payments(id TEXT PRIMARY KEY,invoice_id TEXT NOT NULL REFERENCES invoices(id),paid_on TEXT NOT NULL,
             amount_minor INTEGER NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS invoice_reminders(id TEXT PRIMARY KEY,invoice_id TEXT NOT NULL REFERENCES invoices(id),level INTEGER NOT NULL,
+            issued_on TEXT NOT NULL,pay_by TEXT NOT NULL,open_minor INTEGER NOT NULL,bank TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,UNIQUE(invoice_id,level));
         CREATE TABLE IF NOT EXISTS time_entries(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,case_id TEXT NOT NULL,day TEXT NOT NULL,minutes INTEGER NOT NULL,
             activity TEXT NOT NULL,hourly_rate TEXT NOT NULL,invoice_id TEXT,recorded_by TEXT,created_at TEXT NOT NULL);
     ''')
@@ -259,6 +267,37 @@ def invoice_text(row, user, case):
     return '\n'.join(out)
 
 
+REMINDER_TITLES = {1: 'Zahlungserinnerung', 2: 'Mahnung', 3: 'Letzte Mahnung'}
+DUNNING_AFTER_DAYS = 30   # § 286 Abs. 3 BGB: default 30 days after receipt of the invoice
+
+
+def reminder_text(invoice, reminder, previous, user, case):
+    """Payment reminder for the firm's own invoice, three escalating levels, fixed wording."""
+    when = lambda value: date.fromisoformat(value).strftime('%d.%m.%Y')
+    issuer = ', '.join(part for part in (user['organisation'] or user['full_name'], user['street'], f"{user['postal_code']} {user['city']}") if part.strip())
+    open_amount = euro(Decimal(reminder['open_minor']) / 100)
+    level = reminder['level']
+    out = [issuer, '', invoice['recipient'], '', when(reminder['issued_on']), '',
+           f"{REMINDER_TITLES[level].upper()}", f"Rechnung Nr. {invoice['number']} vom {when(invoice['issued_on'])} – Ihre Angelegenheit: {case['title']} (unser Zeichen {case['reference']})", '',
+           'Sehr geehrte Damen und Herren,', '']
+    if level == 1:
+        out.append(f"unsere oben genannte Rechnung ist bisher nicht vollständig beglichen. Sicher haben Sie die Zahlung nur übersehen. "
+                   f"Bitte überweisen Sie den offenen Betrag von {open_amount} bis zum {when(reminder['pay_by'])}.")
+    elif level == 2:
+        earlier = f" vom {when(previous[-1]['issued_on'])}" if previous else ''
+        out.append(f"trotz unserer Zahlungserinnerung{earlier} ist unsere Rechnung weiterhin offen. Sie befinden sich mit der Zahlung in Verzug (§ 286 BGB). "
+                   f"Wir fordern Sie auf, den offenen Betrag von {open_amount} bis zum {when(reminder['pay_by'])} zu zahlen. Verzugszinsen (§ 288 BGB) behalten wir uns vor.")
+    else:
+        out.append(f"auch auf unsere Mahnung ist keine Zahlung eingegangen. Wir fordern Sie letztmalig auf, den offenen Betrag von {open_amount} bis zum {when(reminder['pay_by'])} zu zahlen. "
+                   "Geht die Zahlung nicht fristgerecht ein, werden wir unsere Vergütung ohne weitere Ankündigung festsetzen lassen (§ 11 RVG) oder gerichtlich geltend machen. "
+                   "Die dadurch entstehenden Kosten und Verzugszinsen (§ 288 BGB) gehen zu Ihren Lasten.")
+    out += ['', 'Sollten Sie die Zahlung inzwischen geleistet haben, betrachten Sie dieses Schreiben bitte als gegenstandslos.']
+    if reminder['bank']:
+        out += ['', f"Bankverbindung: {reminder['bank']}", f"Verwendungszweck: Rechnung {invoice['number']}"]
+    out += ['', 'Mit freundlichen Grüßen', '', '', user['full_name']]
+    return '\n'.join(out)
+
+
 def router(db, require_user, now, record_activity, compose_pdf, letterhead):
     r = APIRouter()
 
@@ -287,7 +326,52 @@ def router(db, require_user, now, record_activity, compose_pdf, letterhead):
                 'input': json.loads(row['input']), 'result': json.loads(row['result']), 'payable_minor': row['payable_minor'], 'paid_minor': paid,
                 'open_minor': 0 if row['status'] == 'cancelled' else max(row['payable_minor'] - paid, 0),
                 'case_reference': case['reference'] if case else '', 'case_title': case['title'] if case else '',
-                'payments': [dict(p) for p in c.execute('SELECT paid_on,amount_minor,note FROM invoice_payments WHERE invoice_id=? ORDER BY paid_on', (row['id'],))]}
+                'payments': [dict(p) for p in c.execute('SELECT paid_on,amount_minor,note FROM invoice_payments WHERE invoice_id=? ORDER BY paid_on', (row['id'],))],
+                **dunning_state(c, row, paid)}
+
+    def dunning_state(c, row, paid):
+        reminders = [dict(item) for item in c.execute('SELECT id,level,issued_on,pay_by,open_minor FROM invoice_reminders WHERE invoice_id=? ORDER BY level', (row['id'],))]
+        today = date.fromisoformat(now()[:10])
+        open_minor = 0 if row['status'] == 'cancelled' else max(row['payable_minor'] - paid, 0)
+        days = (today - date.fromisoformat(row['issued_on'])).days
+        last = reminders[-1] if reminders else None
+        due = bool(open_minor) and len(reminders) < 3 and (date.fromisoformat(last['pay_by']) < today if last else days >= DUNNING_AFTER_DAYS)
+        return {'reminders': reminders, 'days_open': days, 'dunning_level': len(reminders), 'dunning_due': due,
+                'next_level': len(reminders) + 1 if open_minor and len(reminders) < 3 else None}
+
+    @r.post('/api/invoices/{invoice_id}/reminders', status_code=201)
+    def create_reminder(invoice_id: str, payload: ReminderInput, user: dict = Depends(require_user)):
+        with db() as c:
+            row = owned_invoice(c, invoice_id, user)
+            paid = c.execute('SELECT COALESCE(SUM(amount_minor),0) FROM invoice_payments WHERE invoice_id=?', (invoice_id,)).fetchone()[0]
+            open_minor = max(row['payable_minor'] - paid, 0)
+            if row['status'] == 'cancelled' or not open_minor:
+                raise HTTPException(409, 'nothing_open')
+            level = c.execute('SELECT COUNT(*) FROM invoice_reminders WHERE invoice_id=?', (invoice_id,)).fetchone()[0] + 1
+            if level > 3:
+                raise HTTPException(409, 'last_level_reached')
+            today = date.fromisoformat(now()[:10])
+            pay_by = (today + timedelta(days=payload.pay_within_days)).isoformat()
+            c.execute('INSERT INTO invoice_reminders VALUES(?,?,?,?,?,?,?,?)', (str(uuid.uuid4()), invoice_id, level, today.isoformat(), pay_by, open_minor, payload.bank.strip(), now()))
+            title = f'Zahlungseingang prüfen: Rechnung {row["number"]} ({REMINDER_TITLES[level]})'
+            c.execute('INSERT INTO tasks(id, case_id, title, note, due_on, priority, created_at, kind, due_time, pre_days) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                      (str(uuid.uuid4()), row['case_id'], title, f'Offen: {euro(Decimal(open_minor) / 100)}', pay_by, 'normal', now(), 'resubmission', None, 0))
+            record_activity(c, row['case_id'], 'dunning_created', f'{REMINDER_TITLES[level]} zu Rechnung {row["number"]}, Zahlungsziel {pay_by}')
+            return public(c, owned_invoice(c, invoice_id, user))
+
+    @r.get('/api/invoices/{invoice_id}/reminders/{level}/pdf')
+    def reminder_pdf(invoice_id: str, level: int, user: dict = Depends(require_user)):
+        with db() as c:
+            row = owned_invoice(c, invoice_id, user)
+            reminders = [dict(item) for item in c.execute('SELECT * FROM invoice_reminders WHERE invoice_id=? ORDER BY level', (invoice_id,))]
+            reminder = next((item for item in reminders if item['level'] == level), None)
+            if not reminder:
+                raise HTTPException(404, 'Not found')
+            case = c.execute('SELECT * FROM cases WHERE id=?', (row['case_id'],)).fetchone()
+            owner = c.execute('SELECT * FROM users WHERE id=?', (user['id'],)).fetchone()
+        template, layout = letterhead(owner)
+        content = compose_pdf(reminder_text(row, reminder, [item for item in reminders if item['level'] < level], owner, case), template, layout)
+        return Response(content, media_type='application/pdf', headers={'Cache-Control': 'no-store', 'Content-Disposition': f'inline; filename="{REMINDER_TITLES[level].replace(" ", "-")}-{row["number"]}.pdf"'})
 
     @r.get('/api/invoices/catalogue')
     def catalogue(user: dict = Depends(require_user)):
@@ -324,14 +408,16 @@ def router(db, require_user, now, record_activity, compose_pdf, letterhead):
             return public(c, owned_invoice(c, invoice_id, user))
 
     @r.get('/api/invoices')
-    def listing(case_id: uuid.UUID | None = None, status: Literal['all', 'open', 'paid', 'cancelled'] = 'all', user: dict = Depends(require_user)):
+    def listing(case_id: uuid.UUID | None = None, status: Literal['all', 'open', 'paid', 'cancelled', 'dunning'] = 'all', user: dict = Depends(require_user)):
         with db() as c:
             sql, args = 'SELECT * FROM invoices WHERE user_id=?', [user['id']]
             if case_id:
                 sql += ' AND case_id=?'
                 args.append(str(case_id))
             items = [public(c, row) for row in c.execute(sql + ' ORDER BY issued_on DESC, number DESC', args)]
-        if status == 'open':
+        if status == 'dunning':
+            items = [item for item in items if item['dunning_due']]
+        elif status == 'open':
             items = [item for item in items if item['status'] != 'cancelled' and item['open_minor'] > 0]
         elif status != 'all':
             items = [item for item in items if item['status'] == status]

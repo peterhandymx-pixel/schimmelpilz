@@ -50,6 +50,10 @@ from . import mailbox
 from . import email_import
 from . import cost_risk
 from . import forms
+from . import notes
+from . import cost_assessment
+from . import retention
+from . import pdfa
 from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
 from .word_export import compose_docx
@@ -485,6 +489,8 @@ def init_db() -> None:
         dictations.migrate(connection)
         account.migrate(connection)
         mailbox.migrate(connection)
+        notes.migrate(connection)
+        retention.migrate(connection)
 
 
 async def require_user(request: Request) -> dict:
@@ -754,6 +760,29 @@ def export_draft_pdf(case_id: str, draft_id: str, user: dict = Depends(require_u
     result.headers['X-Draft-Review-Status'] = row['review_status']
     result.headers['Content-Disposition'] = f'attachment; filename="Schimmelpilz-v{row["version"]}-{row["review_status"]}.pdf"'
     return result
+
+
+BEA_KINDS = {"letter": "Schreiben", "claim": "Klage", "application": "Antrag", "objection": "Widerspruch", "response": "Stellungnahme"}
+
+
+@app.get("/api/cases/{case_id}/drafts/{draft_id}/bea.pdf")
+def export_draft_bea(case_id: str, draft_id: str, user: dict = Depends(require_user)):
+    """The saved draft as PDF/A-2b with an ERVB file name; the local beA checks travel in the X-Bea-Check header."""
+    case = get_case(case_id, user['id'])
+    with db() as connection:
+        row = connection.execute('SELECT * FROM drafts WHERE case_id=? AND id=?', (case_id, draft_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='Draft not found')
+    plain = letterhead_pdf_response(row['body'], row['letterhead_id'], json.loads(row['letterhead_layout']) if row['letterhead_layout'] else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump(), user['id'])
+    label = BEA_KINDS.get(row['kind'], 'Schriftsatz')
+    content = pdfa.to_pdfa(plain.body, f"{label} {case['reference']}", user.get('organisation') or user.get('full_name') or '')
+    report = pdfa.check(content)
+    filename = pdfa.ervb_filename(f"{case['reference']}_{label}_v{row['version']}")
+    from urllib.parse import quote
+    return BinaryResponse(content, media_type='application/pdf', headers={
+        'Cache-Control': 'no-store', 'X-Draft-Version': str(row['version']), 'X-Draft-Review-Status': row['review_status'],
+        'X-Bea-Check': json.dumps(report, ensure_ascii=True), 'Access-Control-Expose-Headers': 'X-Bea-Check, X-Draft-Version, Content-Disposition',
+        'Content-Disposition': f"attachment; filename=\"{filename.encode('ascii', 'replace').decode()}\"; filename*=UTF-8''{quote(filename)}"})
 
 
 class DraftSendInput(BaseModel):
@@ -1559,6 +1588,9 @@ app.include_router(legal_notice.router())
 app.include_router(account.router(db, require_user, lambda: UPLOAD_DIR, lambda: DATA_DIR))
 app.include_router(deadlines.router(require_user))
 app.include_router(cost_risk.router(require_user))
+app.include_router(notes.router(db, require_user, now, record_activity))
+app.include_router(cost_assessment.router(require_user, get_case))
+app.include_router(retention.router(db, require_user, now, lambda: UPLOAD_DIR))
 app.include_router(forms.router(db, require_user, get_case, letterhead_pdf_response))
 app.include_router(letter_assistant.router(require_user, db, record_activity, now, row_case))
 app.include_router(reminders.router(db, require_user))
