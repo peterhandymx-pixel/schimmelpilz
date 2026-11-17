@@ -15,6 +15,7 @@ import io
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
+from . import pdf_fonts
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -134,20 +135,22 @@ def report_pdf(data: dict, payload: RiskInput) -> bytes:
     from .dates import display_date
     from datetime import date
 
-    base = ParagraphStyle('base', fontName='Helvetica', fontSize=9.5, leading=12.5, textColor=colors.HexColor('#1f2d26'))
+    pdf_fonts.register()
+
+    base = ParagraphStyle('base', fontName=pdf_fonts.BODY, fontSize=9.5, leading=12.5, textColor=colors.HexColor('#1f2d26'))
     small = ParagraphStyle('small', parent=base, fontSize=8.5, leading=11, textColor=colors.HexColor('#5d6b60'))
-    bold = ParagraphStyle('bold', parent=base, fontName='Helvetica-Bold')
+    bold = ParagraphStyle('bold', parent=base, fontName=pdf_fonts.BOLD)
     right = ParagraphStyle('right', parent=base, alignment=TA_RIGHT)
     right_bold = ParagraphStyle('right_bold', parent=bold, alignment=TA_RIGHT)
-    title = ParagraphStyle('title', parent=base, fontName='Helvetica-Bold', fontSize=16, leading=20, spaceAfter=4)
-    heading = ParagraphStyle('heading', parent=base, fontName='Helvetica-Bold', fontSize=11, leading=14, spaceBefore=12, spaceAfter=6)
+    title = ParagraphStyle('title', parent=base, fontName=pdf_fonts.BOLD, fontSize=16, leading=20, spaceAfter=4)
+    heading = ParagraphStyle('heading', parent=base, fontName=pdf_fonts.BOLD, fontSize=11, leading=14, spaceBefore=12, spaceAfter=6)
     cell = lambda text, style=base: Paragraph(escape(str(text)), style)
     style = [('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, 0), (-1, -1), 0.3, colors.HexColor('#d6ded2')),
              ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4), ('LEFTPADDING', (0, 0), (-1, -1), 3), ('RIGHTPADDING', (0, 0), (-1, -1), 3)]
 
     def table(rows, bold_last=True):
         result = Table(rows, colWidths=[None, 34 * mm])
-        result.setStyle(TableStyle(style + ([('LINEABOVE', (0, -1), (-1, -1), 0.8, colors.HexColor('#1f2d26')), ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f3f7f4'))] if bold_last else [])))
+        result.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY)] + style + ([('LINEABOVE', (0, -1), (-1, -1), 0.8, colors.HexColor('#1f2d26')), ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f3f7f4'))] if bold_last else [])))
         return result
 
     head = [Paragraph('Prozesskostenrisiko', title)]
@@ -159,7 +162,7 @@ def report_pdf(data: dict, payload: RiskInput) -> bytes:
     scenario_rows = [[cell('Ausgang des Verfahrens', bold), cell('Ihr Kostenrisiko', right_bold)]]
     scenario_rows += [[cell(item['label']), cell(euro(item['amount']), right)] for item in data['scenarios']]
     scenario_table = Table(scenario_rows, colWidths=[None, 34 * mm])
-    scenario_table.setStyle(TableStyle(style + [('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.HexColor('#2f5d4d')),
+    scenario_table.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY)] + style + [('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.HexColor('#2f5d4d')),
                                                 ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#fbefe9'))]))
     story = head + [Paragraph('1. Überblick', heading), scenario_table]
     if data['advance'] != '0.00':
@@ -179,14 +182,14 @@ def report_pdf(data: dict, payload: RiskInput) -> bytes:
         story.append(cell('• ' + note, small))
 
     def footer(canvas, doc):
-        canvas.saveState(); canvas.setFont('Helvetica', 8); canvas.setFillColor(colors.HexColor('#5d6b60'))
+        canvas.saveState(); canvas.setFont(pdf_fonts.BODY, 8); canvas.setFillColor(colors.HexColor('#5d6b60'))
         canvas.drawString(20 * mm, 12 * mm, 'Prozesskostenrisiko · unverbindliche Berechnung nach RVG/GKG')
         canvas.drawRightString(A4[0] - 20 * mm, 12 * mm, f'Seite {doc.page}')
         canvas.restoreState()
 
     output = io.BytesIO()
     SimpleDocTemplate(output, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=20 * mm, bottomMargin=20 * mm,
-                      title='Prozesskostenrisiko', author='').build(story, onFirstPage=footer, onLaterPages=footer)
+                      title='Prozesskostenrisiko', author='', initialFontName=pdf_fonts.BODY).build(story, onFirstPage=footer, onLaterPages=footer)
     return output.getvalue()
 
 

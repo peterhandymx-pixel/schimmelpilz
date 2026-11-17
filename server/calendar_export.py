@@ -2,6 +2,7 @@
 import json
 import uuid
 from datetime import date, timedelta
+from . import pdf_fonts
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
@@ -55,11 +56,13 @@ def deadline_book_pdf(rows, start, end, firm):
     from reportlab.lib.units import mm
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-    base = ParagraphStyle('base', fontName='Helvetica', fontSize=8.8, leading=11, textColor=colors.HexColor('#1f2d26'))
-    bold = ParagraphStyle('bold', parent=base, fontName='Helvetica-Bold')
+    pdf_fonts.register()
+
+    base = ParagraphStyle('base', fontName=pdf_fonts.BODY, fontSize=8.8, leading=11, textColor=colors.HexColor('#1f2d26'))
+    bold = ParagraphStyle('bold', parent=base, fontName=pdf_fonts.BOLD)
     red = ParagraphStyle('red', parent=bold, textColor=colors.HexColor('#9b3d3d'))
     small = ParagraphStyle('small', parent=base, fontSize=8, leading=10, textColor=colors.HexColor('#5d6b60'))
-    title = ParagraphStyle('title', parent=base, fontName='Helvetica-Bold', fontSize=15, leading=19, spaceAfter=3)
+    title = ParagraphStyle('title', parent=base, fontName=pdf_fonts.BOLD, fontSize=15, leading=19, spaceAfter=3)
     cell = lambda text, style=base: Paragraph(escape(str(text or '')), style)
 
     def when(value):
@@ -70,7 +73,7 @@ def deadline_book_pdf(rows, start, end, firm):
 
     def box():
         mark = Table([['']], colWidths=[4 * mm], rowHeights=[4 * mm])
-        mark.setStyle(TableStyle([('BOX', (0, 0), (-1, -1), 0.7, colors.HexColor('#1f2d26'))]))
+        mark.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY), ('BOX', (0, 0), (-1, -1), 0.7, colors.HexColor('#1f2d26'))]))
         return mark
     header = [cell('Fristende', bold), cell('Vorfrist', bold), cell('Akte', bold), cell('Frist / Gegenstand', bold), cell('Art', bold), cell('notiert', bold), cell('erledigt', bold), cell('Kontrolle', bold)]
     table_rows = [header]
@@ -84,23 +87,23 @@ def deadline_book_pdf(rows, start, end, firm):
                            cell('NOTFRIST' if notfrist else row['label'], red if notfrist else base), box(), box(), cell('')])
         if notfrist:
             styles.append(('BACKGROUND', (0, index), (-1, index), colors.HexColor('#fbefed')))
-    table = Table(table_rows, colWidths=[27 * mm, 25 * mm, 33 * mm, None, 24 * mm, 15 * mm, 15 * mm, 30 * mm], repeatRows=1)
-    table.setStyle(TableStyle(styles))
+    table = Table(table_rows, colWidths=[31 * mm, 29 * mm, 34 * mm, None, 24 * mm, 18 * mm, 19 * mm, 30 * mm], repeatRows=1)
+    table.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY)] + styles))
     period = date.fromisoformat(start).strftime('%d.%m.%Y') + ' bis ' + date.fromisoformat(end).strftime('%d.%m.%Y')
-    story = [Paragraph('Fristenbuch', title), cell(f'{firm} · Zeitraum {period} · {len(rows)} offene Fristen', small), Spacer(1, 6)]
+    story = [Paragraph('Fristenbuch', title), cell(f'{firm} · Zeitraum {period} · {len(rows)} offene {"Frist" if len(rows) == 1 else "Fristen"}', small), Spacer(1, 6)]
     story.append(table if rows else cell('Keine offenen Fristen im gewählten Zeitraum.'))
     story += [Spacer(1, 8), cell('Spalte "notiert": Frist und Vorfrist im Kalender eingetragen; "erledigt": fristwahrende Handlung ausgeführt; "Kontrolle": Zeichen der zweiten Person (Vier-Augen-Prinzip). '
                                  'Fristen sind Rechenergebnisse aus den erfassten Daten und vor Ablauf selbst zu prüfen.', small)]
 
     def footer(canvas, doc):
-        canvas.saveState(); canvas.setFont('Helvetica', 7.5); canvas.setFillColor(colors.HexColor('#5d6b60'))
+        canvas.saveState(); canvas.setFont(pdf_fonts.BODY, 7.5); canvas.setFillColor(colors.HexColor('#5d6b60'))
         canvas.drawString(15 * mm, 9 * mm, 'Fristenbuch ' + period)
         canvas.drawRightString(landscape(A4)[0] - 15 * mm, 9 * mm, f'Seite {doc.page}')
         canvas.restoreState()
 
     output = io.BytesIO()
     SimpleDocTemplate(output, pagesize=landscape(A4), leftMargin=15 * mm, rightMargin=15 * mm, topMargin=14 * mm, bottomMargin=15 * mm,
-                      title='Fristenbuch', author='').build(story, onFirstPage=footer, onLaterPages=footer)
+                      title='Fristenbuch', author='', initialFontName=pdf_fonts.BODY).build(story, onFirstPage=footer, onLaterPages=footer)
     return output.getvalue()
 
 

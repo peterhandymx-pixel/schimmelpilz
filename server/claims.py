@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
+from . import pdf_fonts
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -262,13 +263,14 @@ def report_pdf(case, data, items):
     money = lambda value: euro(Decimal(value))
     when = lambda value: date.fromisoformat(value).strftime('%d.%m.%Y')
     modes = {'consumer': '5 %-Punkte über Basiszins (§ 288 Abs. 1 BGB)', 'business': '9 %-Punkte über Basiszins (§ 288 Abs. 2 BGB)'}
-    base = ParagraphStyle('base', fontName='Helvetica', fontSize=9.5, leading=12.5, textColor=colors.HexColor('#1f2d26'))
+    pdf_fonts.register()
+    base = ParagraphStyle('base', fontName=pdf_fonts.BODY, fontSize=9.5, leading=12.5, textColor=colors.HexColor('#1f2d26'))
     small = ParagraphStyle('small', parent=base, fontSize=8.5, leading=11, textColor=colors.HexColor('#5d6b60'))
-    bold = ParagraphStyle('bold', parent=base, fontName='Helvetica-Bold')
+    bold = ParagraphStyle('bold', parent=base, fontName=pdf_fonts.BOLD)
     right = ParagraphStyle('right', parent=base, alignment=TA_RIGHT)
     right_bold = ParagraphStyle('right_bold', parent=bold, alignment=TA_RIGHT)
-    title = ParagraphStyle('title', parent=base, fontName='Helvetica-Bold', fontSize=16, leading=20, spaceAfter=4)
-    heading = ParagraphStyle('heading', parent=base, fontName='Helvetica-Bold', fontSize=11, leading=14, spaceBefore=12, spaceAfter=6)
+    title = ParagraphStyle('title', parent=base, fontName=pdf_fonts.BOLD, fontSize=16, leading=20, spaceAfter=4)
+    heading = ParagraphStyle('heading', parent=base, fontName=pdf_fonts.BOLD, fontSize=11, leading=14, spaceBefore=12, spaceAfter=6)
     cell = lambda text, style=base: Paragraph(escape(str(text)), style)
     width = A4[0] - 45 * mm
     grid = lambda header_rows=1: [('LINEBELOW', (0, 0), (-1, header_rows - 1), 0.8, colors.HexColor('#2f5d4d')), ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -286,8 +288,8 @@ def report_pdf(case, data, items):
             rate = (modes.get(item['interest_mode']) or f'{str(item["interest_rate"]).replace(".", ",")} % p. a.') + f' ab {when(item["interest_from"])}'
         rows.append([cell('Hauptforderung' if item['kind'] == 'principal' else 'Kosten'), cell(item['description']), cell(when(item['booked_on'])),
                      cell(money(Decimal(item['amount_minor']) / 100), right), cell(rate, small)])
-    claims_table = Table(rows, colWidths=[28 * mm, None, 22 * mm, 26 * mm, 52 * mm], repeatRows=1)
-    claims_table.setStyle(TableStyle(grid()))
+    claims_table = Table(rows, colWidths=[33 * mm, None, 22 * mm, 26 * mm, 50 * mm], repeatRows=1)
+    claims_table.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY)] + grid()))
     story += [Paragraph('1. Forderungen', heading), claims_table]
 
     rows = [[cell('Datum', bold), cell('Vorgang', bold), cell('Betrag', right_bold)]]
@@ -296,7 +298,7 @@ def report_pdf(case, data, items):
         label = [cell(text)] + ([cell('verrechnet nach § 367 BGB: ' + credited, small)] if credited else [])
         rows.append([cell(when(entry['day'])), label, cell(money(entry['amount']), right)])
     history = Table(rows, colWidths=[22 * mm, None, 30 * mm], repeatRows=1)
-    history.setStyle(TableStyle(grid()))
+    history.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY)] + grid()))
     story += [Paragraph('2. Kontoverlauf', heading), history]
 
     next_day = when((date.fromisoformat(data['as_of']) + timedelta(days=1)).isoformat())
@@ -306,7 +308,7 @@ def report_pdf(case, data, items):
             [cell('Gesamtforderung', bold), cell(money(data['total']), right_bold)],
             [cell(f'zuzüglich weiterer Zinsen ab {next_day} je Tag', small), cell(money(data['daily_interest']), ParagraphStyle('rs', parent=small, alignment=TA_RIGHT))]]
     totals = Table(rows, colWidths=[None, 34 * mm], hAlign='RIGHT')
-    totals.setStyle(TableStyle([('LINEABOVE', (0, 3), (-1, 3), 0.8, colors.HexColor('#1f2d26')), ('LINEBELOW', (0, 3), (-1, 3), 0.8, colors.HexColor('#1f2d26')),
+    totals.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY), ('LINEABOVE', (0, 3), (-1, 3), 0.8, colors.HexColor('#1f2d26')), ('LINEBELOW', (0, 3), (-1, 3), 0.8, colors.HexColor('#1f2d26')),
                                 ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#f3f7f4')), ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
                                 ('LEFTPADDING', (0, 0), (-1, -1), 3), ('RIGHTPADDING', (0, 0), (-1, -1), 3)]))
     story += [KeepTogether([Paragraph('3. Zusammenfassung', heading), totals]), Spacer(1, 12),
@@ -314,14 +316,14 @@ def report_pdf(case, data, items):
                    'Zinsen taggenau (Tage/365), ohne Zinseszins (§ 289 BGB); Basiszinssatz nach § 247 BGB laut Deutscher Bundesbank.', small)]
 
     def footer(canvas, doc):
-        canvas.saveState(); canvas.setFont('Helvetica', 8); canvas.setFillColor(colors.HexColor('#5d6b60'))
+        canvas.saveState(); canvas.setFont(pdf_fonts.BODY, 8); canvas.setFillColor(colors.HexColor('#5d6b60'))
         canvas.drawString(25 * mm, 12 * mm, f'Forderungsaufstellung {case["reference"]} · Stand {when(data["as_of"])}')
         canvas.drawRightString(A4[0] - 20 * mm, 12 * mm, f'Seite {doc.page}')
         canvas.restoreState()
 
     output = io.BytesIO()
     SimpleDocTemplate(output, pagesize=A4, leftMargin=25 * mm, rightMargin=20 * mm, topMargin=22 * mm, bottomMargin=20 * mm,
-                      title=f'Forderungsaufstellung {case["reference"]}', author='').build(story, onFirstPage=footer, onLaterPages=footer)
+                      title=f'Forderungsaufstellung {case["reference"]}', author='', initialFontName=pdf_fonts.BODY).build(story, onFirstPage=footer, onLaterPages=footer)
     return output.getvalue()
 
 

@@ -9,6 +9,7 @@ import json
 import uuid
 from datetime import date
 
+from . import pdf_fonts
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -48,24 +49,26 @@ def protocol_pdf(entries, firm):
     from reportlab.lib.units import mm
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-    base = ParagraphStyle('base', fontName='Helvetica', fontSize=8.8, leading=11, textColor=colors.HexColor('#1f2d26'))
-    bold = ParagraphStyle('bold', parent=base, fontName='Helvetica-Bold')
+    pdf_fonts.register()
+
+    base = ParagraphStyle('base', fontName=pdf_fonts.BODY, fontSize=8.8, leading=11, textColor=colors.HexColor('#1f2d26'))
+    bold = ParagraphStyle('bold', parent=base, fontName=pdf_fonts.BOLD)
     small = ParagraphStyle('small', parent=base, fontSize=8, textColor=colors.HexColor('#5d6b60'))
-    title = ParagraphStyle('title', parent=base, fontName='Helvetica-Bold', fontSize=15, leading=19, spaceAfter=3)
+    title = ParagraphStyle('title', parent=base, fontName=pdf_fonts.BOLD, fontSize=15, leading=19, spaceAfter=3)
     cell = lambda text, style=base: Paragraph(escape(str(text)), style)
     when = lambda value: date.fromisoformat(value[:10]).strftime('%d.%m.%Y')
-    rows = [[cell(text, bold) for text in ('Aktenzeichen', 'Bezeichnung', 'Mandat beendet', 'Aufbewahrt bis', 'Dokumente', 'Vernichtet am')]]
+    rows = [[cell(text, bold) for text in ('Aktenzeichen', 'Bezeichnung', 'Mandat beendet', 'Aufbewahrt bis', 'Dok.', 'Vernichtet am')]]
     rows += [[cell(item['reference']), cell(item['title']), cell(when(item['ended_on'])), cell(when(item['retained_until'])), cell(item['documents']), cell(when(item['destroyed_at']))] for item in entries]
-    table = Table(rows, colWidths=[32 * mm, None, 24 * mm, 24 * mm, 18 * mm, 24 * mm], repeatRows=1)
-    table.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.HexColor('#2f5d4d')),
+    table = Table(rows, colWidths=[37 * mm, None, 26 * mm, 28 * mm, 22 * mm, 26 * mm], repeatRows=1)
+    table.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY), ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.HexColor('#2f5d4d')),
                                ('LINEBELOW', (0, 1), (-1, -1), 0.3, colors.HexColor('#c9d3cc')), ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 5)]))
-    story = [Paragraph('Vernichtungsprotokoll', title), cell(f'{firm} · Stand {date.today().strftime("%d.%m.%Y")} · {len(entries)} Akten', small), Spacer(1, 6),
+    story = [Paragraph('Vernichtungsprotokoll', title), cell(f'{firm} · Stand {date.today().strftime("%d.%m.%Y")} · {len(entries)} {"Akte" if len(entries) == 1 else "Akten"}', small), Spacer(1, 6),
              table if entries else cell('Bisher wurden keine Akten vernichtet.'), Spacer(1, 10),
              cell('Vernichtet wurden die elektronischen Handakten einschließlich aller Dokumente, Entwürfe, Fristen und Notizen nach Ablauf der Aufbewahrungsfrist '
                   'von sechs Jahren (§ 50 Abs. 1 BRAO). Rechnungen und Buchungen bleiben nach § 147 AO, § 257 HGB gesondert erhalten.', small),
              Spacer(1, 30), cell('______________________________', base), cell('Datum, Unterschrift', small)]
     output = io.BytesIO()
-    SimpleDocTemplate(output, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=18 * mm, bottomMargin=18 * mm, title='Vernichtungsprotokoll', author='').build(story)
+    SimpleDocTemplate(output, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=18 * mm, bottomMargin=18 * mm, title='Vernichtungsprotokoll', author='', initialFontName=pdf_fonts.BODY).build(story)
     return output.getvalue()
 
 

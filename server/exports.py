@@ -14,6 +14,7 @@ from typing import Literal
 
 from docx import Document
 from docx.shared import Mm, Pt
+from . import pdf_fonts
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from openpyxl import Workbook
@@ -140,14 +141,14 @@ def table_response(fmt, name, sheet, headers, rows, de):
 
 def blocks_pdf(title, blocks):
     """blocks: (style, text) with style one of Title, Heading2, Heading3, BodyText."""
-    styles, output = getSampleStyleSheet(), io.BytesIO()
+    styles, output = pdf_fonts.embedded_styles(getSampleStyleSheet()), io.BytesIO()
     head = Table([[Image(str(LOGO), 62 * mm, 62 * mm * LOGO_RATIO)]], colWidths=[None], hAlign='LEFT')
-    head.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('LEFTPADDING', (0, 0), (-1, -1), 0), ('LINEBELOW', (0, 0), (-1, 0), 0.6, '#d9d2c4'), ('BOTTOMPADDING', (0, 0), (-1, -1), 6)]))
+    head.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY), ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('LEFTPADDING', (0, 0), (-1, -1), 0), ('LINEBELOW', (0, 0), (-1, 0), 0.6, '#d9d2c4'), ('BOTTOMPADDING', (0, 0), (-1, -1), 6)]))
     story = [head, Spacer(1, 10)]
     for style, text in blocks:
         story.append(Paragraph(escape(str(text)).replace('\n', '<br/>'), styles[style]))
         story.append(Spacer(1, 6))
-    SimpleDocTemplate(output, title=title).build(story)
+    SimpleDocTemplate(output, title=title, initialFontName=pdf_fonts.BODY).build(story)
     return output.getvalue()
 
 
