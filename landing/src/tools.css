@@ -142,3 +142,14 @@
 .retention-table form.invoice-inline input{height:32px;border:1px solid #cfd8d1;border-radius:6px;padding:0 8px}
 .retention-log-title{font:600 14px var(--sans,inherit);margin:18px 0 0;color:#22392d}
 .tool-panel{padding-bottom:20px}.tool-panel>:not(.desk-panel-heading):not(.desk-table-scroll){margin-left:21px;margin-right:21px}.tool-panel>.tool-grid,.tool-panel>.note-form{margin-top:16px}
+
+/* Client upload links */
+.upload-form fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.upload-form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600;color:#3f5246}
+.upload-form select,.upload-form textarea{border:1px solid #cfd8d1;border-radius:6px;padding:8px 10px;font:inherit;font-size:14px;background:#fff}
+.upload-form .desk-button{align-self:flex-start}
+.upload-created{background:#eef6f0;border:1px solid #cfe2d4;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.upload-created p{margin:0;font-size:13.5px}
+.upload-created input{height:40px;border:1px solid #b9cfc0;border-radius:6px;padding:0 10px;font:13px ui-monospace,monospace;background:#fff}
+.upload-qr{margin:0;display:flex;gap:14px;align-items:center}.upload-qr img{width:180px;height:180px;background:#fff;border-radius:8px}.upload-qr figcaption{font-size:13px;color:#4c5d52}
+.upload-state.active{color:#2f5d4d}.upload-state.expired,.upload-state.revoked{color:#8c978f}.upload-state.full{color:#8a5410}

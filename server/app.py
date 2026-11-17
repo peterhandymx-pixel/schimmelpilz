@@ -54,6 +54,7 @@ from . import notes
 from . import cost_assessment
 from . import retention
 from . import pdfa
+from . import client_upload
 from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
 from .word_export import compose_docx
@@ -491,6 +492,7 @@ def init_db() -> None:
         mailbox.migrate(connection)
         notes.migrate(connection)
         retention.migrate(connection)
+        client_upload.migrate(connection)
 
 
 async def require_user(request: Request) -> dict:
@@ -1591,6 +1593,7 @@ app.include_router(cost_risk.router(require_user))
 app.include_router(notes.router(db, require_user, now, record_activity))
 app.include_router(cost_assessment.router(require_user, get_case))
 app.include_router(retention.router(db, require_user, now, lambda: UPLOAD_DIR))
+app.include_router(client_upload.router(db, require_user, now, record_activity, lambda: UPLOAD_DIR))
 app.include_router(forms.router(db, require_user, get_case, letterhead_pdf_response))
 app.include_router(letter_assistant.router(require_user, db, record_activity, now, row_case))
 app.include_router(reminders.router(db, require_user))

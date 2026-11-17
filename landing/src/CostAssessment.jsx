@@ -11,7 +11,7 @@ const decimal = text => { const raw = String(text || "").trim().replace(/\s|€/
 export function CostAssessment({ item, onDraft }) {
   const d = item.details || {};
   const [form, setForm] = useState({ value: d.dispute_value ? String(d.dispute_value) : "", instance: "civil_first", hearing: true, settlement: false, vat_deductible: false,
-    business_fee_rate: "0", court_fees_paid: "", client_role: "plaintiff", title_kind: "Urteil", title_date: "", cost_quota: 100 });
+    business_fee_rate: "0", court_fees_paid: "", client_role: d.client_role === "respondent" ? "defendant" : "plaintiff", title_kind: "Urteil", title_date: "", cost_quota: 100 });
   const [extras, setExtras] = useState([]), [preview, setPreview] = useState(null), [error, setError] = useState(""), [busy, setBusy] = useState(false);
   const set = (key, value) => { setForm(previous => ({ ...previous, [key]: value })); setPreview(null); };
   const payload = () => ({ ...form, value: decimal(form.value), court_fees_paid: decimal(form.court_fees_paid) || "0", business_fee_rate: form.business_fee_rate,
