@@ -4,7 +4,8 @@ import os
 from fastapi import APIRouter
 
 from . import billing
-from .research import AI_PROVIDER
+from .research import AI_PROVIDER, LLM_BASE_URL
+from urllib.parse import urlparse
 
 FIELDS=('NAME','LEGAL_FORM','REPRESENTATIVE','ADDRESS','EMAIL','PHONE','REGISTER','TAX_ID','CONTENT_RESPONSIBLE','HOSTING','MAIL_PROVIDER')
 REQUIRED=('name','address','email')
@@ -23,5 +24,5 @@ def router():
     @r.get('/api/public/operator')
     def operator():
         values=particulars()
-        return {**values,'complete':all(values[key] for key in REQUIRED),'ai_provider':AI_PROVIDER,'payments':None if billing.demo_mode() else 'clip' if any(billing.links_ready().values()) else None}
+        return {**values,'complete':all(values[key] for key in REQUIRED),'ai_provider':AI_PROVIDER,'ai_host':urlparse(LLM_BASE_URL).hostname or '' if AI_PROVIDER=='openai' else '','payments':None if billing.demo_mode() else 'clip' if any(billing.links_ready().values()) else None}
     return r

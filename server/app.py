@@ -15,7 +15,7 @@ import threading
 import subprocess
 import sys
 from contextlib import asynccontextmanager, contextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
@@ -24,9 +24,10 @@ from fastapi.responses import FileResponse, Response as BinaryResponse
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from . import control, billing, document_ocr
+from . import control, billing, document_ocr, admin, court_lookup, invoices, claims, bookkeeping, snippets, letter_assistant, reminders, dictations, speech, conflicts, fulltext
 from .auth import COOKIE_NAME, RegisterInput, LoginInput, public_user, password_hash, verify_password, set_session, token_hash, check_login_limit, failed_logins
-from .research import ai_status, prepare_messages, generate_answer, AI_MODEL
+from .research import ai_status, prepare_messages, generate_answer, AI_MODEL, plan_norms
+from . import nulegal, law_skills
 from .document_context import select_sources
 from . import legal_catalogue
 from . import draft_review
@@ -46,6 +47,14 @@ from . import account
 from . import deletion
 from . import deadlines
 from . import mailbox
+from . import email_import
+from . import cost_risk
+from . import forms
+from . import notes
+from . import cost_assessment
+from . import retention
+from . import pdfa
+from . import client_upload
 from .legal_context import attach_snapshot, legal_row, supplied_legal_passages, citation_audit
 from .letterheads import normalize, compose_pdf, office_path
 from .word_export import compose_docx
@@ -68,6 +77,7 @@ LETTERHEAD_LOCK = threading.Lock()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    reminders.start(db, pre_deadline)
     yield
 
 
@@ -107,7 +117,11 @@ class CaseDetails(BaseModel):
     opponent_name: str = Field(default="", max_length=160)
     opponent_address: str = Field(default="", max_length=500)
     opponent_reference: str = Field(default="", max_length=100)
-    legal_area: Literal["general", "consumer", "tenancy", "contract", "commercial", "employment", "family", "social", "administrative", "criminal"] = "general"
+    # Legal expenses insurer of the client (Rechtsschutzversicherung).
+    insurer_name: str = Field(default="", max_length=300)
+    insurer_policy: str = Field(default="", max_length=60)
+    insurer_claim: str = Field(default="", max_length=60)
+    legal_area: Literal["general", "consumer", "tenancy", "contract", "commercial", "employment", "family", "social", "administrative", "tax", "criminal"] = "general"
     jurisdiction: Literal["DE", "EU", "MX", "other"] = "DE"
     stage: Literal["initial", "out_of_court", "court", "appeal", "enforcement"] = "initial"
     objective: str = Field(default="", max_length=2000)
@@ -121,7 +135,7 @@ class CaseDetails(BaseModel):
     fee_basis: Literal["unknown", "statutory", "hourly", "agreement"] = "unknown"
     conflict_check: Literal["pending", "checked", "conflict"] = "pending"
 
-    @field_validator("responsible", "client_name", "client_email", "client_address", "opponent_name", "opponent_address", "opponent_reference", "objective", "court", "court_reference", "deadline_note", mode="before")
+    @field_validator("responsible", "client_name", "client_email", "client_address", "opponent_name", "opponent_address", "opponent_reference", "insurer_name", "insurer_policy", "insurer_claim", "objective", "court", "court_reference", "deadline_note", mode="before")
     @classmethod
     def strip_input(cls, value):
         return value.strip() if isinstance(value, str) else value
@@ -181,30 +195,51 @@ class CaseUpdate(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
+TASK_KINDS = ("task", "appointment", "deadline", "notfrist", "resubmission")
+# Deadlines need a reminder well before they run out; a week is the usual office rule.
+DEFAULT_PRE_DAYS = {"deadline": 7, "notfrist": 7}
+
+
 class TaskCreate(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     note: str = Field(default="", max_length=2000)
     due_on: date | None = None
     priority: Literal["normal", "high"] = "normal"
+    kind: Literal["task", "appointment", "deadline", "notfrist", "resubmission"] = "task"
+    due_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    pre_days: int | None = Field(default=None, ge=0, le=60)
 
     @field_validator("title", "note", mode="before")
     @classmethod
     def strip_input(cls, value):
         return value.strip() if isinstance(value, str) else value
 
+    @model_validator(mode="after")
+    def dated_kinds(self):
+        if self.kind != "task" and not self.due_on:
+            raise ValueError("date_required")
+        if self.kind != "appointment":
+            self.due_time = None
+        if self.pre_days is None:
+            self.pre_days = DEFAULT_PRE_DAYS.get(self.kind, 0)
+        return self
+
 
 class TaskUpdate(TaskCreate):
     completed: bool
+    # Deadline control: a deadline is only struck off with a note on how it was met (e.g. "Schriftsatz am … per beA").
+    completion_note: str = Field(default="", max_length=500)
 
 
 class ResearchInput(BaseModel):
     request_id: uuid.UUID
     question: str = Field(min_length=3, max_length=4000)
     language: Literal["de", "en"] = "de"
-    workflow: Literal["intake", "research", "jurisdiction", "costs", "drafting", "deadlines"] = "research"
+    workflow: Literal["intake", "research", "jurisdiction", "costs", "drafting", "deadlines", "comparison"] = "research"
     document_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
     legal_source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=8)
     use_legal_catalogue: bool = False
+    thread_id: uuid.UUID | None = None  # continue this chat; empty starts a new one
 
     @field_validator("question", mode="before")
     @classmethod
@@ -402,6 +437,11 @@ def init_db() -> None:
             connection.execute("ALTER TABLE users ADD COLUMN profile TEXT NOT NULL DEFAULT '{}'")
         if "letterhead_id" not in user_columns:
             connection.execute("ALTER TABLE users ADD COLUMN letterhead_id TEXT")
+        task_columns = {row["name"] for row in connection.execute("PRAGMA table_info(tasks)")}
+        for column, declaration in (("kind", "TEXT NOT NULL DEFAULT 'task'"), ("due_time", "TEXT"), ("pre_days", "INTEGER NOT NULL DEFAULT 0"),
+                                    ("completed_by", "TEXT"), ("completion_note", "TEXT NOT NULL DEFAULT ''")):
+            if column not in task_columns:
+                connection.execute(f"ALTER TABLE tasks ADD COLUMN {column} {declaration}")
         research_columns = {row["name"] for row in connection.execute("PRAGMA table_info(research_runs)")}
         for column in ("sources", "document_selection", "legal_sources"):
             if column not in research_columns:
@@ -409,6 +449,11 @@ def init_db() -> None:
         for column in ('legal_selection','citation_audit','retrieval_report'):
             if column not in research_columns:
                 connection.execute(f"ALTER TABLE research_runs ADD COLUMN {column} TEXT NOT NULL DEFAULT '{{}}'")
+        if 'thread_id' not in research_columns:
+            # Chats: earlier questions each become a chat of their own.
+            connection.execute("ALTER TABLE research_runs ADD COLUMN thread_id TEXT")
+            connection.execute("UPDATE research_runs SET thread_id = id WHERE thread_id IS NULL")
+        connection.execute("CREATE INDEX IF NOT EXISTS research_runs_thread ON research_runs(case_id, thread_id, created_at)")
         connection.commit()
         # Legacy databases made references globally unique. They are now per account.
         if any(index["origin"] == "u" for index in connection.execute("PRAGMA index_list(cases)")):
@@ -435,10 +480,19 @@ def init_db() -> None:
         route_plans.migrate(connection)
         ocr_routes.migrate(connection)
         auto_text.migrate(connection)
+        reminders.migrate(connection)
         control.migrate(connection)
         billing.migrate(connection)
+        invoices.migrate(connection)
+        claims.migrate(connection)
+        bookkeeping.migrate(connection)
+        snippets.migrate(connection)
+        dictations.migrate(connection)
         account.migrate(connection)
         mailbox.migrate(connection)
+        notes.migrate(connection)
+        retention.migrate(connection)
+        client_upload.migrate(connection)
 
 
 async def require_user(request: Request) -> dict:
@@ -620,6 +674,20 @@ def activate_letterhead(letterhead_id: str, payload: LetterheadActivation, user:
         return public_letterhead(owned_letterhead(connection, letterhead_id, user['id']))
 
 
+def invoice_letterhead(owner):
+    """The active letter paper of the account for invoices, or plain paper with 25 mm margins."""
+    layout = LetterheadLayout(top_mm=25, bottom_mm=25).model_dump()
+    if not owner['letterhead_id']:
+        return None, layout
+    with db() as connection:
+        row = connection.execute('SELECT * FROM letterheads WHERE id=? AND user_id=?', (owner['letterhead_id'], owner['id'])).fetchone()
+    template = DATA_DIR / 'letterheads' / row['pdf_stored'] if row else None
+    # A missing letter-paper file must not block an invoice: fall back to plain paper.
+    if not template or not template.is_file():
+        return None, layout
+    return template, {**layout, **json.loads(row['layout'] or '{}')}
+
+
 def draft_letterhead(user):
     if not user['letterhead_id']:
         return None, None
@@ -696,6 +764,29 @@ def export_draft_pdf(case_id: str, draft_id: str, user: dict = Depends(require_u
     return result
 
 
+BEA_KINDS = {"letter": "Schreiben", "claim": "Klage", "application": "Antrag", "objection": "Widerspruch", "response": "Stellungnahme"}
+
+
+@app.get("/api/cases/{case_id}/drafts/{draft_id}/bea.pdf")
+def export_draft_bea(case_id: str, draft_id: str, user: dict = Depends(require_user)):
+    """The saved draft as PDF/A-2b with an ERVB file name; the local beA checks travel in the X-Bea-Check header."""
+    case = get_case(case_id, user['id'])
+    with db() as connection:
+        row = connection.execute('SELECT * FROM drafts WHERE case_id=? AND id=?', (case_id, draft_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='Draft not found')
+    plain = letterhead_pdf_response(row['body'], row['letterhead_id'], json.loads(row['letterhead_layout']) if row['letterhead_layout'] else LetterheadLayout(top_mm=25, bottom_mm=25).model_dump(), user['id'])
+    label = BEA_KINDS.get(row['kind'], 'Schriftsatz')
+    content = pdfa.to_pdfa(plain.body, f"{label} {case['reference']}", user.get('organisation') or user.get('full_name') or '')
+    report = pdfa.check(content)
+    filename = pdfa.ervb_filename(f"{case['reference']}_{label}_v{row['version']}")
+    from urllib.parse import quote
+    return BinaryResponse(content, media_type='application/pdf', headers={
+        'Cache-Control': 'no-store', 'X-Draft-Version': str(row['version']), 'X-Draft-Review-Status': row['review_status'],
+        'X-Bea-Check': json.dumps(report, ensure_ascii=True), 'Access-Control-Expose-Headers': 'X-Bea-Check, X-Draft-Version, Content-Disposition',
+        'Content-Disposition': f"attachment; filename=\"{filename.encode('ascii', 'replace').decode()}\"; filename*=UTF-8''{quote(filename)}"})
+
+
 class DraftSendInput(BaseModel):
     model_config = {"extra": "forbid"}
     to: str = Field(min_length=3, max_length=254)
@@ -765,6 +856,20 @@ def send_draft(case_id: str, draft_id: str, payload: DraftSendInput, user: dict 
     return {"sent": True, "message_id": message_id, "attachment": filename, "review_status": row["review_status"], "activity": activity}
 
 
+def pre_deadline(due_on, days):
+    """The Vorfrist: `days` before the deadline, moved back to the previous working day (weekends, nationwide holidays)."""
+    if not due_on or not days:
+        return None
+    day = date.fromisoformat(due_on) - timedelta(days=days)
+    try:
+        closed = deadlines.holidays(day.year, None)
+    except ValueError:
+        closed = {}
+    while day.weekday() >= 5 or day in closed:
+        day -= timedelta(days=1)
+    return day.isoformat()
+
+
 def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
     documents = connection.execute(
         """SELECT d.id, d.original_name, d.content_type, d.size_bytes, d.created_at, d.inbox_reassigned_at, d.inbox_correction_note,
@@ -783,7 +888,7 @@ def row_case(row: sqlite3.Row, connection: sqlite3.Connection) -> dict:
         "details": json.loads(row["details"]),
         "documents": [dict(item) for item in documents],
         "drafts": [dict(item) for item in drafts],
-        "tasks": [{**dict(item), "completed": bool(item["completed"])} for item in connection.execute("SELECT * FROM tasks WHERE case_id = ? ORDER BY created_at DESC", (row["id"],))],
+        "tasks": [{**dict(item), "completed": bool(item["completed"]), "pre_due_on": pre_deadline(item["due_on"], item["pre_days"])} for item in connection.execute("SELECT * FROM tasks WHERE case_id = ? ORDER BY created_at DESC", (row["id"],))],
         "activities": [dict(item) for item in connection.execute("SELECT * FROM activities WHERE case_id = ? ORDER BY created_at DESC", (row["id"],))],
     }
 
@@ -813,6 +918,52 @@ def list_cases(user: dict = Depends(require_user)) -> list[dict]:
         return [row_case(row, connection) for row in connection.execute("SELECT * FROM cases WHERE user_id = ? ORDER BY created_at DESC", (user["id"],)) if user.get("allowed_cases") is None or row["id"] in user["allowed_cases"]]
 
 
+def allocate_reference(connection, user_id: str) -> str:
+    # Imported references may already occupy a generated number.
+    while True:
+        counter = connection.execute("UPDATE counters SET value = value + 1 WHERE name = 'case_reference' RETURNING value").fetchone()[0]
+        reference = f"SCH-{datetime.now().year}-{counter:06d}"
+        if not connection.execute("SELECT 1 FROM cases WHERE reference = ? COLLATE NOCASE AND user_id = ?", (reference, user_id)).fetchone():
+            return reference
+
+
+class ReferenceChange(BaseModel):
+    mode: Literal["generate", "existing"]
+    reference: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @field_validator("reference", mode="before")
+    @classmethod
+    def strip_reference(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def check(self):
+        if self.mode == "existing" and not self.reference:
+            raise ValueError("An existing reference is required")
+        if self.reference and any(ord(character) < 32 or ord(character) == 127 for character in self.reference):
+            raise ValueError("Control characters are not allowed in references")
+        return self
+
+
+@app.put("/api/cases/{case_id}/reference")
+def change_reference(case_id: str, payload: ReferenceChange, user: dict = Depends(require_user)) -> dict:
+    """A firm taking over a case gives it its own file number, typed in or allocated; the old one stays in the history."""
+    get_case(case_id, user["id"])
+    with db() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        old = connection.execute("SELECT reference FROM cases WHERE id = ? AND user_id = ?", (case_id, user["id"])).fetchone()["reference"]
+        if payload.mode == "existing":
+            reference = payload.reference
+            if reference.casefold() != old.casefold() and connection.execute("SELECT 1 FROM cases WHERE reference = ? COLLATE NOCASE AND user_id = ? AND id != ?", (reference, user["id"], case_id)).fetchone():
+                raise HTTPException(status_code=409, detail="Reference already exists")
+        else:
+            reference = allocate_reference(connection, user["id"])
+        if reference != old:
+            connection.execute("UPDATE cases SET reference = ? WHERE id = ? AND user_id = ?", (reference, case_id, user["id"]))
+            record_activity(connection, case_id, "reference_changed", f"{old} → {reference}")
+        return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
+
+
 @app.post("/api/cases", status_code=201)
 def create_case(payload: CaseCreate, user: dict = Depends(require_user)) -> dict:
     case_id = str(uuid.uuid4())
@@ -823,12 +974,7 @@ def create_case(payload: CaseCreate, user: dict = Depends(require_user)) -> dict
             if connection.execute("SELECT 1 FROM cases WHERE reference = ? COLLATE NOCASE AND user_id = ?", (reference, user["id"])).fetchone():
                 raise HTTPException(status_code=409, detail="Reference already exists")
         else:
-            # Imported references may already occupy a generated number.
-            while True:
-                counter = connection.execute("UPDATE counters SET value = value + 1 WHERE name = 'case_reference' RETURNING value").fetchone()[0]
-                reference = f"SCH-{datetime.now().year}-{counter:06d}"
-                if not connection.execute("SELECT 1 FROM cases WHERE reference = ? COLLATE NOCASE AND user_id = ?", (reference, user["id"])).fetchone():
-                    break
+            reference = allocate_reference(connection, user["id"])
         connection.execute(
             "INSERT INTO cases(id, reference, title, description, language, created_at, details, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (case_id, reference, payload.title, payload.description, payload.language, now(), payload.details.model_dump_json(), user["id"]),
@@ -856,7 +1002,7 @@ def update_case(case_id: str, payload: CaseUpdate, user: dict = Depends(require_
 def create_task(case_id: str, payload: TaskCreate, user: dict = Depends(require_user)) -> dict:
     get_case(case_id, user["id"])
     with db() as connection:
-        connection.execute("INSERT INTO tasks(id, case_id, title, note, due_on, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), case_id, payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, now()))
+        connection.execute("INSERT INTO tasks(id, case_id, title, note, due_on, priority, created_at, kind, due_time, pre_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), case_id, payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, now(), payload.kind, payload.due_time, payload.pre_days))
         record_activity(connection, case_id, "task_created", payload.title)
         return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
 
@@ -869,7 +1015,12 @@ def update_task(case_id: str, task_id: str, payload: TaskUpdate, user: dict = De
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         completed_at = (task["completed_at"] or now()) if payload.completed else None
-        connection.execute("UPDATE tasks SET title = ?, note = ?, due_on = ?, priority = ?, completed = ?, completed_at = ? WHERE id = ? AND case_id = ?", (payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, payload.completed, completed_at, task_id, case_id))
+        striking = payload.completed and not task["completed"]
+        if striking and payload.kind in ("deadline", "notfrist") and len(payload.completion_note.strip()) < 5:
+            raise HTTPException(status_code=422, detail="completion_note_required")
+        completed_by = (user["full_name"] if striking else task["completed_by"]) if payload.completed else None
+        completion_note = (payload.completion_note.strip() if striking else task["completion_note"]) if payload.completed else ""
+        connection.execute("UPDATE tasks SET title = ?, note = ?, due_on = ?, priority = ?, completed = ?, completed_at = ?, kind = ?, due_time = ?, pre_days = ?, completed_by = ?, completion_note = ? WHERE id = ? AND case_id = ?", (payload.title, payload.note, payload.due_on.isoformat() if payload.due_on else None, payload.priority, payload.completed, completed_at, payload.kind, payload.due_time, payload.pre_days, completed_by, completion_note, task_id, case_id))
         action = "task_completed" if payload.completed else "task_reopened" if task["completed"] else "task_updated"
         record_activity(connection, case_id, action, payload.title)
         return row_case(connection.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone(), connection)
@@ -878,7 +1029,7 @@ def update_task(case_id: str, task_id: str, payload: TaskUpdate, user: dict = De
 @app.get("/api/research/status")
 def research_status(user: dict = Depends(require_user)) -> dict:
     with db() as connection:enabled=bool(connection.execute('SELECT ai_enabled FROM operator_settings WHERE id=1').fetchone()[0])
-    return {**ai_status(),'enabled':enabled}
+    return {**ai_status(),'enabled':enabled,'speech':speech.available()}
 
 
 @app.get('/api/legal/status')
@@ -1012,7 +1163,11 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
                 if existing["status"] == "completed":
                     return research_row(existing)
                 raise HTTPException(status_code=409, detail="request_already_recorded")
-            history = [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 6", (case_id,))][::-1]
+            thread_id = str(payload.thread_id) if payload.thread_id else run_id
+            if payload.thread_id and not connection.execute("SELECT 1 FROM research_runs WHERE case_id = ? AND thread_id = ?", (case_id, thread_id)).fetchone():
+                raise HTTPException(status_code=404, detail="chat_not_found")
+            # Only the chosen chat is context for the model, not every question ever asked in the case.
+            history = [dict(row) for row in connection.execute("SELECT * FROM research_runs WHERE case_id = ? AND thread_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 6", (case_id, thread_id))][::-1]
             retired = {row['id'] for row in connection.execute('SELECT id FROM documents WHERE case_id=? AND inbox_reassigned_at IS NOT NULL',(case_id,))}
             history = [turn for turn in history if not any(source.get('document_id') in retired for source in json.loads(turn['sources'] or '[]'))]
             for document_id in document_ids:
@@ -1033,7 +1188,16 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
         retrieval = {'automatic':payload.use_legal_catalogue,'errors':[],'coverage':None}
         if payload.use_legal_catalogue:
             retrieval['coverage'] = legal_catalogue.catalogue_status()
-            for hit in legal_catalogue.search(payload.question,limit=4):
+            area = case['details'].get('legal_area')
+            planned = []
+            # The model names the provisions to open first; only ones that exist in the official catalogue survive.
+            if not ("pytest" in sys.modules and not os.getenv("PLAN_NORMS_IN_TESTS")):
+                try:
+                    planned = plan_norms(payload.question, area, list(legal_catalogue.LAWS.values()))
+                except Exception as error:
+                    retrieval['errors'].append({'title':'norm_planning','reason':'planning_failed','detail':type(error).__name__ + (f' {error.code}' if hasattr(error,'code') else '')})
+            retrieval['planned'] = [f'§ {number} {law}' for number,law in planned]
+            for hit in legal_catalogue.search_question(payload.question,limit=5,area=area,planned=planned):
                 try:
                     snapshot = legal_catalogue.source(hit['key'])
                     with db() as connection:
@@ -1054,16 +1218,29 @@ def research_chat(case_id: str, payload: ResearchInput, user: dict = Depends(req
                 legal_passages = supplied_legal_passages(legal_rows,payload.question)
             except ValueError:
                 raise HTTPException(status_code=422,detail='source_excluded') from None
-            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, AI_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False)))
+        # Leading decisions for the statutes found, from nu:legal; the query holds statute headings and fixed vocabulary only.
+        case_law = []
+        if case['details'].get('jurisdiction','DE') == 'DE' and legal_passages:
+            titles = list(dict.fromkeys(item['title'] for item in legal_passages))
+            case_law = nulegal.case_law_for(titles, legal_catalogue.everyday_keywords(payload.question))
+        retrieval['case_law'] = case_law
+        # The matching expert skill (AI-Skills-German-Law) as working instructions for this question.
+        chosen = law_skills.select(payload.question, [item['title'] for item in legal_passages], case['details'].get('legal_area')) if case['details'].get('jurisdiction','DE') == 'DE' else None
+        skill = {**law_skills.label(chosen), 'text': law_skills.instructions(chosen)} if chosen else None
+        retrieval['skill'] = {key: value for key, value in skill.items() if key != 'text'} if skill else None
+        with db() as connection:
+            connection.execute("INSERT INTO research_runs(id, case_id, question, language, workflow, status, model, created_at, sources, document_selection,legal_sources,legal_selection,retrieval_report,thread_id) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)", (run_id, case_id, payload.question, payload.language, payload.workflow, AI_MODEL, now(), json.dumps(sources, ensure_ascii=False), json.dumps(document_ids),json.dumps(legal_passages,ensure_ascii=False),json.dumps(selection),json.dumps(retrieval,ensure_ascii=False), thread_id))
         try:
-            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages))
+            result = generate_answer(prepare_messages(case, history, payload.question, payload.language, payload.workflow, sources, legal_passages, case_law, skill))
         except (URLError, OSError, TimeoutError, ValueError) as error:
-            code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_unavailable"
+            code = "ai_timeout" if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError) else "ai_quota" if getattr(error, "code", None) == 429 else "ai_unavailable"
             with db() as connection:
                 connection.execute("UPDATE research_runs SET status = 'failed', error_code = ?, finished_at = ? WHERE id = ?", (code, now(), run_id))
-            raise HTTPException(status_code=504 if code == "ai_timeout" else 503, detail=code) from None
+            raise HTTPException(status_code=504 if code == "ai_timeout" else 429 if code == "ai_quota" else 503, detail=code) from None
+        # Every statute and docket the answer cites is checked against nu:legal (citation strings only).
+        retrieval['citation_check'] = nulegal.check_citations(result['answer'])
         with db() as connection:
-            connection.execute("UPDATE research_runs SET status = 'completed', answer = ?, input_tokens = ?, output_tokens = ?, truncated = ?, finished_at = ?, citation_audit=? WHERE id = ?", (result["answer"], result["input_tokens"], result["output_tokens"], result["truncated"], now(),json.dumps(citation_audit(result['answer'],legal_passages)), run_id))
+            connection.execute("UPDATE research_runs SET status = 'completed', answer = ?, input_tokens = ?, output_tokens = ?, truncated = ?, finished_at = ?, citation_audit=?, retrieval_report=? WHERE id = ?", (result["answer"], result["input_tokens"], result["output_tokens"], result["truncated"], now(),json.dumps(citation_audit(result['answer'],legal_passages)),json.dumps(retrieval,ensure_ascii=False), run_id))
             record_activity(connection, case_id, "research_answer")
             return research_row(connection.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone())
     finally:
@@ -1149,22 +1326,69 @@ def review_document_text(case_id: str, document_id: str, unit_no: int, payload: 
         return document_text(connection, document_id)
 
 
+def import_mail(case_id: str, user: dict, content: bytes, extension: str, background_tasks: BackgroundTasks) -> dict:
+    """An e-mail becomes a PDF of the message plus one document per attachment of an allowed type."""
+    try:
+        mail = email_import.parse(content, extension)
+    except email_import.MailError:
+        raise HTTPException(status_code=422, detail="not_a_mail") from None
+    except Exception:
+        raise HTTPException(status_code=422, detail="not_a_mail") from None
+    case = get_case(case_id, user["id"])
+    keep, skipped = [], []
+    for item in mail["attachments"][:email_import.MAX_ATTACHMENTS]:
+        suffix = Path(item["name"]).suffix.lower()
+        if item["data"] and suffix in ALLOWED_EXTENSIONS and len(item["data"]) <= MAX_UPLOAD_BYTES:
+            keep.append(item)
+        else:
+            skipped.append(item["name"])
+    skipped += [item["name"] for item in mail["attachments"][email_import.MAX_ATTACHMENTS:]]
+    pdf = email_import.mail_pdf(mail, case["reference"], [item["name"] for item in keep], skipped)
+    files = [(email_import.pdf_name(mail), pdf, "application/pdf")] + [(item["name"], item["data"], None) for item in keep]
+    written, created_documents = [], []
+    created = now()
+    try:
+        with db() as connection:
+            for index, (name, data, content_type) in enumerate(files):
+                document_id = str(uuid.uuid4())
+                suffix = Path(name).suffix.lower()
+                target = UPLOAD_DIR / f"{document_id}{suffix}"
+                target.write_bytes(data)
+                written.append(target)
+                kind = content_type or {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".zip": "application/zip",
+                                        ".doc": "application/msword", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}.get(suffix, "application/octet-stream")
+                connection.execute("INSERT INTO documents(id, case_id, original_name, stored_name, content_type, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                   (document_id, case_id, name, target.name, kind, len(data), created))
+                activity = record_activity(connection, case_id, "document_uploaded", name if index == 0 else f"{name} (Anhang)")
+                created_documents.append({"id": document_id, "case_id": case_id, "original_name": name, "content_type": kind, "size_bytes": len(data), "created_at": created, "activity": activity})
+    except Exception:
+        for target in written:
+            target.unlink(missing_ok=True)
+        raise
+    for document in created_documents:
+        AUTO_TEXT.queue(background_tasks, case_id, document["id"], user["id"])
+    return {**created_documents[0], "extra_documents": created_documents[1:], "skipped_attachments": skipped}
+
+
 @app.post("/api/cases/{case_id}/documents", status_code=201)
 async def upload_document(case_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...), user: dict = Depends(require_user)) -> dict:
     get_case(case_id, user["id"])
     original = Path((file.filename or "document").replace("\\", "/")).name
     extension = Path(original).suffix.lower()
-    if extension not in ALLOWED_EXTENSIONS:
+    if extension not in ALLOWED_EXTENSIONS | email_import.MAIL_EXTENSIONS:
         await file.close()
         raise HTTPException(status_code=415, detail="Unsupported document type")
+    limit = MAX_UPLOAD_BYTES * 3 if extension in email_import.MAIL_EXTENSIONS else MAX_UPLOAD_BYTES
     try:
-        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        content = await file.read(limit + 1)
     finally:
         await file.close()
     if not content:
         raise HTTPException(status_code=422, detail="Document is empty")
-    if len(content) > MAX_UPLOAD_BYTES:
+    if len(content) > limit:
         raise HTTPException(status_code=413, detail="Document exceeds the 10 MB limit")
+    if extension in email_import.MAIL_EXTENSIONS:
+        return import_mail(case_id, user, content, extension, background_tasks)
     document_id = str(uuid.uuid4())
     stored_name = f"{document_id}{extension}"
     target = UPLOAD_DIR / stored_name
@@ -1336,8 +1560,24 @@ app.include_router(mailbox.router(db, require_user, now, lambda: UPLOAD_DIR, lam
 app.include_router(inbox.router(db, require_user, now, record_activity, lambda: UPLOAD_DIR, MAX_UPLOAD_BYTES, ALLOWED_EXTENSIONS, lambda *job: AUTO_TEXT.queue(*job)))
 app.include_router(costs.router(db, require_user, now, record_activity))
 app.include_router(case_tools.router(db, require_user, now, record_activity, row_case, lambda: DATA_DIR, lambda: UPLOAD_DIR))
-app.include_router(calendar_export.router(db, require_user, now))
+app.include_router(calendar_export.router(db, require_user, now, pre_deadline))
 app.include_router(fee_tables.router(require_user))
+app.include_router(court_lookup.router(require_user))
+
+
+@app.get("/api/cases/{case_id}/court-suggestion")
+def court_suggestion(case_id: str, area: Literal["", "contract", "tenancy", "employment", "social", "administrative", "tax", "family", "criminal"] = "", user: dict = Depends(require_user)):
+    """Competent first-instance court for a claim in this case (court type by value/area, place by the relevant address)."""
+    case = get_case(case_id, user["id"])
+    return court_lookup.suggest(case["details"], area or None)
+app.include_router(invoices.router(db, require_user, now, record_activity, compose_pdf, invoice_letterhead))
+app.include_router(claims.router(db, require_user, now, record_activity, compose_pdf))
+app.include_router(bookkeeping.router(db, require_user, now, record_activity))
+app.include_router(snippets.router(db, require_user, now))
+app.include_router(dictations.router(db, require_user, now, record_activity, lambda: UPLOAD_DIR))
+app.include_router(speech.router(db, require_user))
+app.include_router(conflicts.router(db, require_user))
+app.include_router(fulltext.router(db, require_user))
 app.include_router(route_plans.router(db, require_user, now, record_activity))
 app.include_router(exports.router(db, require_user, now))
 app.include_router(ocr_routes.router(db, require_user, now, record_activity, get_case, get_document, document_text, lambda: UPLOAD_DIR, EXTRACTION_LOCK, ROOT))
@@ -1345,7 +1585,16 @@ app.include_router(ocr_routes.router(db, require_user, now, record_activity, get
 app.include_router(control.router(db,require_user,now,lambda:{'ai':ai_status(),'ocr_available':document_ocr.available(),'catalogue':legal_catalogue.catalogue_status()}))
 
 app.include_router(billing.router(db,require_user,now))
+app.include_router(admin.router(db,require_user,now,lambda:UPLOAD_DIR,lambda:DATA_DIR,lambda:{'ai':ai_status(),'ocr_available':document_ocr.available(),'catalogue':legal_catalogue.catalogue_status()}))
 app.include_router(legal_notice.router())
 app.include_router(account.router(db, require_user, lambda: UPLOAD_DIR, lambda: DATA_DIR))
 app.include_router(deadlines.router(require_user))
+app.include_router(cost_risk.router(require_user))
+app.include_router(notes.router(db, require_user, now, record_activity))
+app.include_router(cost_assessment.router(require_user, get_case))
+app.include_router(retention.router(db, require_user, now, lambda: UPLOAD_DIR))
+app.include_router(client_upload.router(db, require_user, now, record_activity, lambda: UPLOAD_DIR))
+app.include_router(forms.router(db, require_user, get_case, letterhead_pdf_response))
+app.include_router(letter_assistant.router(require_user, db, record_activity, now, row_case))
+app.include_router(reminders.router(db, require_user))
 app.include_router(deletion.router(db, require_user, record_activity, lambda: UPLOAD_DIR, lambda: DATA_DIR))

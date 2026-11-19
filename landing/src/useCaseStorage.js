@@ -73,6 +73,11 @@ export function useCaseStorage(enabled = true) {
   };
 
   const replaceCase = item => setCases(current => current.map(saved => saved.id === item.id ? item : saved));
+  const changeReference = async (caseId, payload) => {
+    const saved = await request(`/cases/${caseId}/reference`, jsonOptions("PUT", payload));
+    replaceCase(saved);
+    return saved;
+  };
   const updateCase = async (caseId, payload) => {
     const { title, description, language, details } = payload;
     const updated = await request(`/cases/${caseId}`, jsonOptions("PUT", { title, description, language, details }));
@@ -98,8 +103,10 @@ export function useCaseStorage(enabled = true) {
           body.append("file", file);
           const document = await request(`/cases/${caseId}/documents`, { method: "POST", body });
           // Keep each successful upload visible even if a later file fails.
-          setCases(current => current.map(item => item.id === caseId ? { ...item, documents: [...item.documents, document], activities: [document.activity, ...(item.activities || [])].filter(Boolean) } : item));
-          results.push({ name: file.name, ok: true });
+          // An e-mail (.eml/.msg) arrives as a PDF of the message plus its attachments as further documents.
+          const added = [document, ...(document.extra_documents || [])];
+          setCases(current => current.map(item => item.id === caseId ? { ...item, documents: [...item.documents, ...added], activities: [...added.map(entry => entry.activity).reverse(), ...(item.activities || [])].filter(Boolean) } : item));
+          results.push({ name: file.name, ok: true, count: added.length, skipped: document.skipped_attachments || [] });
         } catch (error) {
           results.push({ name: file.name, ok: false, status: error.status });
         }
@@ -127,7 +134,7 @@ export function useCaseStorage(enabled = true) {
   };
 
   const applyDraft = draft => setCases(current => current.map(item => item.id === selectedId ? {...item,drafts:item.drafts.map(saved => saved.id === draft.id && (saved.version < draft.version || (saved.version === draft.version && saved.review_revision <= draft.review_revision)) ? draft : saved),activities:[draft.activity,...(item.activities || [])].filter(Boolean)} : item));
-  return { cases, selectedCase, selectCase, loading, loadError, reload, createCase, updateCase, saveTask, uploadDocuments, saveDraft, applyDraft, uploading, savingDraft };
+  return { cases, selectedCase, selectCase, loading, loadError, reload, createCase, updateCase, changeReference, saveTask, uploadDocuments, saveDraft, applyDraft, uploading, savingDraft };
 }
 
 export function letterTemplate(item, language) {

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rechtsassistentin Schimmelpilz</title>
-<meta name="description" content="Lokale KI-Rechtsassistenz für Verbraucher, Unternehmen und Kanzleien: Akten, Recherche mit Fundstellen und bearbeitbare Schriftsätze.">
+<meta name="description" content="Rechtsassistenz für Verbraucher, Unternehmen und Kanzleien: Akten, Fristen, Recherche mit Fundstellen, Kosten und beA-fertige Schriftsätze.">
 <link rel="icon" href="assets/schimmelpilz-mark.webp">
 <link rel="stylesheet" href="assets/fonts.css">
 <style>
@@ -313,6 +313,8 @@ body{background:var(--night);color:var(--ink)}
 summary{color:#fff}
 footer{border-top-color:var(--line)}
 </style>
+<link rel="stylesheet" href="assets/legal-modal.css">
+<script src="assets/legal-modal.js" defer></script>
 </head>
 <body>
 
@@ -343,7 +345,7 @@ footer{border-top-color:var(--line)}
   <div class="vignette"></div>
   <div class="wrap">
     <div>
-      <p class="eyebrow" style="color:var(--gold-hi);opacity:0;animation:fade 1s .1s forwards">Lokale KI · Deutsches Bundesrecht · DE / EN</p>
+      <p class="eyebrow" style="color:var(--gold-hi);opacity:0;animation:fade 1s .1s forwards">KI-Recherche · Deutsches Bundesrecht · DE / EN</p>
       <h1 style="margin-top:18px">
         <span class="line"><span>Rechtsassistentin</span></span>
         <span class="line"><span><em>Schimmelpilz</em></span></span>
@@ -363,7 +365,7 @@ footer{border-top-color:var(--line)}
       <div class="card" id="card"><img src="assets/schimmelpilz-mark.webp" alt="Schimmelpilz ringt mit Justitia vor dem Arbeitsgericht München"></div>
       <div class="chip c1">📎 <b>§ 626 BGB</b> · Fundstelle geprüft</div>
       <div class="chip c2">⚖️ Entwurf: <b>Kündigungsschutzklage</b></div>
-      <div class="chip c3">🔒 Läuft <b>lokal</b></div>
+      <div class="chip c3">📅 Frist <b>mit Vorfrist</b></div>
     </div>
   </div>
   <a class="scroll-cue" href="#courts" aria-label="Weiter scrollen"></a>
@@ -428,9 +430,9 @@ footer{border-top-color:var(--line)}
   <div class="wrap">
     <p class="eyebrow" style="color:var(--gold-hi)">Live-Demo</p>
     <h2 class="h2 reveal" style="margin-top:14px">Antworten mit Fundstellen.<br>Nicht mit Bauchgefühl.</h2>
-    <p class="lead reveal d1">Der lokale KI-Chat recherchiert in deutschem Bundesrecht und veröffentlichten Bundesentscheidungen – und zeigt die Originalpassage gleich mit.</p>
+    <p class="lead reveal d1">Der KI-Chat recherchiert in deutschem Bundesrecht und veröffentlichten Bundesentscheidungen – und zeigt die Originalpassage gleich mit.</p>
     <div class="player reveal d2" id="player">
-      <div class="top"><span>Akte 2026/014 · KI-Chat</span><span class="live"><i></i>LÄUFT LOKAL</span></div>
+      <div class="top"><span>Akte 2026/014 · KI-Chat</span><span class="live"><i></i>LIVE</span></div>
       <div class="body">
         <aside>
           <h4>Akte</h4>
@@ -474,7 +476,17 @@ footer{border-top-color:var(--line)}
         <ul><li>Fundstellen und Originalentscheidungen</li><li>Urteil vs. Beschluss</li><li>Relevanz, Abweichungen, Instanzenzug</li></ul></div>
       <div class="bx reveal"><span class="tag">Rechenprüfung verfügbar</span><h3>Kostenrechnungen prüfen</h3><p>RVG, GKG, FamGKG nachrechnen, Abweichungen markieren, PDF-Prüfberichte erstellen.</p></div>
       <div class="bx reveal d1"><span class="tag">Vorlagen verfügbar</span><h3>Klagen & Anschreiben</h3><p>Vorlagen übernehmen Aktenzeichen, Beteiligte und Sachverhalt. Export als Text, Word oder PDF mit Briefkopf.</p></div>
-      <div class="bx reveal d2"><span class="tag plan">Geplant</span><h3>Welches Gericht ist zuständig?</h3><p>Rechtsweg, sachliche und örtliche Zuständigkeit anhand von Streitgegenstand und Ort untersuchen.</p></div>
+      <div class="bx reveal d2"><span class="tag">Verfügbar</span><h3>Welches Gericht ist zuständig?</h3><p>Gerichtsart nach Rechtsgebiet und Streitwert, örtliches Gericht mit Anschrift – direkt in den Klageentwurf übernommen.</p></div>
+      <div class="bx w3 dark reveal"><span class="tag">Neu</span><h3>Fristen & Kanzleikalender</h3><p>Fristenrechner nach §§ 187 ff. BGB mit Feiertagen je Bundesland, Notfrist und automatischer Vorfrist. Monats-, Wochen- und Listenansicht für alle Akten.</p>
+        <ul><li>Fristenbuch als PDF mit Kontrollspalten</li><li>Export für Outlook und Handy (.ics)</li><li>Wiedervorlagen mit einem Klick</li></ul></div>
+      <div class="bx w3 reveal d1"><span class="tag">Neu</span><h3>beA-fertige Schriftsätze</h3><p>Gespeicherte Schriftsätze als PDF/A mit eingebetteten Schriften und zulässigem Dateinamen. Die Prüfung nach ERVV zeigt vor dem Versand, ob alles passt.</p>
+        <ul><li>Briefkopf der Kanzlei</li><li>Versionen und eigene Freigabe</li><li>Kostenfestsetzungsantrag als Entwurf</li></ul></div>
+      <div class="bx reveal"><span class="tag">Neu</span><h3>Kostenrisiko</h3><p>Was kostet der Prozess bei Verlust, Teilerfolg, Gewinn oder Vergleich? Nach RVG und GKG, auch Arbeitsgericht mit § 12a ArbGG – als PDF für das Mandantengespräch.</p></div>
+      <div class="bx reveal d1"><span class="tag">Neu</span><h3>Abrechnung & Mahnwesen</h3><p>RVG-Rechnungen, Zeiterfassung und Vorschüsse. Offene Posten mit Zahlungserinnerung, Mahnung und letzter Mahnung auf Ihrem Briefkopf.</p></div>
+      <div class="bx reveal d2"><span class="tag">Neu</span><h3>Upload-Link für Mandanten</h3><p>Mandanten senden Unterlagen und Handyfotos ohne Anmeldung, per Link oder QR-Code. Alles landet geprüft im Posteingang der Akte.</p></div>
+      <div class="bx reveal"><span class="tag">Neu</span><h3>E-Mails & Formulare</h3><p>Outlook-Mails (.msg, .eml) samt Anhängen in die Akte. Vollmacht, Vergütungshinweis, Datenschutzhinweise und Schweigepflichtentbindung aus den Aktendaten.</p></div>
+      <div class="bx reveal d1"><span class="tag">Neu</span><h3>Notizen & Volltextsuche</h3><p>Telefon- und Gesprächsnotizen mit Wiedervorlage. Eine Suche über Aktendaten, Dokumenttexte, Schriftsätze, Fristen und Notizen.</p></div>
+      <div class="bx reveal d2"><span class="tag">Neu</span><h3>Aufbewahrung & Kollisionsprüfung</h3><p>Kollisionsprüfung bei der Aktenanlage. Aufbewahrungsfristen nach § 50 BRAO, Aktenvernichtung mit Protokoll und verschlüsselte Datensicherung.</p></div>
     </div>
     <div class="stats">
       <div class="stat reveal"><b data-count="6">0</b><span>Gerichte im Praxistest</span></div>
@@ -508,9 +520,9 @@ footer{border-top-color:var(--line)}
   <div class="wrap faq">
     <p class="eyebrow reveal">FAQ</p>
     <h2 class="h2 reveal d1" style="margin:14px 0 30px">Klarheit, bevor Sie starten.</h2>
-    <details class="reveal"><summary>Ersetzt die Assistenz eine Rechtsberatung?</summary><p>Nein. Die lokale KI strukturiert Angaben und bereitet Entwürfe vor. Antworten sind rechtlich nicht geprüft; die technische Quellen- und Verweisprüfung ersetzt keine individuelle anwaltliche Beratung.</p></details>
-    <details class="reveal"><summary>Wo werden meine Unterlagen verarbeitet?</summary><p>Der KI-Chat, die Quellensuche und die OCR laufen lokal. Ausgewählte, zuvor überprüfte PDF/DOCX-Textauszüge werden mit Seiten- oder Abschnittsbezug eingebunden.</p></details>
-    <details class="reveal"><summary>Kann ich auf Deutsch und Englisch arbeiten?</summary><p>Ja. Deutsch und Englisch sind die Arbeitssprachen. Der lokale Quellenkatalog enthält deutsches Bundesrecht; EU-Quellen sind separat verlinkt.</p></details>
+    <details class="reveal"><summary>Ersetzt die Assistenz eine Rechtsberatung?</summary><p>Nein. Die KI strukturiert Angaben und bereitet Entwürfe vor. Antworten sind rechtlich nicht geprüft; die technische Quellen- und Verweisprüfung ersetzt keine individuelle anwaltliche Beratung.</p></details>
+    <details class="reveal"><summary>Wo werden meine Unterlagen verarbeitet?</summary><p>Akten, Entwürfe und Dateien werden auf unserem Server gespeichert; Quellensuche und Texterkennung (OCR) laufen dort. Für eine KI-Recherche werden Ihre Frage, die Aktenangaben und die von Ihnen ausgewählten Dokumentauszüge an Google (Gemini API) übermittelt. Einzelheiten stehen in der Datenschutzerklärung. Fristen, Kosten, Formulare und PDFs arbeiten ohne KI.</p></details>
+    <details class="reveal"><summary>Kann ich auf Deutsch und Englisch arbeiten?</summary><p>Ja. Deutsch und Englisch sind die Arbeitssprachen. Der Quellenkatalog enthält deutsches Bundesrecht; EU-Quellen sind separat verlinkt.</p></details>
   </div>
 </section>
 

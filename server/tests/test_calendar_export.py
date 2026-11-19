@@ -49,3 +49,32 @@ class CalendarApiTests(test_case_tools.CaseToolsTests):
 
 if __name__=='__main__':
     unittest.main()
+
+
+class DeadlineBookTests(test_case_tools.CaseToolsTests):
+    test_archive_restore_version_and_persistence=None
+    test_export_originals_versions_hashes_and_isolation=None
+    test_export_fails_for_missing_or_unsafe_original=None
+
+    def test_deadline_book_lists_open_deadlines_with_pre_deadline(self):
+        import io
+        from pypdf import PdfReader
+        with TestClient(api.app) as owner,TestClient(api.app) as other:
+            self.login(owner);self.login(other,'book-foreign@example.invalid')
+            case=self.case(owner)
+            owner.post(f'/api/cases/{case["id"]}/tasks',json={'title':'Berufungsfrist','due_on':'2026-12-14','kind':'notfrist','pre_days':7})
+            owner.post(f'/api/cases/{case["id"]}/tasks',json={'title':'Stellungnahme','due_on':'2026-12-10','kind':'deadline'})
+            owner.post(f'/api/cases/{case["id"]}/tasks',json={'title':'Mandant anrufen','due_on':'2026-12-11'})
+            owner.post(f'/api/cases/{case["id"]}/tasks',json={'title':'Ausserhalb','due_on':'2027-06-01','kind':'deadline'})
+            response=owner.get('/api/tasks/deadline-book.pdf?start=2026-12-01&end=2026-12-31')
+            self.assertEqual(response.status_code,200)
+            text=''.join(page.extract_text() for page in PdfReader(io.BytesIO(response.content)).pages)
+            self.assertIn('Fristenbuch',text)
+            self.assertIn('Berufungsfrist',text);self.assertIn('NOTFRIST',text)
+            self.assertIn('Mo 07.12.2026',text)          # Vorfrist 7 days before Mon 14.12.
+            self.assertLess(text.index('Stellungnahme'),text.index('Berufungsfrist'))
+            self.assertNotIn('Mandant anrufen',text);self.assertNotIn('Ausserhalb',text)
+            self.assertIn('2 offene Fristen',text)
+            self.assertEqual(owner.get('/api/tasks/deadline-book.pdf?start=2026-12-31&end=2026-12-01').status_code,422)
+            foreign=''.join(page.extract_text() for page in PdfReader(io.BytesIO(other.get('/api/tasks/deadline-book.pdf?start=2026-12-01&end=2026-12-31').content)).pages)
+            self.assertNotIn('Berufungsfrist',foreign)

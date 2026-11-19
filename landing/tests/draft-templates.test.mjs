@@ -7,7 +7,7 @@ const matter = { reference: "24/2026-MÜ", title: "Synthetischer Test", descript
 test("claim uses file facts but requires actual relief and verified grounds", () => {
   const text = documentTemplate(matter, "de", "claim", "Testgericht\nTeststraße 2");
   assert.match(text, /Unser Aktenzeichen: 24\/2026-MÜ/);
-  assert.match(text, /Gericht \/ Behörde: 12 O 123\/26/);
+  assert.match(text, /Az\. des Gerichts: 12 O 123\/26/);
   assert.match(text, /Die konkreten Falldaten stehen hier/);
   assert.match(text, /\[Bestimmten Klageantrag/);
   assert.match(text, /Streitwert ist nicht automatisch die Klageforderung/);

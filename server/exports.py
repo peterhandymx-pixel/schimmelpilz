@@ -14,6 +14,7 @@ from typing import Literal
 
 from docx import Document
 from docx.shared import Mm, Pt
+from . import pdf_fonts
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from openpyxl import Workbook
@@ -40,9 +41,9 @@ ISO_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 STATUS = {'de': {'active': 'In Bearbeitung', 'waiting': 'Wartet', 'closed': 'Abgeschlossen'},
           'en': {'active': 'In progress', 'waiting': 'Waiting', 'closed': 'Closed'}}
 AREA = {'de': {'general': 'Allgemein', 'consumer': 'Verbraucherrecht', 'tenancy': 'Mietrecht', 'contract': 'Vertragsrecht', 'commercial': 'Handelsrecht',
-               'employment': 'Arbeitsrecht', 'family': 'Familienrecht', 'social': 'Sozialrecht', 'administrative': 'Verwaltungsrecht', 'criminal': 'Strafrecht'},
+               'employment': 'Arbeitsrecht', 'family': 'Familienrecht', 'social': 'Sozialrecht', 'administrative': 'Verwaltungsrecht', 'tax': 'Steuerrecht', 'criminal': 'Strafrecht'},
         'en': {'general': 'General', 'consumer': 'Consumer law', 'tenancy': 'Tenancy law', 'contract': 'Contract law', 'commercial': 'Commercial law',
-               'employment': 'Employment law', 'family': 'Family law', 'social': 'Social law', 'administrative': 'Administrative law', 'criminal': 'Criminal law'}}
+               'employment': 'Employment law', 'family': 'Family law', 'social': 'Social law', 'administrative': 'Administrative law', 'tax': 'Tax law', 'criminal': 'Criminal law'}}
 KIND = {'de': {'client': 'Mandant', 'opponent': 'Gegner', 'law_firm': 'Anwaltskanzlei', 'court': 'Gericht', 'authority': 'Behörde', 'company': 'Unternehmen', 'person': 'Privatperson', 'other': 'Sonstige'},
         'en': {'client': 'Client', 'opponent': 'Opponent', 'law_firm': 'Law firm', 'court': 'Court', 'authority': 'Authority', 'company': 'Company', 'person': 'Individual', 'other': 'Other'}}
 ROLE = {'de': {'client': 'Mandant / eigene Partei', 'opponent': 'Gegenseite', 'counsel': 'Rechtsvertretung', 'court': 'Gericht', 'authority': 'Behörde', 'other': 'Weitere Beteiligte'},
@@ -140,14 +141,14 @@ def table_response(fmt, name, sheet, headers, rows, de):
 
 def blocks_pdf(title, blocks):
     """blocks: (style, text) with style one of Title, Heading2, Heading3, BodyText."""
-    styles, output = getSampleStyleSheet(), io.BytesIO()
+    styles, output = pdf_fonts.embedded_styles(getSampleStyleSheet()), io.BytesIO()
     head = Table([[Image(str(LOGO), 62 * mm, 62 * mm * LOGO_RATIO)]], colWidths=[None], hAlign='LEFT')
-    head.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('LEFTPADDING', (0, 0), (-1, -1), 0), ('LINEBELOW', (0, 0), (-1, 0), 0.6, '#d9d2c4'), ('BOTTOMPADDING', (0, 0), (-1, -1), 6)]))
+    head.setStyle(TableStyle([('FONTNAME', (0, 0), (-1, -1), pdf_fonts.BODY), ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('LEFTPADDING', (0, 0), (-1, -1), 0), ('LINEBELOW', (0, 0), (-1, 0), 0.6, '#d9d2c4'), ('BOTTOMPADDING', (0, 0), (-1, -1), 6)]))
     story = [head, Spacer(1, 10)]
     for style, text in blocks:
         story.append(Paragraph(escape(str(text)).replace('\n', '<br/>'), styles[style]))
         story.append(Spacer(1, 6))
-    SimpleDocTemplate(output, title=title).build(story)
+    SimpleDocTemplate(output, title=title, initialFontName=pdf_fonts.BODY).build(story)
     return output.getvalue()
 
 

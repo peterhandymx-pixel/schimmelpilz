@@ -1,0 +1,22 @@
+[
+  {"id": "gdb-ausland", "area": "social", "question": "Kann einem der GdB auch abgesprochen werden, wenn man ins Ausland zieht?",
+   "norms_any": ["§ 30 SGB I", "§ 2 SGB IX", "§ 152 SGB IX", "§ 48 SGB X"], "answer_all": ["Wohnsitz"], "answer_none": [" AO"]},
+  {"id": "schimmel-minderung", "area": "tenancy", "question": "In meiner Mietwohnung ist Schimmel. Darf ich die Miete mindern und muss ich vorher eine Frist setzen?",
+   "norms_any": ["§ 536 BGB"], "answer_all": ["§ 536"], "answer_none": []},
+  {"id": "kaution", "area": "tenancy", "question": "Der Vermieter zahlt die Mietkaution nach dem Auszug nicht zurück. Was kann ich tun?",
+   "norms_any": ["§ 551 BGB"], "answer_all": ["Kaution"], "answer_none": []},
+  {"id": "widerruf-online", "area": "consumer", "question": "Ich habe online einen Fernseher gekauft. Wie lange kann ich den Kauf widerrufen?",
+   "norms_any": ["§ 355 BGB", "§ 312g BGB", "§ 356 BGB"], "answer_all": ["14 Tage"], "answer_none": []},
+  {"id": "kuendigung-krank", "area": "employment", "question": "Darf mein Arbeitgeber mir kündigen, während ich krankgeschrieben bin, und bis wann muss ich mich wehren?",
+   "norms_any": ["§ 1 KSchG", "§ 4 KSchG"], "answer_all": ["drei Wochen"], "answer_none": []},
+  {"id": "widerspruch-sozial", "area": "social", "question": "Bis wann muss ich Widerspruch gegen einen Bescheid des Jobcenters einlegen?",
+   "norms_any": ["§ 84 SGG", "§ 66 SGG"], "answer_all": ["Monat"], "answer_none": [" AO"]},
+  {"id": "einspruch-steuer", "area": "tax", "question": "Wie lange habe ich Zeit, Einspruch gegen meinen Steuerbescheid einzulegen?",
+   "norms_any": ["§ 355 AO", "§ 347 AO"], "answer_all": ["Monat"], "answer_none": ["SGG"]},
+  {"id": "verzugszins-b2b", "area": "contract", "question": "Welche Verzugszinsen kann ich als Unternehmer von einem anderen Unternehmen verlangen?",
+   "norms_any": ["§ 288 BGB"], "answer_all": ["9 Prozentpunkte|neun Prozentpunkte"], "answer_none": []},
+  {"id": "bussgeld-einspruch", "area": "administrative", "question": "Ich habe einen Bußgeldbescheid wegen zu schnellen Fahrens bekommen. Wie lange kann ich Einspruch einlegen?",
+   "norms_any": ["§ 67 OWiG"], "answer_all": ["zwei Wochen"], "answer_none": []},
+  {"id": "mieterhoehung", "area": "tenancy", "question": "Mein Vermieter verlangt eine Mieterhöhung auf die ortsübliche Vergleichsmiete. Wie lange habe ich Zeit, zuzustimmen?",
+   "norms_any": ["§ 558 BGB", "§ 558b BGB"], "answer_all": ["Kalendermonat|Monat"], "answer_none": []}
+]

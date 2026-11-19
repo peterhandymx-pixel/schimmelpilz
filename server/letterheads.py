@@ -80,7 +80,9 @@ def compose_pdf(body, template, layout):
     font_size = layout.get('font_size', 11)
     style = ParagraphStyle('Body', fontName='SchimmelpilzBody', fontSize=font_size, leading=font_size * 1.45, spaceAfter=0, splitLongWords=True)
     overlay = io.BytesIO()
-    document = SimpleDocTemplate(overlay, pagesize=size, leftMargin=left, rightMargin=right, topMargin=top, bottomMargin=bottom, title='Schimmelpilz Entwurf')
+    document = SimpleDocTemplate(overlay, pagesize=size, leftMargin=left, rightMargin=right, topMargin=top, bottomMargin=bottom, title='Schimmelpilz Entwurf',
+                                # Start every page with the embedded font, so no unembedded Helvetica ends up in the PDF (§ 2 ERVV).
+                                initialFontName='SchimmelpilzBody')
     paragraphs = []
     for line in body.replace('\r\n', '\n').replace('\r', '\n').split('\n'):
         if line:

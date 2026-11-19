@@ -153,3 +153,19 @@ class DocumentResearchTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PhotoPreparationTests(unittest.TestCase):
+    def test_small_photo_is_upscaled_and_flattened(self):
+        from PIL import Image, ImageDraw
+        from server import document_ocr
+        photo = Image.new('RGB', (400, 560), (205, 200, 185))
+        draw = ImageDraw.Draw(photo)
+        draw.rectangle((0, 0, 200, 560), fill=(150, 145, 130))  # shadow over half the page
+        draw.text((20, 40), 'Sehr geehrte Damen und Herren', fill=(30, 30, 30))
+        prepared = document_ocr.prepare_photo(photo)
+        self.assertEqual(max(prepared.size), document_ocr.PHOTO_TARGET)
+        self.assertEqual(prepared.mode, 'L')
+        # The shadowed and the bright half end up equally white once the shadow is removed.
+        left, right = prepared.getpixel((300, 1500)), prepared.getpixel((1500, 1500))
+        self.assertLess(abs(left - right), 25)

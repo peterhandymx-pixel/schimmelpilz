@@ -3,6 +3,7 @@ import { IconDownload, IconEdit, IconFileText, IconFolderOpen, IconMailForward, 
 import { API_BASE } from "./useCaseStorage.js";
 import { reviewLabels } from "./DraftReview.jsx";
 import { draftSubject } from "./draftTemplates.js";
+import { DocumentViewer } from "./DocumentViewer.jsx";
 import { dateLabel, matches } from "./workbench.js";
 
 const KINDS = {
@@ -14,6 +15,7 @@ const KINDS = {
 export function EAkte({ cases, selectedCase, lang, query = "", open, onSelectCase, onFile, uploading, notice, onDraft, onRefresh }) {
   const de = lang === "de";
   const [filter, setFilter] = useState("all");
+  const [viewing, setViewing] = useState(null);
   const active = cases.filter(item => !item.archived_at);
   const current = selectedCase && cases.some(item => item.id === selectedCase.id) ? selectedCase : active[0] || cases[0] || null;
   // The upload button files into the selected case, so the case shown here must also be the selected one.
@@ -40,6 +42,7 @@ export function EAkte({ cases, selectedCase, lang, query = "", open, onSelectCas
       <span>{de ? `${sheets.length} Blatt in dieser Akte` : `${sheets.length} sheets in this case`}</span>
     </div>
     {notice && <p className="storage-notice" role="status">{notice}</p>}
+    {viewing && <DocumentViewer key={viewing.id} lang={lang} caseId={current.id} document={viewing} onClose={() => setViewing(null)} />}
     {shown.length ? <div className="desk-table-scroll"><table className="desk-table eakte-table"><thead><tr><th>{de ? "Bl." : "No."}</th><th>{de ? "Datum" : "Date"}</th><th>{de ? "Art" : "Type"}</th><th>{de ? "Bezeichnung" : "Title"}</th><th>{de ? "Aktion" : "Action"}</th></tr></thead>
       <tbody>{shown.map(sheet => <tr key={sheet.type + sheet.id}>
         <td className="eakte-no">{sheet.no}</td>
@@ -49,7 +52,7 @@ export function EAkte({ cases, selectedCase, lang, query = "", open, onSelectCas
           ? docState(sheet.doc) && <small>{docState(sheet.doc)}</small>
           : <small>{sheet.draft.recipient ? sheet.draft.recipient.split("\n")[0] + " · " : ""}{reviewLabels[lang][sheet.draft.review_status || "draft"]} · v{sheet.draft.version || 1}</small>}</td>
         <td className="eakte-links">{sheet.type === "in"
-          ? <><a className="desk-link" href={`${API_BASE}/api/cases/${current.id}/documents/${sheet.id}/download`} download><IconDownload size={15} />{de ? "Herunterladen" : "Download"}</a><button className="desk-link" onClick={() => open(current.id, "documents")}>{de ? "Text prüfen" : "Review text"}</button></>
+          ? <><button className="desk-link" onClick={() => setViewing(viewing?.id === sheet.id ? null : sheet.doc)}>{de ? "Ansehen" : "View"}</button><a className="desk-link" href={`${API_BASE}/api/cases/${current.id}/documents/${sheet.id}/download`} download><IconDownload size={15} />{de ? "Herunterladen" : "Download"}</a><button className="desk-link" onClick={() => open(current.id, "documents")}>{de ? "Text prüfen" : "Review text"}</button></>
           : <><button className="desk-link" onClick={() => onDraft(sheet.draft, current)}><IconEdit size={15} />{de ? "Bearbeiten" : "Edit"}</button><a className="desk-link" href={`${API_BASE}/api/cases/${current.id}/drafts/${sheet.id}/pdf`} target="_blank" rel="noreferrer">PDF</a></>}</td>
       </tr>)}</tbody></table></div>
       : <p className="desk-empty">{sheets.length ? (de ? "Nichts in dieser Auswahl." : "Nothing in this selection.") : (de ? "Diese Akte ist noch leer. Laden Sie das erste Dokument hoch oder erstellen Sie einen Schriftsatz." : "This file is still empty. Upload a first document or create a draft.")}</p>}

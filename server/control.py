@@ -16,13 +16,23 @@ def admin_mfa_required():
     return __import__('os').getenv('ADMIN_MFA_REQUIRED','true').lower()!='false'
 
 
+def admin_allowlist():
+    # ADMIN_EMAILS (comma-separated) limits operator powers to these addresses, whatever the is_admin flag says.
+    return {item.strip().lower() for item in __import__('os').getenv('ADMIN_EMAILS','').split(',') if item.strip()}
+
+
+def allowlisted(email):
+    allowed=admin_allowlist()
+    return not allowed or (email or '').strip().lower() in allowed
+
+
 def operator_active(user):
     """Operator powers need an administrator who signed in with a second factor (unless disabled for development)."""
-    return bool(user.get('is_admin')) and (bool(user.get('mfa_enabled')) or not admin_mfa_required())
+    return bool(user.get('is_admin')) and allowlisted(user.get('email')) and (bool(user.get('mfa_enabled')) or not admin_mfa_required())
 
 
 def require_operator(user):
-    if not user.get('is_admin'):raise HTTPException(403,'administrator_required')
+    if not user.get('is_admin') or not allowlisted(user.get('email')):raise HTTPException(403,'administrator_required')
     if not operator_active(user):raise HTTPException(403,'admin_mfa_required')
 
 
@@ -71,8 +81,9 @@ def principal(c,user,request):
         if case_id:
             if case_id not in allowed:raise HTTPException(404,'Case not found')
         elif path=='/api/cases' and request.method=='GET':pass
-        elif path in {'/api/research/status','/api/cost-reviews/calculate','/api/fee-tables/calculate','/api/deadlines/calculate','/api/deadlines/holidays'}:pass
+        elif path in {'/api/research/status','/api/cost-reviews/calculate','/api/fee-tables/calculate','/api/deadlines/calculate','/api/deadlines/holidays','/api/courts/lookup'}:pass
         elif path.startswith('/api/legal/') and request.method=='GET':pass
+        elif path.startswith('/api/dictations'):pass  # the handlers list and open only granted cases
         elif path=='/api/tasks/calendar.ics' and request.query_params.get('case_id') in allowed:pass
         elif path in {'/api/exports/cases.csv','/api/exports/cases.xlsx','/api/exports/tasks.csv','/api/exports/tasks.xlsx'} and request.method=='GET':pass
         elif path.startswith('/api/cost-reviews'):
@@ -82,7 +93,7 @@ def principal(c,user,request):
                 if review:target=review['case_id']
             if target not in allowed:raise HTTPException(403,'case_not_granted')
         else:raise HTTPException(403,'case_scoped_member_use_case_workspace')
-    elif not path.startswith(('/api/cases','/api/contacts','/api/inbox','/api/tasks/','/api/cost-reviews','/api/fee-tables','/api/deadlines/','/api/legal/','/api/research/status','/api/exports/')):
+    elif not path.startswith(('/api/cases','/api/contacts','/api/inbox','/api/tasks/','/api/cost-reviews','/api/fee-tables','/api/deadlines/','/api/legal/','/api/research/status','/api/exports/','/api/courts/','/api/snippets','/api/letter-assistant/','/api/reminders/','/api/dictations')):
         raise HTTPException(403,'personal_account_endpoint')
     owner_row=c.execute('SELECT letterhead_id FROM users WHERE id=?',(owner,)).fetchone()
     return {**user,'id':owner,'actor_id':actor,'workspace_role':member['role'],'allowed_cases':allowed,'letterhead_id':owner_row['letterhead_id']}
@@ -243,6 +254,9 @@ def router(db,require_user,now,system_status=None):
         with db() as c:
             c.execute('BEGIN IMMEDIATE')
             if len(payload.reason.strip())<10:raise HTTPException(422,'Reason required')
+            target=c.execute('SELECT email,is_admin FROM users WHERE id=?',(identifier,)).fetchone()
+            if not target:raise HTTPException(404,'User not found')
+            if payload.is_admin and not target['is_admin'] and not allowlisted(target['email']):raise HTTPException(403,'admin_not_allowlisted')
             result=c.execute('UPDATE users SET disabled=?,is_admin=?,control_version=control_version+1 WHERE id=? AND control_version=?',(payload.disabled,payload.is_admin,identifier,payload.expected_version))
             if not result.rowcount:raise HTTPException(409,'User changed')
             if not c.execute('SELECT 1 FROM users WHERE is_admin=1 AND disabled=0 LIMIT 1').fetchone():raise HTTPException(409,'At least one active administrator is required')

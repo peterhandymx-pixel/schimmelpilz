@@ -23,6 +23,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 #film{position:fixed;inset:0;overflow:hidden;background:var(--night)}
 #film .shot{position:absolute;inset:0;opacity:0;will-change:transform,opacity;background-size:cover;background-repeat:no-repeat}
+#film .team{position:absolute;right:0;bottom:0;width:50vw;aspect-ratio:1161/775;container-type:inline-size}
+#film .team img{display:block;width:100%;height:100%}
+@media (max-width:720px){#film .team{bottom:auto}#film .team img{-webkit-mask-image:linear-gradient(#000 72%,transparent);mask-image:linear-gradient(#000 72%,transparent)}}
+#film .shot-label{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;padding:.7cqw 1.8cqw .8cqw;border:1.5px solid var(--gold-hi);border-radius:1cqw;background:rgba(3,34,27,.9);box-shadow:0 6px 18px rgba(0,0,0,.45);white-space:nowrap;line-height:1.15}
+#film .shot-label b{font-family:var(--serif);font-weight:400;font-size:clamp(11px,2.75cqw,30px);color:#f3e2c2}
+#film .shot-label small{font-size:clamp(9px,1.8cqw,19px);color:var(--gold-hi)}
+
 #film::after{content:"";position:absolute;inset:0;z-index:5;pointer-events:none;background:radial-gradient(ellipse at center,transparent 52%,rgba(2,20,16,.62)),linear-gradient(180deg,rgba(2,24,19,.5),transparent 24%,transparent 64%,rgba(2,24,19,.6))}
 #dust{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 #ai{position:fixed;z-index:29;right:14px;bottom:56px;font-size:12px;color:var(--muted);text-shadow:0 1px 6px #000}
@@ -166,6 +173,8 @@ body.nogl #fallback{display:block;max-width:760px;margin:0 auto;padding:110px 20
 #fallback article{padding:22px 0;border-bottom:1px solid var(--line)}
 #fallback h2{font-family:var(--serif);font-weight:400;font-size:28px}
 </style>
+<link rel="stylesheet" href="assets/legal-modal.css">
+<script src="assets/legal-modal.js" defer></script>
 </head>
 <body>
 
@@ -222,6 +231,8 @@ body.nogl #fallback{display:block;max-width:760px;margin:0 auto;padding:110px 20
   </div>
   <p class="lead">Für alle Rechtsgebiete:</p>
   <ul class="areas"><li>Kündigungsschutz</li><li>Arbeitsrecht</li><li>Sozialrecht</li><li>Zivilrecht</li><li>Mietrecht</li><li>Vertragsrecht</li><li>Verbraucherrecht</li><li>Familienrecht</li><li>Handelsrecht</li><li>Verwaltungsrecht</li><li>Strafrecht</li></ul>
+  <p class="lead">Außerdem in Ihrer Akte:</p>
+  <ul class="areas"><li>Fristen &amp; Kalender</li><li>Fristenbuch</li><li>beA-fertige PDFs</li><li>Kostenrisiko</li><li>Kostenfestsetzung</li><li>Rechnungen &amp; Mahnungen</li><li>Upload-Link für Mandanten</li><li>Outlook-E-Mails</li><li>Vollmacht &amp; Formulare</li><li>Gesprächsnotizen</li><li>Volltextsuche</li><li>Aufbewahrung nach § 50 BRAO</li></ul>
   <small>Preise pro Inhaber-Arbeitsbereich / Monat. Die Assistenz ersetzt keine individuelle anwaltliche Beratung; Antworten sind rechtlich nicht geprüft. Die Bilder sind KI-generiert oder KI-bearbeitet und zeigen nicht das echte Gebäude; keine Verbindung zum Arbeitsgericht München.</small>
 </aside>
 
@@ -240,32 +251,32 @@ const STOPS = [
   { nav: "Vorplatz", stn: "Station 1 · Vorplatz", title: "Der Brief ist da.",
     text: "Kündigung, Bescheid oder Klage: Atmen Sie durch. Oft läuft jetzt eine kurze Frist, etwa drei Wochen für die Kündigungsschutzklage oder ein Monat für den Widerspruch gegen einen Bescheid. Legen wir zuerst Ihre Akte an: wer, was, wann.",
     cites: ["§ 4 Satz 1 KSchG", "§ 84 Abs. 1 SGG"],
-    feats: [["Akte anlegen, Aktenzeichen führen", "Verfügbar"], ["Frist tragen Sie derzeit selbst ein", "Manuell"]] },
+    feats: [["Akte anlegen, Aktenzeichen führen", "Verfügbar"], ["Fristenrechner mit Feiertagen und Vorfrist", "Verfügbar"], ["Kanzleikalender und Fristenbuch (PDF)", "Neu"]] },
   { nav: "Pforte", stn: "Station 2 · Pforte", title: "Bin ich hier richtig?",
     text: "Streit aus dem Arbeitsverhältnis gehört meist vors Arbeitsgericht, Sozialleistungen vors Sozialgericht, Miete und Verträge vors Amts- oder Landgericht. Ich zeige Ihnen die Normen mit Fundstelle. Die Zuständigkeit im Einzelfall prüfen Sie noch selbst.",
     cites: ["§ 2 ArbGG", "§ 51 SGG", "§§ 23, 71 GVG"],
-    feats: [["Gesetze & Normen mit Quellenbezug", "Verfügbar"], ["Automatische Zuständigkeitsprüfung", "Geplant", 1]] },
+    feats: [["Gesetze & Normen mit Quellenbezug", "Verfügbar"], ["Zuständiges Gericht mit Anschrift", "Verfügbar"], ["Kollisionsprüfung bei der Aktenanlage", "Verfügbar"]] },
   { nav: "Rechtsantragstelle", stn: "Station 3 · Rechtsantragstelle", title: "Die Klage auf den Weg bringen.",
     text: "Hier können Sie Ihre Klage aufnehmen lassen. Mit dem Entwurf aus Ihrer Akte kommen Sie vorbereitet: Beteiligte, Sachverhalt und Ziel stehen schon drin, fehlende Angaben sind als Platzhalter markiert.",
     cites: ["§ 46 Abs. 2 ArbGG", "§ 496 ZPO", "§ 90 SGG"],
-    feats: [["Klage- und Antragsentwürfe", "Verfügbar"], ["Export als Text, Word oder PDF", "Verfügbar"]] },
+    feats: [["Klage- und Antragsentwürfe", "Verfügbar"], ["Export als Text, Word oder PDF mit Briefkopf", "Verfügbar"], ["Vollmacht und Mandantenformulare", "Neu"]] },
   { nav: "Flur", stn: "Station 4 · Flur vor den Sälen", title: "Warten. Und Ordnung schaffen.",
     text: "Bescheide, Verträge, Schreiben der Gegenseite: alles an einem Ort. Scans liest die lokale OCR ein, den Text kontrollieren Sie. So finden Sie im Termin jede Seite sofort.",
     cites: ["PDF", "DOCX", "PNG / JPG"],
-    feats: [["Dateiablage mit überprüfbaren Texten", "Verfügbar"], ["Lokale OCR mit Textkontrolle", "Verfügbar"]] },
+    feats: [["Dateiablage mit Volltextsuche und lokaler OCR", "Verfügbar"], ["E-Mails aus Outlook samt Anhängen", "Neu"], ["Upload-Link und QR-Code für Mandanten", "Neu"]] },
   { nav: "Güteverhandlung", stn: "Station 5 · Saal, Gütetermin", title: "Die Güteverhandlung.",
     text: "Im Arbeits- und im Zivilprozess wird zuerst eine gütliche Einigung versucht. Vorab suche ich Ihnen veröffentlichte Entscheidungen mit tragenden Gründen und Gegenargumenten heraus, damit Sie wissen, was auf Sie zukommt.",
     cites: ["§ 54 ArbGG", "§ 278 ZPO"],
-    feats: [["Recherche in Bundesentscheidungen", "Verfügbar"], ["Originalpassagen mit Fundstelle", "Verfügbar"]] },
+    feats: [["Recherche in Bundesentscheidungen", "Verfügbar"], ["Originalpassagen mit Fundstelle", "Verfügbar"], ["Kostenrisiko: Vergleich oder Urteil?", "Neu"]] },
   { nav: "Kammertermin", stn: "Station 6 · Saal, Kammertermin", title: "Jetzt entscheidet die Kammer.",
     text: "Scheitert die Güte, verhandelt die Kammer: Vorsitz und zwei ehrenamtliche Richter, so auch beim Sozialgericht. Vertreten kann ich Sie nicht, beim Landgericht brauchen Sie ohnehin eine Anwältin oder einen Anwalt. Schriftsätze und Kostenfragen bereite ich aber mit Ihnen vor.",
     cites: ["§ 16 Abs. 2 ArbGG", "§ 12 SGG", "§ 78 ZPO"],
-    feats: [["Schriftsätze mit Versionen", "Verfügbar"], ["Kostenprüfung RVG / GKG", "Verfügbar"]] },
+    feats: [["Schriftsätze mit Versionen, beA-fertig als PDF/A", "Neu"], ["Kostenfestsetzungsantrag nach RVG / GKG", "Neu"], ["Abrechnung mit Mahnwesen", "Neu"]] },
   { nav: "Ihr Start" },
 ];
 
 /* one photo per stop: `o` is where the camera walks to (a doorway or vanishing point) */
-const SHOTS = [{"f": "assets/photo/vorplatz-gericht.webp", "p": "assets/photo/vorplatz-gericht-hoch.webp", "o": "50% 72%", "b": "50% 20%"}, {"f": "assets/photo/vorplatz.webp", "o": "50% 58%"}, {"f": "assets/photo/pforte.webp", "o": "50% 55%"}, {"f": "assets/photo/rechtsantragstelle.webp", "o": "62% 62%", "z": {"f": "assets/photo/akte-mexiko.webp", "o": "0% 70%", "om": "50% 66%", "s": 1.24}}, {"f": "assets/photo/flur.webp", "o": "52% 58%"}, {"f": "assets/photo/saal-guete.webp", "o": "50% 55%"}, {"f": "assets/photo/saal-kammer.webp", "o": "62% 50%"}, {"f": "assets/photo/ende.webp", "o": "50% 30%"}];
+const SHOTS = [{"f": "assets/photo/vorplatz-gericht.webp", "p": "assets/photo/vorplatz-gericht-hoch.webp", "o": "50% 72%", "b": "50% 20%"}, {"f": "assets/photo/vorplatz.webp", "o": "50% 58%"}, {"f": "assets/photo/pforte.webp", "o": "50% 55%"}, {"f": "assets/photo/rechtsantragstelle.webp", "o": "62% 62%", "z": {"f": "assets/photo/akte-mexiko.webp", "o": "0% 70%", "om": "50% 66%", "s": 1.24}}, {"f": "assets/photo/flur.webp", "o": "52% 58%"}, {"f": "assets/photo/saal-guete.webp", "o": "50% 55%"}, {"f": "assets/photo/kammertermin.webp", "o": "55% 40%", "zm": 0.22}, {"f": "assets/photo/schlussbild.webp", "o": "50% 50%", "labels": [{"x": 36, "y": 66.2, "t": "Der Entwickler", "s": "ausgelernter ReFa"}], "team": "assets/photo/team.webp"}];
 
 const N = STOPS.length;
 const $ = id => document.getElementById(id);
@@ -285,10 +296,32 @@ function fallback() {
 const layers = SHOTS.map(s => {
   const d = document.createElement("div"); d.className = "shot";
   d.style.transformOrigin = s.o; d.style.backgroundPosition = s.b || s.o;
+  // People shown as a cut-out with their name plates: same place and proportions at every screen size.
+  if (s.team) {
+    const t = document.createElement("div"); t.className = "team";
+    t.innerHTML = `<img src="${s.team}" alt="">` + s.labels.map(l => `<span class="shot-label" style="left:${l.x}%;top:${l.y}%"><b>${l.t}</b><small>${l.s}</small></span>`).join("");
+    d.appendChild(t);
+  }
   $("film").appendChild(d); return d;
 });
-const fitShots = () => layers.forEach((d, k) => { const s = SHOTS[k]; d.style.backgroundImage = `url(${s.p && innerWidth < innerHeight ? s.p : s.f})`; });
-fitShots(); addEventListener("resize", fitShots);
+// The cut-out fills the room right of the price card, so faces and name plates never sit behind it.
+function fitTeam(t) {
+  const W = innerWidth, H = innerHeight, cta = $("cta");
+  if (W <= 720) {                                                     // phones: the card sits at the bottom, the group above it
+    const cardTop = H - 8 - cta.offsetHeight, top = 64;
+    const h = Math.max(120, Math.min(W * 775 / 1161, (cardTop - top - 22) / .78));   // the lower name plate sits at 73 %
+    t.style.width = h * 1161 / 775 + "px"; t.style.top = top + "px"; return;
+  }
+  t.style.top = "";
+  const right = parseFloat(getComputedStyle(cta).left) + cta.offsetWidth;
+  const free = (W - right - 110) / (1 - .36);                          // the left name plate sits at 36 % of the group
+  t.style.width = Math.max(300, Math.min(free, H * .8 * 1161 / 775, W * .64)) + "px";
+}
+const fitShots = () => layers.forEach((d, k) => {
+  const s = SHOTS[k]; d.style.backgroundImage = `url(${s.p && innerWidth < innerHeight ? s.p : s.f})`;
+  d.querySelectorAll(".team").forEach(fitTeam);
+});
+fitShots(); addEventListener("resize", fitShots); addEventListener("load", fitShots);   // again once fonts have set the card height
 /* Station 3 pushes in on the case file: a second layer over the same stop */
 const Z = 3, zoomShot = SHOTS[Z].z, close = document.createElement("div");
 const portrait = () => innerWidth < innerHeight;
@@ -317,7 +350,7 @@ function paint(f) {
     if (k === i) {
       l.style.opacity = 1; l.style.zIndex = 1;
       const drift = sstep(0, .36, frac) * .03;
-      l.style.transform = `translate(${x}px,${y}px) scale(${BASE + drift + e * e * .62 + (k === Z ? zp * zp * .9 : 0)})`;
+      l.style.transform = `translate(${x}px,${y}px) scale(${BASE + drift + e * e * (SHOTS[k].zm ?? .62) + (k === Z ? zp * zp * .9 : 0)})`;
     } else if (k === i + 1) {
       l.style.opacity = fade; l.style.zIndex = 2;
       l.style.transform = `translate(${x}px,${y}px) scale(${BASE - .05 * (1 - e)})`;
@@ -430,7 +463,7 @@ function frame(now) {
 }
 
 /* start once every photo is here, so nothing pops in mid-walk */
-Promise.all([...SHOTS, zoomShot, { f: SHOTS[0].p }].map(s => new Promise(r => { const im = new Image(); im.onload = () => r(true); im.onerror = () => r(false); im.src = s.f; })))
+Promise.all([...SHOTS, zoomShot, { f: SHOTS[0].p }, ...SHOTS.filter(s => s.team).map(s => ({ f: s.team }))].map(s => new Promise(r => { const im = new Image(); im.onload = () => r(true); im.onerror = () => r(false); im.src = s.f; })))
   .then(ok => {
     if (!ok.every(Boolean)) return fallback();
     paint(0); showStop(0); $("loader").classList.add("off"); requestAnimationFrame(frame);

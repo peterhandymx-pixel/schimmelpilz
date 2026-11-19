@@ -1,0 +1,21 @@
+/* Impressum / Datenschutz as a frosted-glass window over the page instead of a new page */
+.legal-modal{position:fixed;inset:0;z-index:1000;width:min(760px,calc(100vw - 32px));max-height:min(84vh,860px);margin:auto;padding:0;border:1px solid rgba(217,178,122,.38);border-radius:18px;color:#f1eadc;
+  background:linear-gradient(160deg,rgba(255,255,255,.13),rgba(255,255,255,.04)),rgba(3,32,26,.52);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);
+  box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.18);overflow:hidden}
+.legal-modal::backdrop{background:rgba(1,14,11,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.legal-modal[open]{display:flex;flex-direction:column;animation:legal-in .28s ease-out}
+@keyframes legal-in{from{opacity:0;transform:translateY(14px) scale(.985)}}
+.legal-modal header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px 12px;border-bottom:1px solid rgba(217,178,122,.22)}
+.legal-modal header h2{margin:0;font:400 clamp(26px,4vw,34px)/1.1 "Libre Caslon Display",Georgia,serif;color:#f1eadc}
+.legal-modal .legal-close{flex:none;width:40px;height:40px;border-radius:50%;border:1px solid rgba(217,178,122,.55);background:rgba(255,255,255,.06);color:#e8c48d;font-size:22px;line-height:1;cursor:pointer}
+.legal-modal .legal-close:hover,.legal-modal .legal-close:focus-visible{background:rgba(217,178,122,.22);outline:none}
+.legal-modal .legal-body{overflow:auto;padding:6px 26px 26px;font:17px/1.6 "Source Sans 3",system-ui,sans-serif;overscroll-behavior:contain}
+.legal-modal .legal-body h2{font:400 22px/1.25 "Libre Caslon Display",Georgia,serif;color:#e8c48d;margin:24px 0 4px}
+.legal-modal .legal-body p,.legal-modal .legal-body ul,.legal-modal .legal-body address{margin:6px 0;font-style:normal}
+.legal-modal .legal-body a{color:#e8c48d}
+.legal-modal .legal-body small{color:#b9c5bd}
+@media (max-width:600px){.legal-modal{border-radius:14px;max-height:88vh}.legal-modal .legal-body{padding:4px 18px 20px;font-size:16px}}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.legal-modal{background:rgba(3,32,26,.96)}}
+@media (prefers-reduced-motion:reduce){.legal-modal[open]{animation:none}}
+body.legal-open{overflow:hidden}

@@ -40,7 +40,7 @@ def perform(db,now,record_activity,upload_dir,root,case_id,document,user_id,payl
     if path.suffix.lower()!='.pdf' and (payload.start_page!=1 or payload.count!=1):raise HTTPException(422,'Images contain one location')
     if not document_ocr.available():raise HTTPException(503,'ocr_unavailable')
     try:
-        worker=subprocess.run([sys.executable,'-m','server.document_ocr',str(path.resolve()),payload.model_dump_json()],cwd=root,capture_output=True,timeout=115,check=True,creationflags=subprocess.CREATE_NO_WINDOW if sys.platform=='win32' else 0)
+        worker=subprocess.run([sys.executable,'-m','server.document_ocr',str(path.resolve()),payload.model_dump_json()],cwd=root,capture_output=True,timeout=200,check=True,creationflags=subprocess.CREATE_NO_WINDOW if sys.platform=='win32' else 0)
         result=json.loads(worker.stdout)
     except (subprocess.SubprocessError,ValueError,OSError):raise HTTPException(503,'ocr_failed') from None
     if result.get('error_code'):

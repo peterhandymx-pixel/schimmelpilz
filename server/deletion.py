@@ -65,6 +65,10 @@ def strip_case_grants(connection, owner_id, case_id):
 def delete_case(connection, case_id, owner_id):
     documents = [row['id'] for row in connection.execute('SELECT id FROM documents WHERE case_id=?', (case_id,))]
     orphans = delete_documents(connection, documents)
+    # Dictation rows cascade with the case; their audio files are removed with the other uploads.
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dictations'").fetchone():
+        orphans += [row['stored_name'] for row in connection.execute('SELECT stored_name FROM dictations WHERE case_id=?', (case_id,))]
+        connection.execute('DELETE FROM dictations WHERE case_id=?', (case_id,))
     connection.execute('DELETE FROM inbox_corrections WHERE case_id=? OR from_case_id=?', (case_id, case_id))
     connection.execute('UPDATE inbox_documents SET case_id=NULL,document_id=NULL,assigned_at=NULL,version=version+1 WHERE case_id=?', (case_id,))
     reviews = [row['id'] for row in connection.execute('SELECT id FROM cost_reviews WHERE case_id=?', (case_id,))]

@@ -34,6 +34,10 @@ def migrate(c):
     ''')
     if 'completed_at' not in {r[1] for r in c.execute('PRAGMA table_info(billing_orders)')}:
         c.execute('ALTER TABLE billing_orders ADD COLUMN completed_at TEXT')
+    # A reversed booking stays on record (bookkeeping) but no longer counts towards paid access.
+    payment_columns={r[1] for r in c.execute('PRAGMA table_info(billing_payments)')}
+    for name in ('reversed_at','reversed_reason'):
+        if name not in payment_columns:c.execute(f'ALTER TABLE billing_payments ADD COLUMN {name} TEXT')
     # The pilot phase is over: accounts still on free pilot access get the same seven-day trial as new accounts, counted from now.
     start=datetime.now(UTC)
     c.execute(f"UPDATE subscriptions SET plan=(SELECT {AUDIENCE_PLAN} FROM users WHERE users.id=subscriptions.user_id),status='trial',trial_started=?,trial_end=?,updated_at=?,version=version+1 WHERE status='pilot'",
@@ -146,7 +150,7 @@ class PaymentRecord(Plan):
 
 
 def payment_view(row):
-    return {key:row[key] for key in ('id','plan','months','amount_minor','currency','provider','reference','paid_on','period_start','period_end','created_at')}
+    return {key:row[key] for key in ('id','plan','months','amount_minor','currency','provider','reference','paid_on','period_start','period_end','created_at','reversed_at')}
 
 
 def router(db,require_user,now):

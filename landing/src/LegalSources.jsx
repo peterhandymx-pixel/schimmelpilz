@@ -4,9 +4,84 @@ import {request} from './useCaseStorage.js';
 import { DateInput } from "./DateInput";
 export {legalLedger} from './legalLedger.js';
 
-export function CitedAnswer({answer,sources = []}) {
-  const lookup = Object.fromEntries(sources.map(item => [`[${item.citation_id}]`,item]));
-  return <p>{answer.split(/(\[L\d+\])/g).map((part,index) => lookup[part] ? <a key={index} href={lookup[part].url} target="_blank" rel="noreferrer" title={`${lookup[part].title} · ${lookup[part].pinpoint}`}>{part}</a> : part)}</p>;
+// AI answers arrive as light Markdown. Render headings, lists, quotes and **bold** as
+// React elements (never as raw HTML) so the strict CSP stays intact and [L1] links still work.
+function inline(text,lookup,prefix) {
+  return text.split(/(\*\*[^*]+\*\*|\[[LR]\d+\])/g).filter(Boolean).map((part,index) => {
+    const key = `${prefix}-${index}`;
+    if (lookup[part]) return <a key={key} href={lookup[part].url} target="_blank" rel="noreferrer" title={`${lookup[part].title} · ${lookup[part].pinpoint}`}>{part}</a>;
+    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={key}>{inline(part.slice(2,-2),lookup,key)}</strong>;
+    return part;
+  });
+}
+
+export function answerBlocks(answer) {
+  const blocks = [];
+  for (const raw of answer.split('\n')) {
+    const line = raw.trimEnd();
+    if (/^\s*```/.test(line)) continue; // code fences around example letters carry no meaning here
+    const heading = /^#{1,6}\s+(.*)$/.exec(line.trim());
+    const bullet = /^\s*(?:[-*•]|\d+[.)])\s+(.*)$/.exec(line);
+    const quote = /^\s*>\s?(.*)$/.exec(line);
+    const last = blocks[blocks.length - 1];
+    if (!line.trim()) blocks.push({type:'break'});
+    else if (heading) blocks.push({type:'heading',text:heading[1]});
+    else if (bullet) {
+      const ordered = /^\s*\d/.test(line);
+      if (last?.type === 'list' && last.ordered === ordered) last.items.push(bullet[1]);
+      else blocks.push({type:'list',ordered,items:[bullet[1]]});
+    } else if (quote) {
+      if (last?.type === 'quote') last.lines.push(quote[1]); else blocks.push({type:'quote',lines:[quote[1]]});
+    } else if (last?.type === 'text') last.lines.push(line);
+    else blocks.push({type:'text',lines:[line]});
+  }
+  return blocks.filter(block => block.type !== 'break');
+}
+
+export function CitedAnswer({answer,sources = [],caseLaw = []}) {
+  const lookup = Object.fromEntries([...sources.map(item => [`[${item.citation_id}]`,item]),
+    ...caseLaw.map(item => [`[${item.citation_id}]`,{url:item.url,title:`${item.court} ${item.aktenzeichen}`,pinpoint:item.decided}])]);
+  return <div className="research-answer">{answerBlocks(answer).map((block,index) => {
+    const key = `b${index}`;
+    if (block.type === 'heading') return <h4 key={key}>{inline(block.text,lookup,key)}</h4>;
+    if (block.type === 'quote') return <blockquote key={key}>{inline(block.lines.join('\n'),lookup,key)}</blockquote>;
+    if (block.type === 'list') {
+      const List = block.ordered ? 'ol' : 'ul';
+      return <List key={key}>{block.items.map((item,itemIndex) => <li key={itemIndex}>{inline(item,lookup,`${key}-${itemIndex}`)}</li>)}</List>;
+    }
+    return <p key={key}>{inline(block.lines.join('\n'),lookup,key)}</p>;
+  })}</div>;
+}
+
+// The expert working instructions (AI-Skills-German-Law) the answer was written with.
+export function SkillNote({lang = 'de', skill}) {
+  const de = lang === 'de';
+  if (!skill) return null;
+  return <p className="skill-note">{de ? 'Fachanleitung: ' : 'Expert guide: '}<a href={skill.url} target="_blank" rel="noreferrer">{skill.title}</a>
+    <small> · {de ? 'AI-Skills-German-Law, Rechtsstand Oktober 2026 – Arbeitshilfe, keine geprüfte Quelle' : 'AI-Skills-German-Law, legal state October 2026 – working aid, not a verified source'}</small></p>;
+}
+
+// Leading decisions supplied with an answer (from nu:legal), each linked to its full text.
+export function CaseLawList({lang = 'de', items = []}) {
+  const de = lang === 'de';
+  if (!items.length) return null;
+  const attribution = [...new Set(items.map(item => item.attribution).filter(Boolean))];
+  return <details className="case-law-list" open><summary>{de ? 'Passende Rechtsprechung' : 'Relevant case law'} ({items.length})</summary><ul>
+    {items.map(item => <li key={item.aktenzeichen}><a href={item.url} target="_blank" rel="noreferrer"><strong>[{item.citation_id}] {item.court}</strong>, {dateLabel(item.decided, lang)} – {item.aktenzeichen}</a>{item.snippet && <small>{item.snippet}</small>}</li>)}
+  </ul><p className="field-help">{attribution.join(' · ') || 'Quelle: nu:legal – recht.nulegal.eu'}</p></details>;
+}
+
+// Result of checking every statute and docket the AI cited against nu:legal.
+export function CitationCheck({lang = 'de', items = []}) {
+  const de = lang === 'de';
+  if (!items.length) return null;
+  const bad = items.filter(item => item.status !== 'resolved');
+  const label = item => item.status === 'mismatch' ? (de ? `Gericht oder Datum stimmen nicht${item.actual_date ? ` (laut Datenbank: ${item.actual_court || ''} ${dateLabel(item.actual_date, lang)})` : ''}` : 'court or date do not match')
+    : item.status === 'ambiguous' ? (de ? 'mehrdeutig' : 'ambiguous') : (de ? 'nicht gefunden – bitte prüfen' : 'not found – please check');
+  return <div className={`citation-check${bad.length ? ' warn' : ''}`}>
+    <strong>{bad.length ? (de ? `Zitate geprüft: ${bad.length} von ${items.length} auffällig` : `Citations checked: ${bad.length} of ${items.length} flagged`) : (de ? `Zitate geprüft: alle ${items.length} gefunden` : `Citations checked: all ${items.length} found`)}</strong>
+    {bad.length > 0 && <ul>{bad.map(item => <li key={item.citation}>{item.citation}: {label(item)}</li>)}</ul>}
+  </div>;
 }
 
 export function LegalAnswerSources({lang,sources = [],audit = {},report = {}}) {

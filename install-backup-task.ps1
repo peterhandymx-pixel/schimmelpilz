@@ -1,10 +1,12 @@
-param([string]$DataDirectory = 'data', [string]$DestinationDirectory = 'backups/local')
+﻿param([string]$DataDirectory = 'data', [string]$DestinationDirectory = 'backups/local')
 $ErrorActionPreference = 'Stop'
 $projectDirectory = $PSScriptRoot
 $sourcePath = if ([IO.Path]::IsPathRooted($DataDirectory)) { [IO.Path]::GetFullPath($DataDirectory) } else { [IO.Path]::GetFullPath((Join-Path $projectDirectory $DataDirectory)) }
 $destinationPath = if ([IO.Path]::IsPathRooted($DestinationDirectory)) { [IO.Path]::GetFullPath($DestinationDirectory) } else { [IO.Path]::GetFullPath((Join-Path $projectDirectory $DestinationDirectory)) }
 $taskIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$identifier = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($sourcePath.ToLowerInvariant()))).Substring(0,12)
+# Works in Windows PowerShell 5.1 and PowerShell 7 (same upper-case hex as before, so existing task names stay valid).
+$hashBytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($sourcePath.ToLowerInvariant()))
+$identifier = (($hashBytes | ForEach-Object { $_.ToString('X2') }) -join '').Substring(0,12)
 $taskName = "Schimmelpilz-Backup-$identifier"
 $scriptPath = Join-Path $projectDirectory 'backup-task.ps1'
 $runtimePowerShell = Join-Path $PSHOME 'pwsh.exe'

@@ -20,6 +20,8 @@ GII = 'https://www.gesetze-im-internet.de'
 RII = 'https://www.rechtsprechung-im-internet.de'
 LAWS = {'bgb':'BGB','bgbeg':'EGBGB','zpo':'ZPO','gvg':'GVG','hgb':'HGB','gmbhg':'GmbHG','inso':'InsO','kschg':'KSchG','burlg':'BUrlG','arbgg':'ArbGG','famfg':'FamFG','vwgo':'VwGO','sgg':'SGG','stgb':'StGB','stpo':'StPO','vwvfg':'VwVfG','rvg':'RVG','gkg_2004':'GKG','famgkg':'FamGKG','gg':'GG','sgb_1':'SGB I','sgb_2':'SGB II','sgb_10':'SGB X'}
 LAWS.update({'uwg_2004':'UWG','uklag':'UKlaG','prodhaftg':'ProdHaftG','bdsg_2018':'BDSG','tzbfg':'TzBfG','milog':'MiLoG','betrvg':'BetrVG','arbzg':'ArbZG','entgfg':'EntgFG','zvg':'ZVG','estg':'EStG','ustg_1980':'UStG','ao_1977':'AO'})
+# Social law in full (benefits, disability, care, pensions) and frequent everyday statutes.
+LAWS.update({'sgb_3':'SGB III','sgb_4':'SGB IV','sgb_5':'SGB V','sgb_6':'SGB VI','sgb_7':'SGB VII','sgb_8':'SGB VIII','sgb_9_2018':'SGB IX','sgb_11':'SGB XI','sgb_12':'SGB XII','sgb_14':'SGB XIV','versmedv':'VersMedV','beeg':'BEEG','bkgg_1996':'BKGG','wogg':'WoGG','baf_g':'BAföG','aufenthg_2004':'AufenthG','owig_1968':'OWiG','stvg':'StVG','stvo_2013':'StVO','woeigg':'WEG','betrkv':'BetrKV','vvg_2008':'VVG','agg':'AGG'})
 SYNC_LOCK = threading.Lock()
 FETCH_LOCK = threading.Lock()
 PROGRESS_LOCK = threading.Lock()
@@ -98,7 +100,8 @@ def parse_law(data, path):
     first = root.find('norm/metadaten')
     if first is None:
         raise ValueError('missing_metadata')
-    abbreviation = field(first, 'jurabk') or LAWS[path]
+    # The usual citation form (SGB IX, WEG) instead of the register code (SGB 9 2018, WoEigG), so lookups and citations match.
+    abbreviation = LAWS[path] or field(first, 'jurabk')
     version = '; '.join(words(item) for item in first.findall('standangabe/standkommentar'))
     full_title = field(first, 'langue')
     rows = []
@@ -293,6 +296,130 @@ def search(query, kind='all', limit=15, court='', date_from='', date_to='', law=
     normalized=re.sub(r'\W+','',query.lower())
     results.sort(key=lambda item:0 if re.sub(r'\W+','',item['title'].split(' · ')[0].lower()) in normalized else 1)
     return results
+
+
+# Automatic retrieval for free-text questions. Lay questions rarely use statute wording,
+# so filler words are dropped, words are matched by stem and common everyday terms are
+# expanded to the vocabulary of statute headings (e.g. Schimmel -> Mangel, Mietminderung).
+QUESTION_STOPWORDS = set('''der die das den dem des ein eine einer eines einem einen und oder aber
+wenn weil dass ob wie was wer wo wann warum wegen mit ohne für fuer von vom zu zum zur
+im in ins an am auf aus bei bis nach über ueber unter um durch gegen seit
+ich du er sie es wir ihr mein meine meiner meinem meinen mir mich dir dich sich
+sein seine ihre ihren ihrem ist sind war waren hat habe haben hatte wird werden wurde
+kann können koennen darf dürfen duerfen muss müssen muessen soll sollen will wollen
+nicht kein keine auch noch schon nur sehr so als da dann denn doch
+eur euro jetzt bitte welche welcher welches gilt gibt mehr weniger wochen'''.split())
+QUESTION_SYNONYMS = {
+    'schimmel':['mangel','mietminderung'],'feucht':['mangel'],'kaputt':['mangel'],
+    'defekt':['mangel','mängeln'],'heizung':['mangel','mietminderung'],
+    'mindern':['minderung','mietminderung'],'minderung':['mietminderung'],
+    'kaution':['mietsicherheit','sicherheitsleistung'],
+    'eigenbedarf':['berechtigte','interessen','ordentliche','kündigung','vermieters'],
+    'kündigungsfrist':['kündigungsfristen','fristen','ordentlichen','kündigung'],
+    'erhöhen':['mieterhöhung','vergleichsmiete'],'fristlos':['außerordentliche','wichtigem','grund'],
+    'gewährleistung':['rechte','käufers','mängeln'],'widerrufen':['widerrufsrecht'],'widerruf':['widerrufsrecht'],
+    'verjährt':['verjährungsfrist','regelmäßige'],'verjährung':['verjährungsfrist'],
+    'mietwohnung':['wohnraum','mietverhältnis'],'wohnung':['wohnraum','mietverhältnis'],
+    'vermieter':['vermieters'],'arbeitgeber':['dienstverhältnis','arbeitsverhältnis'],
+    'gekauft':['käufers'],'gekaufte':['käufers'],'online':['fernabsatzverträgen'],
+    'gekündigt':['kündigung','kündigungsschutz'],'kündigt':['kündigung'],'chef':['arbeitgeber'],'entlassen':['kündigung','kündigungsschutz'],
+    'anwaltsgebühr':['rechtsanwaltsvergütung','gebühren','rvg'],'anwaltskosten':['rechtsanwaltsvergütung','gebühren','rvg'],'anwaltsrechnung':['rechtsanwaltsvergütung','rvg'],
+    'abgemahnt':['abmahnung'],'mahnbescheid':['mahnverfahren'],'inkasso':['verzug','mahnung'],'bußgeld':['ordnungswidrigkeit'],'geblitzt':['ordnungswidrigkeit'],
+    'nebenkosten':['betriebskosten'],'nebenkostenabrechnung':['betriebskostenabrechnung'],
+}
+# Everyday situations whose governing provisions no word match finds reliably:
+# (all patterns must occur in the question) -> provisions put first, in this order.
+QUESTION_TOPICS = [
+    ((r'online|internet|onlineshop|webshop|fernabsatz|bestell|versand|paket|telefon', r'widerruf|zur(ü|ue)ck|retour|r(ü|ue)ckgabe|r(ü|ue)cksend'),
+     [('312g','BGB'),('355','BGB'),('356','BGB'),('357','BGB')]),
+    ((r'widerrufsfrist|widerruf\w*\s.*frist|frist\w*\s.*widerruf',), [('355','BGB'),('356','BGB')]),
+    ((r'schimmel|feucht|heizung\w*\s.*(kalt|aus|defekt|kaputt)',), [('536','BGB'),('536c','BGB'),('535','BGB')]),
+    ((r'kaution|mietsicherheit',), [('551','BGB')]),
+]
+QUESTION_SUFFIXES = ('ungen','ern','en','es','er','em','e','s','n')
+LAW_NAMES = {part for name in LAWS.values() for part in name.lower().split()}
+CITATION = re.compile(r'(?:§+\s*)?(\d+[a-z]?)\s+(' + '|'.join(sorted({re.escape(name) for name in LAWS.values()},key=len,reverse=True)) + r')\b')
+
+
+def _fold(word):
+    # Mirrors the index tokenizer (remove_diacritics): umlauts lose their dots, ß stays.
+    return word.replace('ä','a').replace('ö','o').replace('ü','u')
+
+
+def _stem(word):
+    for suffix in QUESTION_SUFFIXES:
+        if word.endswith(suffix) and len(word)-len(suffix) >= 4:
+            return word[:-len(suffix)]
+    return word
+
+
+def everyday_keywords(question):
+    """Words of the question that are in the fixed legal vocabulary above; never names or facts."""
+    words = re.findall(r'[^\W\d_]+', question.lower(), re.UNICODE)
+    return [word for word in dict.fromkeys(words) if word in QUESTION_SYNONYMS][:4]
+
+
+def question_terms(question):
+    terms = []
+    for word in re.findall(r'[^\W\d_]+',question.lower(),re.UNICODE):
+        if word in QUESTION_STOPWORDS or word in LAW_NAMES or len(word) < 3:
+            continue
+        for item in [word,*QUESTION_SYNONYMS.get(word,[])]:
+            token = _fold(_stem(item))
+            if token not in terms:
+                terms.append(token)
+    return terms[:24]
+
+
+CIVIL_AREAS = {None, '', 'general', 'consumer', 'tenancy', 'contract', 'commercial', 'family'}
+
+
+def search_question(question, limit=4, area=None, planned=()):
+    """Statutes for a free-text question: planned and cited provisions first, then stem/synonym matches.
+
+    planned are (number, law) pairs suggested by the model; only provisions that exist in the official catalogue are used,
+    so an invented paragraph simply finds nothing."""
+    init_catalogue()
+    picked = []
+    with database() as db:
+        for number,law in planned:
+            if len(picked) >= limit:
+                break
+            row = db.execute("SELECT * FROM entries WHERE kind='law' AND title LIKE ?",(f'§ {number} {law} · %',)).fetchone()
+            if row and '(weggefallen)' not in row['title'] and all(item['key'] != row['key'] for item in picked):
+                picked.append(entry(row))
+        for number,law in CITATION.findall(question):
+            row = db.execute("SELECT * FROM entries WHERE kind='law' AND (title=? OR title LIKE ?)",(f'§ {number} {law}',f'§ {number} {law} · %')).fetchone()
+            if row and all(item['key'] != row['key'] for item in picked):
+                picked.append(entry(row))
+        lowered = question.lower()
+        for patterns,provisions in QUESTION_TOPICS:
+            if all(re.search(pattern,lowered) for pattern in patterns):
+                for number,law in provisions:
+                    row = db.execute("SELECT * FROM entries WHERE kind='law' AND title LIKE ?",(f'§ {number} {law} · %',)).fetchone()
+                    if row and '(weggefallen)' not in row['title'] and all(item['key'] != row['key'] for item in picked):
+                        picked.append(entry(row))
+        if len(picked) >= 2 and planned:
+            return picked  # the planned provisions answer the question; keyword hits would only add noise
+        terms = question_terms(question)
+        rows = db.execute("SELECT e.*,bm25(entry_search,0,12,1) AS score FROM entry_search s JOIN entries e ON e.key=s.key WHERE entry_search MATCH ? AND e.kind='law' ORDER BY score LIMIT 200",[' OR '.join(f'"{term}"*' for term in terms)]).fetchall() if terms else []
+    scored = []
+    for position,row in enumerate(rows):
+        item = entry({key:row[key] for key in row.keys() if key != 'score'})
+        if ' · ' not in item['title'] or '(weggefallen)' in item['title']:
+            continue  # repealed or untitled provisions carry no usable text
+        heading = [_fold(word) for word in re.findall(r'[^\W\d_]+',item['title'].split(' · ',1)[-1].lower(),re.UNICODE)]
+        title_hits = sum(1 for term in terms if any(word.startswith(term) for word in heading))
+        # Title matches count double; the civil code is preferred for everyday questions.
+        civil_code = item['title'].split(' · ')[0].endswith(' BGB')
+        preference = (0 if civil_code else 3) if area in CIVIL_AREAS else 0
+        scored.append((row['score'] - 2*title_hits + preference,position,item))
+    for _,_,item in sorted(scored,key=lambda value:value[:2]):
+        if len(picked) >= limit:
+            break
+        if all(existing['key'] != item['key'] for existing in picked):
+            picked.append(item)
+    return picked or search(question,limit=limit)
 
 
 def catalogue_status():

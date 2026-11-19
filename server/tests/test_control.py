@@ -5,6 +5,9 @@ from fastapi.testclient import TestClient
 from server import app as api,billing
 from server.tests import test_inbox
 
+# The local operator .env may restrict administrators; tests use their own synthetic admins.
+os.environ['ADMIN_EMAILS']=''
+
 
 class ControlTests(test_inbox.InboxTests):
     test_unassigned_persistence_then_exact_file_and_text_review_in_case=None

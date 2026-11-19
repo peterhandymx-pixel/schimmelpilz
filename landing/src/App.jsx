@@ -1,10 +1,11 @@
 // @refresh reset
+import { SnippetInsert } from "./Snippets.jsx";
 import { useEffect, useId, useRef, useState } from "react";
 import { CaseIntake, intakeCopy } from "./CaseIntake.jsx";
 import { FeatureOverview } from "./FeatureOverview.jsx";
 import { PricingOverview } from './PricingOverview.jsx';
 import { documentTemplate, draftCopy } from "./draftTemplates.js";
-import { useCaseStorage, readPreference, writePreference } from "./useCaseStorage.js";
+import { useCaseStorage, readPreference, writePreference, request } from "./useCaseStorage.js";
 import { AuthForm, authCopy } from "./AuthForm.jsx";
 import { DraftPdfPreview } from './DraftPdfPreview.jsx';
 import { DraftReview } from './DraftReview.jsx';
@@ -179,7 +180,6 @@ export function App() {
     // Idempotent: React development mode runs effects twice.
     const { reset, verify } = emailLink;
     if (reset) { setResetToken(reset); setAuthMode("reset"); setModal("auth"); }
-    else if (emailLink.auth) { setAuthMode(emailLink.auth); setModal("auth"); }
     if (verify && !emailLink.verifyStarted) {
       emailLink.verifyStarted = true;
       authRequest("verify-email/confirm", { token: verify })
@@ -187,11 +187,13 @@ export function App() {
         .catch(() => showToast(lang === "de" ? "Bestätigungslink ungültig oder abgelaufen. Fordern Sie im Profil einen neuen an." : "Confirmation link invalid or expired. Request a new one in your profile."));
     }
   }, []);
+  // Sign-in and registration links from the landing page: someone already signed in simply goes to the workspace.
+  useEffect(() => { if (!auth.loading && !auth.user && emailLink.auth) { setAuthMode(emailLink.auth); setModal("auth"); } }, [auth.loading]);
   // A desk section requested by the mobile app needs a sign-in first when the browser has no session yet.
   useEffect(() => { if (!auth.loading && !auth.user && (emailLink.view || emailLink.caseId)) { setAuthMode("login"); setModal("auth"); } }, [auth.loading]);
   // Visitors who are not signed in start on the landing page; its buttons come back here with ?open=login or ?open=register.
   useEffect(() => {
-    if (auth.loading || auth.user || modal || legalPage || emailLink.reset || emailLink.verify) return;
+    if (auth.loading || auth.user || modal || legalPage || emailLink.reset || emailLink.verify || emailLink.auth) return;
     window.location.replace("/start/index.html");
   }, [auth.loading, auth.user, modal, legalPage]);
   // A case requested by the mobile app opens once the signed-in user's cases are loaded.
@@ -223,9 +225,11 @@ export function App() {
     setUploadNotice("");
     try {
       const results = await storage.uploadDocuments(selected);
-      const saved = results.filter(result => result.ok).length;
-      const failures = results.filter(result => !result.ok).map(result => result.name + ": " + (result.status === 413 ? t.oversized : result.status === 415 ? t.unsupported : t.uploadError));
-      setUploadNotice([saved ? saved + " " + t.uploadSaved : "", ...failures].filter(Boolean).join(" · "));
+      const saved = results.filter(result => result.ok).reduce((sum, result) => sum + (result.count || 1), 0);
+      const de = lang === "de";
+      const failures = results.filter(result => !result.ok).map(result => result.name + ": " + (result.status === 413 ? t.oversized : result.status === 415 ? t.unsupported : result.status === 422 && /\.(eml|msg)$/i.test(result.name) ? (de ? "keine lesbare E-Mail" : "not a readable e-mail") : t.uploadError));
+      const skipped = results.flatMap(result => result.skipped || []);
+      setUploadNotice([saved ? saved + " " + t.uploadSaved : "", ...failures, skipped.length ? (de ? "Nicht übernommene Anhänge (Dateityp/Größe): " : "Attachments not taken over (type/size): ") + skipped.join(", ") : ""].filter(Boolean).join(" · "));
     } finally { input.value = ""; }
   };
   const openDraft = (draft, caseItem = storage.selectedCase) => {
@@ -244,15 +248,59 @@ export function App() {
     setDraftBody(initialBody);
     setDraftError(""); setModal("draft");
   };
-  const changeDraftSettings = (kind, language, recipient) => {
+  // A claim goes to a court: the app determines it (court type by value and area, place by the relevant address)
+  // and records it in the case, so the draft never starts with an empty court.
+  const autoRecipient = useRef("");
+  const withCourt = async (item, kind, recipient) => {
+    if (kind !== "claim" || recipient.trim() || !item) return { item, jurisdiction: null };
+    try {
+      const jurisdiction = await request(`/cases/${item.id}/court-suggestion`);
+      if (jurisdiction.ok && !item.details?.court) {
+        const updated = await storage.updateCase(item.id, { title: item.title, description: item.description, language: item.language || "de", details: { ...item.details, court: jurisdiction.court.slice(0, 160) } });
+        showToast(lang === "de" ? `Zuständiges Gericht ermittelt: ${jurisdiction.name}` : `Competent court determined: ${jurisdiction.name}`);
+        return { item: updated, jurisdiction };
+      }
+      return { item, jurisdiction };
+    } catch { return { item, jurisdiction: null }; }
+  };
+  // For a claim the recipient is the competent court: filled in automatically, and removed again when the
+  // document type changes, as long as nobody has typed over it. A recipient someone entered is never replaced.
+  const courtRecipient = item => (item?.details?.court || "").split(/,\s*/).filter(Boolean).join("\n");
+  const fillRecipient = async (item, kind, recipient) => {
+    const automatic = !recipient.trim() || recipient === autoRecipient.current;
+    if (kind === "claim" && automatic) {
+      const found = await withCourt(item, kind, "");
+      const court = courtRecipient(found.item);
+      autoRecipient.current = court;
+      return { ...found, recipient: court };
+    }
+    if (kind !== "claim" && recipient && recipient === autoRecipient.current) {
+      autoRecipient.current = "";
+      return { item, jurisdiction: null, recipient: "" };
+    }
+    return { ...(await withCourt(item, kind, recipient)), recipient };
+  };
+  const changeDraftSettings = async (kind, language, recipient) => {
     setDraftKind(kind); setDraftLanguage(language); setDraftRecipient(recipient);
-    if (storage.selectedCase && draftBody === generatedDraft.current) {
-      const body = documentTemplate(storage.selectedCase, language, kind, recipient);
+    if (!storage.selectedCase) return;
+    const draftBefore = draftBody, untouched = draftBody === generatedDraft.current;
+    const { item, jurisdiction, recipient: filled } = await fillRecipient(storage.selectedCase, kind, recipient);
+    if (filled !== recipient) setDraftRecipient(filled);
+    if (untouched && generatedDraft.current === draftBefore) {
+      const body = documentTemplate(item, language, kind, filled, jurisdiction);
       generatedDraft.current = body; setDraftBody(body);
     }
   };
-  const insertDraftTemplate = () => {
-    const body = documentTemplate(storage.selectedCase, draftLanguage, draftKind, draftRecipient);
+  // A text block goes in at the cursor of the draft editor (or at the end).
+  const insertSnippet = text => {
+    const editor = document.getElementById("draft-editor");
+    const at = editor?.selectionStart || draftBody.length;
+    setDraftBody(draftBody.slice(0, at) + text + draftBody.slice(at));
+  };
+  const insertDraftTemplate = async () => {
+    const { item, jurisdiction, recipient } = await fillRecipient(storage.selectedCase, draftKind, draftRecipient);
+    if (recipient !== draftRecipient) setDraftRecipient(recipient);
+    const body = documentTemplate(item, draftLanguage, draftKind, recipient, jurisdiction);
     generatedDraft.current = body; setDraftBody(body);
   };
   const saveDraft = async () => {
@@ -279,10 +327,10 @@ export function App() {
       <PricingOverview lang={lang} onSelect={audience => {setRegistrationAudience(audience);setAuthMode('register');setModal('auth');}} />
       <section className="faq-section" id="faq"><div className="section-heading"><p className="section-kicker">FAQ</p><h2>{t.faqTitle}</h2></div><div className="faq-list">{t.faq.map(([q, a]) => <details key={q}><summary>{q}<ChevronDown size={19} /></summary><p>{a}</p></details>)}</div></section>
     </main><footer className="site-footer"><Brand /><span>{t.limit}</span><LegalLinks lang={lang} /></footer></>}
-    <input ref={fileRef} className="visually-hidden" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip" onChange={onFiles} />
+    <input ref={fileRef} className="visually-hidden" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip,.eml,.msg" onChange={onFiles} />
     <Dialog open={modal === "case"} onClose={() => { if (!savingCase) setModal(null); }} title={editingCase ? (lang === "de" ? "Aktenstammdaten bearbeiten" : "Edit case particulars") : t.modalStart} className="intake-dialog" busy={savingCase}><CaseIntake key={intakeSession} initialCase={editingCase} user={auth.user} lang={lang} t={t} saving={savingCase} error={caseError} onSubmit={startCase} onCancel={() => setModal(null)} /></Dialog>
-    <Dialog open={modal === "auth"} onClose={() => { setModal(null); auth.retry(); }} title={authCopy[lang][authMode]} className="auth-dialog">{modal === "auth" && <AuthForm key={`${authMode}:${registrationAudience}`} initialAudience={registrationAudience} lang={lang} mode={authMode} setMode={mode => { setAuthNotice(""); setAuthMode(mode); }} onAuthenticated={onAuthenticated} resetToken={resetToken} notice={authNotice} onResetDone={() => { setResetToken(""); setTimeout(() => setAuthNotice(authCopy[lang].resetDone)); }} />}</Dialog>
-    <Dialog open={modal === "draft"} onClose={() => { if (!storage.savingDraft) setModal(null); }} title={dc.title} className="draft-dialog" busy={storage.savingDraft}><p className="dialog-intro">{dc.hint}</p><fieldset className="draft-settings" disabled={storage.savingDraft}><div className="intake-grid"><label>{dc.kind}<select aria-label={dc.kind} value={draftKind} onChange={e => changeDraftSettings(e.target.value, draftLanguage, draftRecipient)}>{dc.types.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><label>{dc.language}<select aria-label={dc.language} value={draftLanguage} onChange={e => changeDraftSettings(draftKind, e.target.value, draftRecipient)}><option value="de">Deutsch</option><option value="en">English</option></select></label><label className="span-two">{dc.recipient}<textarea rows={2} maxLength={500} value={draftRecipient} onChange={e => changeDraftSettings(draftKind, draftLanguage, e.target.value)} placeholder={dc.recipientPlaceholder} /></label></div><ContactRecipient lang={lang} contacts={contacts} caseId={storage.selectedCase?.id} onChoose={recipient => changeDraftSettings(draftKind, draftLanguage, recipient)} /><button className="small-action" onClick={insertDraftTemplate}>{dc.insert}</button><p className="field-help">{dc.replaceHint}</p>{draftKind === "claim" && <p className="field-help">{dc.courtHint} <a href="https://www.gesetze-im-internet.de/zpo/__253.html" target="_blank" rel="noreferrer">§ 253 ZPO ↗</a></p>}</fieldset><label htmlFor="draft-editor">{t.draftBody}</label><textarea id="draft-editor" aria-label={t.draftBody} className="draft-editor" value={draftBody} maxLength={50000} onChange={e => setDraftBody(e.target.value)} disabled={storage.savingDraft} />{draftError && <p className="storage-error" role="alert">{draftError}</p>}{draftId && <label className="desk-checkbox"><input type="checkbox" checked={useCurrentLetterhead} onChange={event => setUseCurrentLetterhead(event.target.checked)} />{lang === "de" ? "Aktuellen Briefkopf aus dem Kontoprofil übernehmen" : "Use the current letterhead from my profile"}</label>}{modal === "draft" && <DraftReview key={draftId || "new"} lang={lang} caseId={storage.selectedCase?.id} draft={savedDraft} busy={storage.savingDraft} dirty={Boolean(savedDraft && (draftBody.trim() !== savedDraft.body || draftRecipient.trim() !== savedDraft.recipient || draftLanguage !== savedDraft.language || draftKind !== savedDraft.kind || useCurrentLetterhead))} onUpdated={value => {setSavedDraft(current => current && (current.version > value.version || (current.version === value.version && current.review_revision > value.review_revision)) ? current : value);storage.applyDraft(value);}} />}{modal === "draft" && <><DraftPdfPreview lang={lang} caseId={storage.selectedCase?.id} draftId={draftId} body={draftBody} useCurrentLetterhead={useCurrentLetterhead} /><DraftSend lang={lang} caseItem={storage.selectedCase} draft={savedDraft} dirty={Boolean(savedDraft && (draftBody.trim() !== savedDraft.body || draftRecipient.trim() !== savedDraft.recipient || draftLanguage !== savedDraft.language || draftKind !== savedDraft.kind || useCurrentLetterhead))} onSent={() => storage.reload()} /></>}<button className="text-link" onClick={downloadDraft}>{t.downloadDraft}</button><div className="dialog-actions"><button className="secondary-button" disabled={storage.savingDraft} onClick={() => setModal(null)}>{t.cancel}</button><button className="primary-button" disabled={storage.savingDraft || !draftBody.trim()} onClick={saveDraft}><Check size={18} /> {storage.savingDraft ? "…" : t.save}</button></div></Dialog>
+    <Dialog open={modal === "auth"} onClose={() => { emailLink.auth = null; setModal(null); auth.retry(); }} title={authCopy[lang][authMode]} className="auth-dialog">{modal === "auth" && <AuthForm key={`${authMode}:${registrationAudience}`} initialAudience={registrationAudience} lang={lang} mode={authMode} setMode={mode => { setAuthNotice(""); setAuthMode(mode); }} onAuthenticated={onAuthenticated} resetToken={resetToken} notice={authNotice} onResetDone={() => { setResetToken(""); setTimeout(() => setAuthNotice(authCopy[lang].resetDone)); }} />}</Dialog>
+    <Dialog open={modal === "draft"} onClose={() => { if (!storage.savingDraft) setModal(null); }} title={dc.title} className="draft-dialog" busy={storage.savingDraft}><p className="dialog-intro">{dc.hint}</p><fieldset className="draft-settings" disabled={storage.savingDraft}><div className="intake-grid"><label>{dc.kind}<select aria-label={dc.kind} value={draftKind} onChange={e => changeDraftSettings(e.target.value, draftLanguage, draftRecipient)}>{dc.types.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><label>{dc.language}<select aria-label={dc.language} value={draftLanguage} onChange={e => changeDraftSettings(draftKind, e.target.value, draftRecipient)}><option value="de">Deutsch</option><option value="en">English</option></select></label><label className="span-two">{dc.recipient}<textarea rows={2} maxLength={500} value={draftRecipient} onChange={e => changeDraftSettings(draftKind, draftLanguage, e.target.value)} placeholder={dc.recipientPlaceholder} /></label></div><ContactRecipient lang={lang} contacts={contacts} caseId={storage.selectedCase?.id} onChoose={recipient => changeDraftSettings(draftKind, draftLanguage, recipient)} /><button className="small-action" onClick={insertDraftTemplate}>{dc.insert}</button><p className="field-help">{dc.replaceHint}</p>{draftKind === "claim" && <p className="field-help">{dc.courtHint} <a href="https://www.gesetze-im-internet.de/zpo/__253.html" target="_blank" rel="noreferrer">§ 253 ZPO ↗</a></p>}</fieldset><SnippetInsert caseItem={storage.selectedCase} disabled={storage.savingDraft} onInsert={insertSnippet} /><label htmlFor="draft-editor">{t.draftBody}</label><textarea id="draft-editor" aria-label={t.draftBody} className="draft-editor" value={draftBody} maxLength={50000} onChange={e => setDraftBody(e.target.value)} disabled={storage.savingDraft} />{draftError && <p className="storage-error" role="alert">{draftError}</p>}{draftId && <label className="desk-checkbox"><input type="checkbox" checked={useCurrentLetterhead} onChange={event => setUseCurrentLetterhead(event.target.checked)} />{lang === "de" ? "Aktuellen Briefkopf aus dem Kontoprofil übernehmen" : "Use the current letterhead from my profile"}</label>}{modal === "draft" && <DraftReview key={draftId || "new"} lang={lang} caseId={storage.selectedCase?.id} draft={savedDraft} busy={storage.savingDraft} dirty={Boolean(savedDraft && (draftBody.trim() !== savedDraft.body || draftRecipient.trim() !== savedDraft.recipient || draftLanguage !== savedDraft.language || draftKind !== savedDraft.kind || useCurrentLetterhead))} onUpdated={value => {setSavedDraft(current => current && (current.version > value.version || (current.version === value.version && current.review_revision > value.review_revision)) ? current : value);storage.applyDraft(value);}} />}{modal === "draft" && <><DraftPdfPreview lang={lang} caseId={storage.selectedCase?.id} draftId={draftId} body={draftBody} useCurrentLetterhead={useCurrentLetterhead} /><DraftSend lang={lang} caseItem={storage.selectedCase} draft={savedDraft} dirty={Boolean(savedDraft && (draftBody.trim() !== savedDraft.body || draftRecipient.trim() !== savedDraft.recipient || draftLanguage !== savedDraft.language || draftKind !== savedDraft.kind || useCurrentLetterhead))} onSent={() => storage.reload()} /></>}<button className="text-link" onClick={downloadDraft}>{t.downloadDraft}</button><div className="dialog-actions"><button className="secondary-button" disabled={storage.savingDraft} onClick={() => setModal(null)}>{t.cancel}</button><button className="primary-button" disabled={storage.savingDraft || !draftBody.trim()} onClick={saveDraft}><Check size={18} /> {storage.savingDraft ? "…" : t.save}</button></div></Dialog>
     {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
   </div>;
 }

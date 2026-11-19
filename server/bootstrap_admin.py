@@ -9,9 +9,18 @@ from pathlib import Path
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--data-dir',required=True);parser.add_argument('--email',default='admin@schimmelpilz.local')
+    parser.add_argument('--promote',metavar='EMAIL',help='make an existing account an administrator instead of creating a new one')
     args=parser.parse_args();folder=Path(args.data_dir).resolve();os.environ['DATA_DIR']=str(folder)
     from . import app as api
     api.init_db()
+    if args.promote:
+        email=args.promote.strip().lower()
+        with api.db() as c:
+            row=c.execute('SELECT id,is_admin FROM users WHERE email=?',(email,)).fetchone()
+            if not row:raise SystemExit('No account with this email. Register it in the app first.')
+            c.execute('UPDATE users SET is_admin=1,control_version=control_version+1 WHERE id=?',(row['id'],))
+            api.control.audit(c,row['id'],None,'admin_promoted_locally',email)
+        print('Administrator: '+email+'. Enable two-factor sign-in under Kanzlei / Profil, then sign in again to open ADMIN.');return
     output=folder/'admin-access.json'
     with api.db() as c:
         existing=c.execute('SELECT is_admin FROM users WHERE email=?',(args.email,)).fetchone()

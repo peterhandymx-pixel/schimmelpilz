@@ -70,7 +70,7 @@ export function Inbox({ lang, cases, query = '', open, onChanged, canDelete = fa
       update(item);setAssignment(null);setTarget('');setNotice(de ? `Datei der Akte ${item.case_reference} zugeordnet. Unter „Zugeordnet“ können Sie den Text prüfen.` : `File assigned to ${item.case_reference}. Open “Assigned” to review its text.`);onChanged?.();
     } catch (failure) { setError(fail(failure)); } finally { setBusy(false); }
   };
-  const begin = (item, mode) => { setError('');setNotice(''); if(mode==='edit') { setEditing(item);setEditFields(fields(item)); } else {setAssignment(item);setTarget('');setReason('');} };
+  const begin = (item, mode) => { setError('');setNotice(''); if(mode==='edit') { setEditing(item);setEditFields(fields(item)); } else {setAssignment(item);setTarget(item.case_id ? '' : item.suggested_case_id || '');setReason('');} };
   const editingOpen = Boolean(editing || assignment);
   return <section className="desk-panel inbox-panel">
     <div className="desk-panel-heading"><div><h2>{de ? 'Posteingang & Aktenzuordnung' : 'Inbox & case assignment'}</h2><p>{de ? 'Dateien aufnehmen, Eingangsdaten erfassen und ausdrücklich einer Akte zuordnen.' : 'Receive files, record incoming details and explicitly assign a case.'}</p></div><SpreadsheetLinks path="/api/exports/inbox" lang={lang} /></div>

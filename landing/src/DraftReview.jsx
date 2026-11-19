@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
-import {request} from './useCaseStorage.js';
+import {API_BASE, request} from './useCaseStorage.js';
 import {dateLabel} from './workbench.js';
-import {savedDraftPdf} from './pdfExport.js';
+import {savedDraftPdf, downloadBlob} from './pdfExport.js';
 import './draft-review.css';
 
 export const reviewLabels = {
@@ -61,6 +61,19 @@ export function DraftReview({lang,caseId,draft,dirty,busy,onUpdated}) {
     catch {setError(de ? 'Gespeicherte Fassung nicht verfügbar oder bereits geändert. Entwurf erneut öffnen.' : 'Saved version unavailable or changed. Reopen the draft.');}
     finally {setWorking(false);}
   };
+  // beA: the saved version as PDF/A-2b with an ERVB file name; the server reports what it could check locally.
+  const [bea, setBea] = useState(null);
+  const downloadBea = async () => {
+    setWorking(true);setError('');setBea(null);
+    try {
+      const response = await fetch(`${API_BASE}/api/cases/${caseId}/drafts/${draft.id}/bea.pdf`,{credentials:'include',headers:{'X-Schimmelpilz-Request':'1'}});
+      if (!response.ok || Number(response.headers.get('X-Draft-Version')) !== data.draft.version) throw new Error('changed');
+      const name = decodeURIComponent((response.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/)?.[1] || 'Schriftsatz.pdf');
+      downloadBlob(await response.blob(), name);
+      try { setBea({...JSON.parse(response.headers.get('X-Bea-Check') || '{}'), name}); } catch { setBea({ok:true,issues:[],notes:[],name}); }
+    } catch {setError(de ? 'Gespeicherte Fassung nicht verfügbar oder bereits geändert. Entwurf erneut öffnen.' : 'Saved version unavailable or changed. Reopen the draft.');}
+    finally {setWorking(false);}
+  };
   if (!draft?.id) return <section className="draft-review-panel"><h3>{de ? 'Prüfung & Freigabe' : 'Review & approval'}</h3><p>{de ? 'Zuerst speichern. Danach können Sie diese Fassung mit ihren Originalpassagen prüfen und freigeben.' : 'Save first. Then review and approve this version with its original passages.'}</p></section>;
   const disabled = dirty || busy || working || !data || data.draft.version !== draft.version;
   return <section className="draft-review-panel" aria-label={de ? 'Prüfung & Freigabe' : 'Review & approval'}><header><h3>{de ? 'Prüfung & Freigabe' : 'Review & approval'}</h3>{data && <span className={`draft-review-badge ${dirty ? 'draft' : data.draft.review_status}`}>v{data.draft.version} · {dirty ? (de ? 'Ungespeicherte Änderungen' : 'Unsaved changes') : reviewLabels[lang][data.draft.review_status]}</span>}</header>
@@ -72,7 +85,7 @@ export function DraftReview({lang,caseId,draft,dirty,busy,onUpdated}) {
       {data.checks.map(item => <ReviewCheck key={`${data.draft.version}:${item.id}`} item={item} lang={lang} documents={data.source_context.sources || []} disabled={disabled || data.draft.review_status !== 'in_review'} onSave={(id,checked,value) => action('check',{check_id:id,checked,note:value})} />)}
       {data.draft.review_status === 'in_review' && <form className="draft-approval" onSubmit={event => {event.preventDefault();action('approve',{note,confirmed});}}><fieldset disabled={disabled}><label>{de ? 'Freigabevermerk' : 'Approval note'}<textarea rows={2} required minLength={20} maxLength={2500} value={note} onChange={event => setNote(event.target.value)} /></label><label><input type="checkbox" required checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />{de ? 'Ich bestätige meine eigene Prüfung dieser gespeicherten Fassung.' : 'I confirm my own review of this saved version.'}</label><button className="desk-button solid" type="submit" disabled={!data.can_approve || !confirmed || note.trim().length < 20}>{de ? 'Diese Fassung freigeben' : 'Approve this version'}</button></fieldset></form>}
       {data.draft.review_status === 'approved' && <div className="draft-approved-record"><p>{de ? 'Freigegeben durch' : 'Approved by'} <strong>{data.draft.approved_name}</strong> · v{data.draft.version} · {dateLabel(data.draft.approved_at,lang,true)}</p><button type="button" disabled={disabled} className="desk-button" onClick={() => action('reopen')}>{de ? 'Prüfung wieder öffnen' : 'Reopen review'}</button></div>}
-      <button type="button" disabled={disabled} className="desk-button" onClick={() => download('pdf')}>{de ? 'Gespeicherte Fassung als PDF' : 'Download saved version as PDF'} · v{data.draft.version}</button>
+      <button type="button" disabled={disabled} className="desk-button" title={de ? 'PDF/A mit eingebetteten Schriften und zulässigem Dateinamen für das beA' : 'PDF/A for electronic court filing'} onClick={downloadBea}>{de ? 'Für beA (PDF/A)' : 'For beA (PDF/A)'} · v{data.draft.version}</button>{bea && <div className={`bea-report ${bea.ok ? 'ok' : 'warn'}`} role="status"><strong>{bea.ok ? (de ? 'beA-Prüfung bestanden' : 'beA check passed') : (de ? 'Bitte vor dem Versand prüfen' : 'Check before sending')}</strong> · {bea.name}{[...(bea.issues || []), ...(bea.notes || [])].map(text => <p key={text}>{text}</p>)}<p className="field-help">{de ? 'Geprüft: eingebettete Schriften, Textebene, Verschlüsselung, Skripte, Dateiname (ERVV/ERVB). PDF/A-2b-Kennzeichnung gesetzt; keine zertifizierte PDF/A-Validierung.' : 'Checked locally; not a certified PDF/A validation.'}</p></div>}<button type="button" disabled={disabled} className="desk-button" onClick={() => download('pdf')}>{de ? 'Gespeicherte Fassung als PDF' : 'Download saved version as PDF'} · v{data.draft.version}</button>
       <button type="button" disabled={disabled} className="desk-button" title={de ? 'Bearbeitbare Word-Datei; Änderungen in Word gelten nicht als geprüft.' : 'Editable Word file; changes made in Word are not reviewed.'} onClick={() => download('docx')}>{de ? 'Als Word' : 'As Word'} · v{data.draft.version}</button>
       <details className="draft-version-history"><summary>{de ? 'Fassungen & Prüfverlauf' : 'Versions & review history'} ({data.versions.length})</summary>{data.versions.map(version => <div className="draft-version-row" key={version.version}><span>v{version.version} · {dateLabel(version.created_at,lang,true)} · {version.actor_name || (de ? 'Vorhandene Fassung übernommen' : 'Existing version retained')}</span><button type="button" disabled={working} className="desk-link" onClick={() => showVersion(version.version)}>{de ? 'Fassung ansehen' : 'View version'}</button></div>)}{historical && <article className="draft-historical"><h4>{de ? 'Gespeicherte Fassung' : 'Saved version'} {historical.version}</h4><small>SHA-256: {historical.sha256}</small><pre>{historical.snapshot.body}</pre></article>}<ol>{data.events.map(event => <li key={event.id}><strong>v{event.version} · {eventLabels[lang][event.action] || event.action}</strong> · {event.actor_name} · {dateLabel(event.created_at,lang,true)}{event.note && <p>{event.note}</p>}</li>)}</ol></details>
     </>}{error && <p className="storage-error" role="alert">{error}</p>}</section>;

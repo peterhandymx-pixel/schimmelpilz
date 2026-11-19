@@ -80,10 +80,26 @@ class GeminiTransportTests(unittest.TestCase):
 
     def test_missing_key_is_unavailable_without_network(self):
         with patch.object(research, "GEMINI_API_KEY", ""), patch.object(research, "urlopen", side_effect=AssertionError("No request without a key")):
-            self.assertEqual(research.ai_status(), {"ready": False, "model": "gemini-test", "reason": "unavailable"})
+            self.assertEqual(research.ai_status(), {"ready": False, "model": "gemini-test", "reason": "unavailable", "provider": "gemini"})
             with self.assertRaises(ValueError):
                 research.generate_answer(MESSAGES)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_daily_quota_is_not_retried():
+    import io
+    from unittest.mock import patch
+    from urllib.error import HTTPError
+    from server import research
+    body = b'{"error":{"code":429,"details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}'
+    daily = HTTPError('https://example.invalid', 429, 'Too Many Requests', {}, io.BytesIO(body))
+    with patch.object(research, 'GEMINI_API_KEY', 'test'), patch.object(research, 'GEMINI_RETRY_DELAYS', (5, 5, 5)), \
+            patch.object(research.time, 'sleep', side_effect=AssertionError('must not wait')), patch.object(research, 'urlopen', side_effect=[daily]) as opened:
+        try:
+            research.generate_gemini_answer([{'role': 'user', 'content': 'x'}])
+        except HTTPError as error:
+            assert error.code == 429
+        assert opened.call_count == 1
