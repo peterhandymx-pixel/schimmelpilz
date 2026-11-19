@@ -3,3 +3,16 @@
 .demo-banner a{color:#d9b27a;font-weight:700;white-space:nowrap;text-decoration:none}
 .demo-toast{position:fixed;z-index:1001;left:50%;bottom:66px;transform:translateX(-50%);max-width:calc(100% - 24px);padding:12px 16px;border-radius:10px;background:#fff8ea;border:1px solid #e3c896;color:#5a3e12;font:600 13.5px/1.4 system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.15)}
 @media (max-width:700px){.demo-banner span{display:none}.demo-banner{bottom:8px}}
+.beta-gate{min-height:100vh;display:grid;place-items:center;padding:24px 16px;background:radial-gradient(circle at 30% 20%,#0f4a3a,#03221b 70%);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.beta-card{width:min(420px,100%);background:rgba(3,34,27,.9);border:1px solid #d9b27a;border-radius:20px;padding:32px 28px;color:#f3efe3;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.beta-card img{border-radius:14px;align-self:flex-start}
+.beta-eyebrow{margin:6px 0 0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#d9b27a}
+.beta-card h1{margin:0;font:400 34px/1.1 Georgia,serif}
+.beta-card label{font-weight:600;font-size:15px;margin-top:6px}
+.beta-card input{height:50px;border-radius:12px;border:1px solid #6f8f80;background:#0b3a2e;color:#fff;font-size:22px;letter-spacing:.3em;text-align:center;padding:0 12px}
+.beta-card input:focus{outline:2px solid #d9b27a;outline-offset:2px}
+.beta-card button{height:48px;border-radius:12px;border:0;background:#d9b27a;color:#163b2f;font:700 16px system-ui,sans-serif;cursor:pointer}
+.beta-card button:disabled{opacity:.6;cursor:default}
+.beta-error{margin:0;color:#ffb4a8;font-weight:600;font-size:14px}
+.beta-note{margin:4px 0 0;font-size:13px;color:#b8c7bf}
+.beta-card a{color:#d9b27a;font-size:14px;text-decoration:none}
