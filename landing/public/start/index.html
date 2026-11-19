@@ -231,6 +231,8 @@ body.nogl #fallback{display:block;max-width:760px;margin:0 auto;padding:110px 20
   </div>
   <p class="lead">Für alle Rechtsgebiete:</p>
   <ul class="areas"><li>Kündigungsschutz</li><li>Arbeitsrecht</li><li>Sozialrecht</li><li>Zivilrecht</li><li>Mietrecht</li><li>Vertragsrecht</li><li>Verbraucherrecht</li><li>Familienrecht</li><li>Handelsrecht</li><li>Verwaltungsrecht</li><li>Strafrecht</li></ul>
+  <p class="lead">Außerdem in Ihrer Akte:</p>
+  <ul class="areas"><li>Fristen &amp; Kalender</li><li>Fristenbuch</li><li>beA-fertige PDFs</li><li>Kostenrisiko</li><li>Kostenfestsetzung</li><li>Rechnungen &amp; Mahnungen</li><li>Upload-Link für Mandanten</li><li>Outlook-E-Mails</li><li>Vollmacht &amp; Formulare</li><li>Gesprächsnotizen</li><li>Volltextsuche</li><li>Aufbewahrung nach § 50 BRAO</li></ul>
   <small>Preise pro Inhaber-Arbeitsbereich / Monat. Die Assistenz ersetzt keine individuelle anwaltliche Beratung; Antworten sind rechtlich nicht geprüft. Die Bilder sind KI-generiert oder KI-bearbeitet und zeigen nicht das echte Gebäude; keine Verbindung zum Arbeitsgericht München.</small>
 </aside>
 
@@ -249,27 +251,27 @@ const STOPS = [
   { nav: "Vorplatz", stn: "Station 1 · Vorplatz", title: "Der Brief ist da.",
     text: "Kündigung, Bescheid oder Klage: Atmen Sie durch. Oft läuft jetzt eine kurze Frist, etwa drei Wochen für die Kündigungsschutzklage oder ein Monat für den Widerspruch gegen einen Bescheid. Legen wir zuerst Ihre Akte an: wer, was, wann.",
     cites: ["§ 4 Satz 1 KSchG", "§ 84 Abs. 1 SGG"],
-    feats: [["Akte anlegen, Aktenzeichen führen", "Verfügbar"], ["Frist tragen Sie derzeit selbst ein", "Manuell"]] },
+    feats: [["Akte anlegen, Aktenzeichen führen", "Verfügbar"], ["Fristenrechner mit Feiertagen und Vorfrist", "Verfügbar"], ["Kanzleikalender und Fristenbuch (PDF)", "Neu"]] },
   { nav: "Pforte", stn: "Station 2 · Pforte", title: "Bin ich hier richtig?",
     text: "Streit aus dem Arbeitsverhältnis gehört meist vors Arbeitsgericht, Sozialleistungen vors Sozialgericht, Miete und Verträge vors Amts- oder Landgericht. Ich zeige Ihnen die Normen mit Fundstelle. Die Zuständigkeit im Einzelfall prüfen Sie noch selbst.",
     cites: ["§ 2 ArbGG", "§ 51 SGG", "§§ 23, 71 GVG"],
-    feats: [["Gesetze & Normen mit Quellenbezug", "Verfügbar"], ["Automatische Zuständigkeitsprüfung", "Geplant", 1]] },
+    feats: [["Gesetze & Normen mit Quellenbezug", "Verfügbar"], ["Zuständiges Gericht mit Anschrift", "Verfügbar"], ["Kollisionsprüfung bei der Aktenanlage", "Verfügbar"]] },
   { nav: "Rechtsantragstelle", stn: "Station 3 · Rechtsantragstelle", title: "Die Klage auf den Weg bringen.",
     text: "Hier können Sie Ihre Klage aufnehmen lassen. Mit dem Entwurf aus Ihrer Akte kommen Sie vorbereitet: Beteiligte, Sachverhalt und Ziel stehen schon drin, fehlende Angaben sind als Platzhalter markiert.",
     cites: ["§ 46 Abs. 2 ArbGG", "§ 496 ZPO", "§ 90 SGG"],
-    feats: [["Klage- und Antragsentwürfe", "Verfügbar"], ["Export als Text, Word oder PDF", "Verfügbar"]] },
+    feats: [["Klage- und Antragsentwürfe", "Verfügbar"], ["Export als Text, Word oder PDF mit Briefkopf", "Verfügbar"], ["Vollmacht und Mandantenformulare", "Neu"]] },
   { nav: "Flur", stn: "Station 4 · Flur vor den Sälen", title: "Warten. Und Ordnung schaffen.",
     text: "Bescheide, Verträge, Schreiben der Gegenseite: alles an einem Ort. Scans liest die lokale OCR ein, den Text kontrollieren Sie. So finden Sie im Termin jede Seite sofort.",
     cites: ["PDF", "DOCX", "PNG / JPG"],
-    feats: [["Dateiablage mit überprüfbaren Texten", "Verfügbar"], ["Lokale OCR mit Textkontrolle", "Verfügbar"]] },
+    feats: [["Dateiablage mit Volltextsuche und lokaler OCR", "Verfügbar"], ["E-Mails aus Outlook samt Anhängen", "Neu"], ["Upload-Link und QR-Code für Mandanten", "Neu"]] },
   { nav: "Güteverhandlung", stn: "Station 5 · Saal, Gütetermin", title: "Die Güteverhandlung.",
     text: "Im Arbeits- und im Zivilprozess wird zuerst eine gütliche Einigung versucht. Vorab suche ich Ihnen veröffentlichte Entscheidungen mit tragenden Gründen und Gegenargumenten heraus, damit Sie wissen, was auf Sie zukommt.",
     cites: ["§ 54 ArbGG", "§ 278 ZPO"],
-    feats: [["Recherche in Bundesentscheidungen", "Verfügbar"], ["Originalpassagen mit Fundstelle", "Verfügbar"]] },
+    feats: [["Recherche in Bundesentscheidungen", "Verfügbar"], ["Originalpassagen mit Fundstelle", "Verfügbar"], ["Kostenrisiko: Vergleich oder Urteil?", "Neu"]] },
   { nav: "Kammertermin", stn: "Station 6 · Saal, Kammertermin", title: "Jetzt entscheidet die Kammer.",
     text: "Scheitert die Güte, verhandelt die Kammer: Vorsitz und zwei ehrenamtliche Richter, so auch beim Sozialgericht. Vertreten kann ich Sie nicht, beim Landgericht brauchen Sie ohnehin eine Anwältin oder einen Anwalt. Schriftsätze und Kostenfragen bereite ich aber mit Ihnen vor.",
     cites: ["§ 16 Abs. 2 ArbGG", "§ 12 SGG", "§ 78 ZPO"],
-    feats: [["Schriftsätze mit Versionen", "Verfügbar"], ["Kostenprüfung RVG / GKG", "Verfügbar"]] },
+    feats: [["Schriftsätze mit Versionen, beA-fertig als PDF/A", "Neu"], ["Kostenfestsetzungsantrag nach RVG / GKG", "Neu"], ["Abrechnung mit Mahnwesen", "Neu"]] },
   { nav: "Ihr Start" },
 ];
 
